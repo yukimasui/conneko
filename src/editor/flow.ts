@@ -14,6 +14,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   sheet: string;
   /** 端子・ピンごとのコメント */
   comments?: Record<string, string>;
+  /** 機器のコメント（何をするものか） */
+  note?: string;
 }
 
 export interface WireEdgeData extends Record<string, unknown> {
@@ -41,6 +43,7 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
         ...(d.params ? { params: d.params } : {}),
         ...(d.mount ? { mount: d.mount } : {}),
         ...(d.comments ? { comments: d.comments } : {}),
+        ...(d.note ? { note: d.note } : {}),
       },
       // 装着したユニットは親と一緒に動く（単独では動かさない）
       ...(d.mount ? { draggable: false } : {}),
@@ -76,6 +79,7 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sh
       ...(n.data.mount ? { mount: n.data.mount } : {}),
       sheet: n.data.sheet,
       ...(n.data.comments ? { comments: n.data.comments } : {}),
+      ...(n.data.note ? { note: n.data.note } : {}),
     })),
     wires: edges.map((e) => ({
       id: e.id,

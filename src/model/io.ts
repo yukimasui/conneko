@@ -153,7 +153,7 @@ export function setComment(d: Diagram, device: string, terminal: string, text: s
 /**
  * I/O 点を現場の機器の端子につなぐ。電線の線番は入出力番号にする。
  * 別のシートの機器なら、入出力番号を名前にしたリンクを両方のシートに置いてつなぐ。
- * 現場の機器の名前をコメントにする（コメントが空のとき）。
+ * 現場の機器のコメント（なければ名前）を I/O のコメントにする（コメントが空のとき）。
  */
 export function connectIo(d: Diagram, point: IoPoint, target: TerminalRef, attrs: Omit<WireAttrs, 'wireNo'>, lookup: DefLookup): Diagram {
   if (!point.endpoint) return d;
@@ -161,7 +161,8 @@ export function connectIo(d: Diagram, point: IoPoint, target: TerminalRef, attrs
   if (!point.comment) {
     const dev = d.devices.find((x) => x.id === target.device);
     const def = dev && lookup(dev.type);
-    if (def) out = setComment(out, point.device, point.terminal, `${target.device} ${def.name}`);
+    // 機器のコメント（何をするものか）があればそれを、なければ機器名と種類を入れる
+    if (def) out = setComment(out, point.device, point.terminal, dev.note ? `${target.device} ${dev.note}` : `${target.device} ${def.name}`);
   }
   return out;
 }

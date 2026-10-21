@@ -95,6 +95,7 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
     return `- ${d.id}: リンク「${String(params?.[def.netLabel.param] ?? '')}」（シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
   }
   const lines = [`- ${d.id}: ${def.name} ${def.model}（type: ${def.type}、シート: ${sheetName}）`];
+  if (d.note) lines.push(`  用途: ${d.note}`);
   if (def.description) lines.push(`  説明: ${def.description}`);
   const prot = resolveNum(def.protectionCurrent, def, params);
   if (prot !== undefined) lines.push(`  保護電流: ${prot}A`);
@@ -170,7 +171,7 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
 下の図面データには、配置済みだが配線されていない機器があります。電気的に正しくなるように配線（wires）を追加し、図面データ全体をJSONで返してください。
 
 ## ルール
-- 既存の devices は変更しないでください（id・type・位置・params・mount・sheet・comments をそのまま残す）。リンクは追加して構いません。
+- 既存の devices は変更しないでください（id・type・位置・params・mount・sheet・comments・note をそのまま残す）。リンクは追加して構いません。
 - 既存の wires は、明らかな誤りがない限り残してください。
 - 追加する電線の形式: {"from": {"device": "機器名", "terminal": "端子ID"}, "to": {"device": "機器名", "terminal": "端子ID"}, "wireNo": "線番", "color": "色ID", "sizeSq": 太さ(mm²), "wireType": "電線種類ID"}
   - id は省略できます（アプリが自動採番します）。

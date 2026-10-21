@@ -80,6 +80,7 @@ interface FieldTerminal {
 interface FieldDevice {
   id: string;
   name: string;
+  note?: string;
   sheet: string;
   terminals: FieldTerminal[];
 }
@@ -100,7 +101,7 @@ function fieldDevices(diagram: Diagram, family: Set<string>, sample: IoPoint, wi
         kind: t.signal ? SIGNAL_NAMES[t.signal.kind] ?? '' : t.role === 'input' ? '負荷' : '接点',
         wired: wired(d.id, t.id),
       }));
-    if (terminals.length) out.push({ id: d.id, name: `${def.name} ${def.model}`, sheet: sheetOf(diagram, d), terminals });
+    if (terminals.length) out.push({ id: d.id, name: `${def.name} ${def.model}`, ...(d.note ? { note: d.note } : {}), sheet: sheetOf(diagram, d), terminals });
   }
   return out;
 }
@@ -136,6 +137,7 @@ function PatchBoard({
             <div className="io-patch__name">
               <strong>{d.id}</strong> <span className="muted">{d.name}</span>
               <span className="io-patch__sheet">{sheets.find((s) => s.id === d.sheet)?.name}</span>
+              {d.note && <div className="io-patch__note">{d.note}</div>}
             </div>
             {d.terminals.map((t) => (
               <button

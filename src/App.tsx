@@ -65,7 +65,7 @@ function worst(map: Map<string, Severity>, id: string, s: Severity) {
 
 /** 位置を除いた図面の内容（チェック結果の再計算を、機器の移動中に行わないためのキー） */
 function topologyKey(d: Diagram) {
-  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments]), d.wires.map((w) => ({ ...w, bend: undefined, route: undefined })), d.settings, d.sheets]);
+  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments, x.note]), d.wires.map((w) => ({ ...w, bend: undefined, route: undefined })), d.settings, d.sheets]);
 }
 
 /**
@@ -92,6 +92,23 @@ function arrangeMounted(ns: DeviceFlowNode[]): DeviceFlowNode[] {
   return changed ? out : ns;
 }
 
+/** 表示の切り替え（閲覧者ごとの便利機能としてブラウザに保存。保存できなくても動く） */
+function loadToggle(key: string): boolean {
+  try {
+    return localStorage.getItem(key) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function saveToggle(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? 'on' : 'off');
+  } catch {
+    // 保存できない環境では何もしない
+  }
+}
+
 function Editor() {
   const initial = useMemo(() => diagramToFlow(sampleDiagram), []);
   const [nodes, setNodesRaw] = useState<DeviceFlowNode[]>(() => arrangeMounted(initial.nodes));
@@ -102,13 +119,8 @@ function Editor() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [ioDevice, setIoDevice] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
-  const [showMarkers, setShowMarkers] = useState(() => {
-    try {
-      return localStorage.getItem('conneko.markers') !== 'off';
-    } catch {
-      return true;
-    }
-  });
+  const [showMarkers, setShowMarkers] = useState(() => loadToggle('conneko.markers'));
+  const [showNotes, setShowNotes] = useState(() => loadToggle('conneko.notes'));
   const [picker, setPicker] = useState<null | {
     x: number;
     y: number;
@@ -245,8 +257,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers };
-  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice, showMarkers]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers, showNotes };
+  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice, showMarkers, showNotes]);
 
   // シートごとの最も重い指摘（タブに印を付ける）
   const sheetSeverity = useMemo(() => {
@@ -513,6 +525,19 @@ function Editor() {
     [setNodes],
   );
 
+  const changeNote = useCallback(
+    (id: string, note: string) => {
+      setNodes((ns) =>
+        ns.map((n) => {
+          if (n.id !== id) return n;
+          const { note: _, ...data } = n.data;
+          return { ...n, data: note ? { ...data, note } : data };
+        }),
+      );
+    },
+    [setNodes],
+  );
+
   const changeWire = useCallback(
     (id: string, patch: Partial<WireEdgeData>) => {
       setEdges((es) => es.map((e) => (e.id === id && e.data ? { ...e, data: { ...e.data, ...patch } } : e)));
@@ -712,14 +737,21 @@ function Editor() {
               checked={showMarkers}
               onChange={(e) => {
                 setShowMarkers(e.target.checked);
-                try {
-                  localStorage.setItem('conneko.markers', e.target.checked ? 'on' : 'off');
-                } catch {
-                  // 保存できない環境では何もしない
-                }
+                saveToggle('conneko.markers', e.target.checked);
               }}
             />
             線番表示
+          </label>
+          <label className="toolbar__toggle is-next" title="機器のコメント（何をするものか）を機器の下に表示します">
+            <input
+              type="checkbox"
+              checked={showNotes}
+              onChange={(e) => {
+                setShowNotes(e.target.checked);
+                saveToggle('conneko.notes', e.target.checked);
+              }}
+            />
+            コメント表示
           </label>
           <label className="toolbar__setting" title="安全機能に要求するパフォーマンスレベル（ISO 13849-1）。これを下回る安全機器を警告します">
             要求PL
@@ -808,6 +840,7 @@ function Editor() {
           onWireDefaultsChange={setWireDefaults}
           onRenameDevice={renameDevice}
           onParamChange={changeParam}
+          onNoteChange={changeNote}
           onMountChange={changeMount}
           sheets={sheets}
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}

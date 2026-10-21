@@ -76,7 +76,7 @@ function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: 
 
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
-  const { deviceSeverity, params: effective, hosts, linkPeers, onJump } = useEditorContext();
+  const { deviceSeverity, params: effective, hosts, linkPeers, onJump, showNotes } = useEditorContext();
   const severity = deviceSeverity.get(id);
   const params = effective.get(id) ?? data.params;
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
@@ -104,6 +104,12 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
       style={{ width: def.width, height: def.height }}
     >
       <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
+        {/* 機器のコメントは、下の端子と重ならないよう機器名の上に出す */}
+        {showNotes && data.note && !def.netLabel && (
+          <div className="device-node__note" title={data.note}>
+            {data.note}
+          </div>
+        )}
         <strong>{id}</strong>
         <span>{def.model}</span>
       </div>

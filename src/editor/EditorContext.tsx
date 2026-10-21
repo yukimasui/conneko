@@ -31,6 +31,8 @@ export interface EditorContextValue {
   onJump: (deviceId: string) => void;
   /** 端子の近くに線番（マークチューブ）を表示する */
   showMarkers: boolean;
+  /** 機器のコメントを表示する */
+  showNotes: boolean;
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -44,6 +46,7 @@ export const EditorContext = createContext<EditorContextValue>({
   linkPeers: new Map(),
   onJump: () => {},
   showMarkers: true,
+  showNotes: true,
 });
 
 export const useEditorContext = () => useContext(EditorContext);

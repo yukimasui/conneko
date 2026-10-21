@@ -24,6 +24,7 @@ interface Props {
   onWireDefaultsChange: (d: WireDefaults) => void;
   onRenameDevice: (oldId: string, newId: string) => string | null;
   onParamChange: (id: string, key: string, value: number | string) => void;
+  onNoteChange: (id: string, note: string) => void;
   onMountChange: (id: string, mount: Mount | undefined) => void;
   sheets: Sheet[];
   onSheetChange: (id: string, sheet: string) => void;
@@ -248,6 +249,18 @@ export function Inspector(props: Props) {
       <aside className="inspector">
         <div className="panel-title">機器</div>
         <RenameField id={node.id} onRename={props.onRenameDevice} />
+        {!def?.netLabel && (
+          <label className="field">
+            <span>コメント（何をするものか）</span>
+            <input
+              key={`${node.id}:${node.data.note ?? ''}`}
+              defaultValue={node.data.note ?? ''}
+              placeholder={def?.category === 'sensor' ? '例: ワーク検出（コンベア入口）' : '例: コンベア駆動'}
+              onBlur={(e) => e.target.value.trim() !== (node.data.note ?? '') && props.onNoteChange(node.id, e.target.value.trim())}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+          </label>
+        )}
         {def && (
           <>
             <div className="device-info">

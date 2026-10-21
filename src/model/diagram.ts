@@ -28,6 +28,8 @@ export interface DiagramDevice {
   sheet?: string;
   /** 端子・ピンごとのコメント（PLC の入出力のコメントなど。キーは端子IDまたはピンID） */
   comments?: Record<string, string>;
+  /** 機器のコメント（何をするものか。例: 'ワーク検出（コンベア入口）'） */
+  note?: string;
 }
 
 /** 図面のシート（回路の意味ごとに分けるタブ） */
@@ -121,6 +123,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       ...(d.mount ? { mount: d.mount } : {}),
       ...(d.sheet && diagram.sheets?.length ? { sheet: d.sheet } : {}),
       ...(d.comments && Object.keys(d.comments).length ? { comments: d.comments } : {}),
+      ...(d.note ? { note: d.note } : {}),
     })),
     wires: diagram.wires.map((w) => ({
       id: w.id,
@@ -189,6 +192,7 @@ export function parseDiagram(input: string | unknown): Diagram {
       ...(isObj(d.params) ? { params: d.params as ParamValues } : {}),
       ...(parseMount(d.mount) ?? {}),
       ...(typeof d.sheet === 'string' && d.sheet ? { sheet: d.sheet } : {}),
+      ...(typeof d.note === 'string' && d.note.trim() ? { note: d.note } : {}),
       ...(isObj(d.comments) ? { comments: Object.fromEntries(Object.entries(d.comments).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {}),
     };
   });
