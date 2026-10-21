@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
@@ -50,8 +50,12 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
   const terminals = useMemo(() => (def ? resolveDevice(def, params).terminals : []), [def, params]);
   // パラメータで端子が変わる機器があるため、端子の位置を React Flow に知らせ直す
+  // （初回の描画では不要。初回にも呼ぶと全体表示（fitView）が計測前に走ってしまう）
   const updateNodeInternals = useUpdateNodeInternals();
-  useEffect(() => updateNodeInternals(id), [terminals, id, updateNodeInternals]);
+  const firstTerminals = useRef(terminals);
+  useEffect(() => {
+    if (terminals !== firstTerminals.current) updateNodeInternals(id);
+  }, [terminals, id, updateNodeInternals]);
 
   if (!def) {
     return (

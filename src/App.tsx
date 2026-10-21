@@ -139,7 +139,9 @@ function Editor() {
         if (!n || !def || !t) return null;
         const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[t.side];
         // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
-        const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 20) : stubLength(toEdge);
+        // 正面向きのコネクタは、プラグの端からケーブルが出る
+        const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 : 12;
+        const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 8 + exit) : stubLength(toEdge);
         return { x: n.position.x + t.x, y: n.position.y + t.y, side: t.side as TerminalSide, stub, connector: t.connector };
       };
       const s = end(e.source, e.sourceHandle);

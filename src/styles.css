@@ -122,6 +122,7 @@ textarea {
 
 .toolbar__setting {
   display: flex;
+  white-space: nowrap;
   align-items: center;
   gap: 6px;
   margin-left: auto;
