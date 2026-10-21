@@ -350,7 +350,8 @@ export function ioHeads(p: ParamValues, inputs = 0) {
 /** ピン・端子の電気的な項目（label / note / role / accepts / signal） */
 export function ioProps(pt: IoPoint, p: ParamValues, ctx: IoContext = {}): Omit<PinDef, 'id'> {
   const { inHead, outHead } = ioHeads(p, ctx.inputs);
-  const named = (n: string) => (pt.suffix ? `${n} ${pt.suffix}` : n);
+  // 補足は半角の括弧なら空白を挟み、全角の括弧ならそのまま続ける
+  const named = (n: string) => (!pt.suffix ? n : pt.suffix.startsWith('（') ? `${n}${pt.suffix}` : `${n} ${pt.suffix}`);
   const base = { optional: true, ...(pt.note ? { note: pt.note } : {}) };
   switch (pt.kind) {
     case 'in': {
