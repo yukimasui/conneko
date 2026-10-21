@@ -92,7 +92,7 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 - 安全入力は `role: 'signal'`、`function: 'safety-input'`、`channel`。リセット・EDM なども `function` を付ける
   （`reset` / `reset-auto` / `start` / `muting` / `edm` / `safety-contact` / `aux-output` / `unlock-solenoid` / `lock-solenoid`）。
   1 つの端子が複数の機能を持つ場合は配列にする（例: リセットと EDM を兼ねる端子は `['reset', 'edm']`）。
-  `reset-auto` は配線すると自動リセットになる端子（G9SE の T32 など）。
+  `reset-auto` は配線すると自動リセットになる端子（G9SA の A-B 間の短絡など）。
 - 2 チャンネルの組は `safetyChannels` に書く。
 
   ```ts

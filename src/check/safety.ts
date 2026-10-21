@@ -30,8 +30,14 @@ export function checkSafety(m: Model, push: Push) {
   }
   const suppliesIn = (root: string) => (m.fixedMembers.get(root) ?? []).flatMap((k) => m.supplies.get(k) ?? []);
 
-  /** starts の端子から、owner 以外の機器の接点を通ってたどる */
-  const chain = (starts: string[], owner: string): Chain => {
+  /**
+   * starts の端子から、owner 以外の機器の接点を通ってたどる。
+   * prune を指定すると、行き止まりの枝の接点を除き、ループに直列に入っている接点だけを残す。
+   * - 'input': 安全入力のループ。出発点か電源出力（テスト出力など）に戻る経路だけを残す
+   *   （PNOZ のスタート回路のように、入力から分かれて同じ機器の別の端子へ向かう枝は除く）
+   * - 'own': EDM・リセットのループ。同じ機器の端子（T31 → … → T32 など）に戻る経路も残す
+   */
+  const chain = (starts: string[], owner: string, prune?: 'input' | 'own'): Chain => {
     const startRoots = new Set(starts.map((k) => m.fixed.find(k)));
     const visited = new Set(startRoots);
     const queue = [...startRoots];
@@ -51,6 +57,22 @@ export function checkSafety(m: Model, push: Push) {
         if (!visited.has(other)) {
           visited.add(other);
           queue.push(other);
+        }
+      }
+    }
+    if (prune) {
+      const ownRoot = (r: string) => prune === 'own' && (m.fixedMembers.get(r) ?? []).some((k) => m.terminals.get(k)!.device.id === owner);
+      const keep = new Set([...startRoots, ...[...visited].filter((r) => suppliesIn(r).length || ownRoot(r))]);
+      const ends = (s: SwitchLink) => [m.fixed.find(s.a), m.fixed.find(s.b)];
+      for (let changed = true; changed; ) {
+        changed = false;
+        const degree = new Map<string, number>();
+        for (const s of links) for (const r of ends(s)) degree.set(r, (degree.get(r) ?? 0) + 1);
+        for (let i = links.length - 1; i >= 0; i--) {
+          if (ends(links[i]).some((r) => !keep.has(r) && degree.get(r) === 1)) {
+            links.splice(i, 1);
+            changed = true;
+          }
         }
       }
     }
@@ -110,7 +132,7 @@ export function checkSafety(m: Model, push: Push) {
         });
       }
       const modes: SafetyInputMode[] = g.mode === undefined ? ['nc-nc'] : [g.mode].flat();
-      const chains = used.map((c) => ({ c, idx: g.channels.indexOf(c), chain: chain([tKey(c.input!)], id) }));
+      const chains = used.map((c) => ({ c, idx: g.channels.indexOf(c), chain: chain([tKey(c.input!)], id, 'input') }));
       for (const { c, idx, chain: ch } of chains) {
         const input = tKey(c.input!);
         const where = terminalName(m, input);
@@ -177,7 +199,10 @@ export function checkSafety(m: Model, push: Push) {
       for (let i = 0; i < chains.length; i++) {
         for (let j = i + 1; j < chains.length; j++) {
           const shared = chains[i].chain.links.filter((s) => chains[j].chain.links.includes(s));
-          const sameNet = m.fixed.find(tKey(chains[i].c.input!)) === m.fixed.find(tKey(chains[j].c.input!));
+          // OSSD 入力として使える組で、両方の入力を電源（+24V）に直結する使い方（単体使用）は除く
+          const root = m.fixed.find(tKey(chains[i].c.input!));
+          const sameNet =
+            root === m.fixed.find(tKey(chains[j].c.input!)) && !(modes.includes('ossd') && suppliesIn(root).some((x) => x.kind === 'power'));
           if (!shared.length && !sameNet) continue;
           push({
             severity: severe,
@@ -245,7 +270,7 @@ export function checkSafety(m: Model, push: Push) {
             key: `edm-missing:${id}`,
           });
         } else {
-          const loop = chain(edm.map(tKey), id);
+          const loop = chain(edm.map(tKey), id, 'own');
           for (const d of coilDevices.keys()) {
             const contacts = loop.links.filter((s) => s.device === d);
             let problem: string | undefined;
@@ -291,8 +316,11 @@ export function checkSafety(m: Model, push: Push) {
     // --- リセット（人が通過できる保護に自動リセット） ---
     const reset = byFunction('reset');
     const autoReset = byFunction('reset-auto').filter((t) => netIsWired(m, tKey(t)));
+    // ライトカーテンなど自身が保護装置で、接触器を直接駆動している場合も対象にする
+    // （安全コントローラーなどへつなぐ場合は、そちらでリセットする）
+    if (def.safety?.esType && reset.length && coilDevices.size) fedByEspe = true;
     if ((reset.length || autoReset.length) && fedByEspe) {
-      const manual = reset.length > 0 && chain(reset.map(tKey), id).links.some((s) => s.link.switch === 'NO');
+      const manual = reset.length > 0 && chain(reset.map(tKey), id, 'own').links.some((s) => s.link.switch === 'NO');
       if (autoReset.length || !manual) {
         push({
           severity: 'info',

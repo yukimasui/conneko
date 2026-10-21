@@ -657,7 +657,7 @@ describe('安全回路のルール（実機の定義）', () => {
 
   // 現在のチェッカーは「安全入力の組に ESPE の OSSD が入っている機器」だけを自動リセットの対象にしているため、
   // ライトカーテン自身のリセット線を +24V にした（自動復帰）場合は指摘されない。チェッカーが対応したら it に変える
-  it.fails('ライトカーテン単体で接触器を駆動し、リセット線を +24V にすると reset-auto（注意）', () => {
+  it('ライトカーテン単体で接触器を駆動し、リセット線を +24V にすると reset-auto（注意）', () => {
     const d: Diagram = {
       devices: [dev('PSU1', 'generic.psu.dc24v'), dev('LCR', 'keyence.gl-r.receiver'), dev('MC1', 'mitsubishi.sd-t12.dc24v'), dev('MC2', 'mitsubishi.sd-t12.dc24v')],
       wires: [
@@ -720,7 +720,7 @@ describe('安全回路のルール（実機の定義）', () => {
 
   // 単体使用の GS-11P5 は安全入力 1/2 をどちらも +24V につなぐ（取扱説明書の配線）が、現在のチェッカーは
   // 「2 チャンネルの入力が同じネット」として safety-channel-cross（エラー）にする。チェッカーが対応したら it に変える
-  it.fails('非接触スイッチ GS-11P5 の OSSD を GC-1000 へ、安全入力 1/2 は +24V（単体使用）で指摘なし', () => {
+  it('非接触スイッチ GS-11P5 の OSSD を GC-1000 へ、安全入力 1/2 は +24V（単体使用）で指摘なし', () => {
     const d: Diagram = {
       devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SC1', 'keyence.gc-1000'), dev('DS1', 'keyence.gs-11p5')],
       wires: [
@@ -789,7 +789,7 @@ describe('安全回路のルール（実機の定義）', () => {
 
   // PNOZ はスタート回路を CH1 の入力 S12 から取る（S12 → リセットボタン → 接触器の b 接点 → S34）。現在のチェッカーは
   // S12 からたどった接点にリセットボタンの a 接点が含まれるため estop-not-nc（エラー）にする。チェッカーが対応したら it に変える
-  it.fails('PNOZ のスタート回路（S12-S34）に押しボタンとミラー接点を入れると、EDM・手動リセットとも満たす', () => {
+  it('PNOZ のスタート回路（S12-S34）に押しボタンとミラー接点を入れると、EDM・手動リセットとも満たす', () => {
     const d: Diagram = {
       devices: [
         dev('PSU1', 'generic.psu.dc24v'),

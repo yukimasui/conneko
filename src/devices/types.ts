@@ -135,7 +135,7 @@ export interface SignalSpec {
  * - aux-output: 補助出力（非安全）
  * - edm: 外部機器監視（EDM）入力・フィードバックループ
  * - reset: 手動リセット入力（押しボタンをつなぐ）
- * - reset-auto: 自動リセットにする端子（配線すると自動リセットになる。G9SE の T32 など）
+ * - reset-auto: 自動リセットにする端子（配線すると自動リセットになる。G9SA の A-B 間の短絡など）
  * - start / muting: スタート・ミューティング入力
  * - unlock-solenoid: 通電で解錠するソレノイド（スプリングロック式の電磁ロック）
  * - lock-solenoid: 通電で施錠するソレノイド（ソレノイドロック式の電磁ロック）
