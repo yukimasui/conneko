@@ -7,20 +7,58 @@
 
 ## 1. 端子の電気的定義の方針
 
-| 端子の種類 | role | 補足 |
+書き方の仕様は `docs/device-authoring.md` の「接点と出力」「信号の種類」「安全機器」。安全機器では次のように定義した。
+
+| 端子の種類 | role | 機能・チャンネルなど |
 |---|---|---|
-| 安全コントローラー・セーフティリレーの電源（A1/A2、V1/G1、+24V/0V、V+/V−） | `input` + `accepts`（DC、`+` / `-`） | 電圧範囲は各機種の許容範囲。消費電流は `loadCurrent` |
+| 安全コントローラー・セーフティリレー・センサーの電源（A1/A2、V1/G1、+24V/0V、V+/V−、茶/青） | `input` + `accepts`（DC、`+` / `-`） | 電圧範囲は各機種の許容範囲。消費電流は `loadCurrent` |
 | FG / PE / FE | `ground` | ライトカーテンの FE は未配線でも警告しないよう `optional` |
-| 安全入力・テスト出力・OSSD・リセット・EDM・ミューティング・補助出力 | `signal`（`optional`） | 機能は `label`（例: `T11（テスト出力 CH1）`）と `description` に書く |
-| リレー接点・スイッチ接点（13-14、11-12 など） | `signal` + `links`（向きなし） | ガイドどおり「接点は閉」とみなす。b 接点か a 接点か、直接開路か、ミラー接点かは `label` に書く |
-| 電磁接触器・強制ガイドリレー・ソレノイドロックのコイル | `input` + `accepts` | DC コイルは極性あり（A1/1 が +） |
+| テスト出力（To0、T0、T11、S11、X1 など） | `supply`（DC24V `+`、`kind: 'test'`） | `function: 'test-output'`、`channel`。電流の上限が分かる機種は `limitCurrent` |
+| 安全出力 OSSD（So0、Q1、Y0、S14、ライトカーテンの OSSD1/OSSD2 など） | `supply`（DC24V `+`、`kind: 'ossd'`、`limitCurrent`） | `function: 'ossd'`、`channel`。電源とみなすので接触器のコイルを直接駆動できる |
+| 安全入力（Si0、T12、S12、I1、X0、GS の安全入力 1/2 など） | `signal` | `function: 'safety-input'`、`channel` |
+| 安全出力のリレー接点（13-14 など） | `signal` + `links`（`switch: 'NO'`） | `function: 'safety-contact'` |
+| リセット・EDM（フィードバック）・ミューティング・補助出力 | `signal` | `function: 'reset'` / `'edm'` / `'muting'` / `'aux-output'`。PNP の補助出力には `signal: { dir: 'out', kind: 'pnp' }` |
+| スイッチの接点（非常停止・ドアスイッチ・リミットスイッチ） | `signal` + `links` | b 接点は `switch: 'NC'` + `directOpening: true`（⊕）、a 接点は `switch: 'NO'` |
+| 電磁接触器の接点 | `line` / `load`・`signal` + `links` | 主接点・補助 a 接点は `switch: 'NO'`、補助 b 接点は `switch: 'NC'` + `linked: 'mirror'` |
+| 強制ガイドリレーの接点 | `signal` + `links` | すべての接点に `linked: 'force-guided'` |
+| 電磁接触器・強制ガイドリレーのコイル | `input` + `accepts` | DC コイルは極性あり（A1/1 が +） |
+| 電磁ロックのソレノイド | `input` + `accepts` | スプリングロック式（通電で解錠）は + 側だけに `function: 'unlock-solenoid'` |
 | ケーブル引出しの機器 | 芯線の先端ごとに端子 | id は機能名（`+24V`、`OSSD1` など）、`label` と SVG に線色を書く |
 
-- 安全リレーの出力接点は `links` で表すので、`+24V → 13-14 → 接触器コイル A1` と配線すれば、コイルに電源が届いたと判定される。
-- OSSD（半導体の安全出力）は `signal` なので、OSSD で接触器のコイルを直接駆動するとコイルが「電源が来ていません」と警告される。
-  これは現在の型の限界で、`docs/proposals/safety.md` の 2.4（`SupplySpec.kind: 'ossd'`）で解消する案を出した。
-- 2 チャンネル入力のペア、テストパルス、EDM、安全性能（PL・カテゴリ・SIL・タイプ）は `description` と `label` に書いた。
-- 代表的な安全回路を組んだときに誤検出しないことを `src/check/safetyDevices.test.ts` で確認している。
+- 2 チャンネルの組は `safetyChannels` に書いた。入力の組は「テスト出力（source）→ 接点 → 安全入力（input）」で、
+  セーフティリレーは端子の決まった組（T11→T12 / T21→T22 など）、設定で入力を割り付ける安全コントローラー（GC、G9SP、MELSEC-WS、FS1B）は
+  データシートの配線例に沿った既定の組（偶数・奇数の入力と、組ごとのテスト出力）を書いた。入力の種類は `mode: 'nc-nc'`（b 接点 2 回路）としている。
+- 出力の組は、安全コントローラーは So0/So1 のような 2 点 1 組、セーフティリレーは安全出力の接点すべて（G9SE-221-T05 は瞬時とオフディレーを別の組）。
+- 安全性能は `safety` に書いた。非常停止・ドアスイッチ・リミットスイッチ・接触器・強制ガイドリレーは単体では PL が決まらない
+  （B10d と回路の構成で決まる）ため、準拠規格（`standards`）だけを書いた。
+- 電源チェックでは、接点はすべて閉じた状態（動作中）で電源が届くかを見るため、`+24V → 13-14 → 接触器コイル A1` や `OSSD1 → コイル A1` と配線すればコイルに電源が届いたと判定される。
+- 代表的な安全回路を組んだときに誤検出しないこと、上の項目がそろっていることを `src/check/safetyDevices.test.ts` で確認している。
+
+### 1.1 機器ごとの対応
+
+| 機器 | テスト出力 → 安全入力（組） | 安全出力（組） | EDM / リセット ほか | 安全性能 |
+|---|---|---|---|---|
+| `keyence.gc-1000` | To0/To1・To2/To3 → Si0/Si1 … Si14/Si15（8 組、組ごとに交互） | So0/So1・So2/So3・So4/So5（OSSD 500mA） | Ao0〜3 は aux-output。EDM は任意の Si | PL e / Cat.4 / SIL3 |
+| `keyence.gc-1000r` | 同上（Si0〜Si13、7 組） | So0/So1・So2/So3、SRo 13/23/33（接点） | 同上 | PL e / Cat.4 / SIL3 |
+| `keyence.gc-s84` | To0/To1 → Si0/Si1 … Si6/Si7（4 組） | So0/So1・So2/So3 | | PL e / Cat.4 / SIL3 |
+| `omron.g9sp-n10s` | T0/T1・T2/T3 → Si0/Si1 … Si8/Si9（5 組） | So0/So1・So2/So3（0.8A） | O0〜3 は aux-output（PNP）。テスト出力 T0/T1 60mA、T2 30mA、T3 300mA | PL e / Cat.4 / SIL3 |
+| `mitsubishi.ws0-cpu0-xtio` | X1/X2 → I1/I2 … I7/I8（4 組） | Q1/Q2・Q3/Q4（2A） | テスト出力 120mA | PL e / Cat.4 / SIL3 |
+| `idec.fs1b-c31s` | Tn → Xn（X0/X1 … X14/X15、7 組） | Y0/Y1・Y2/Y3（500mA） | X16/X17 は reset、Y4〜Y16 は aux-output | PL e / Cat.4 / SIL3 |
+| `omron.g9se-201` / `-401` / `-221-t05` | T11 → T12 / T21 → T22 | 13・23（・33・43）、221-T05 はオフディレー 37・47 を別の組 | T31 edm、T32/T33 reset、X1 aux-output | PL e / Cat.4 / SIL3 |
+| `omron.g9sa-301` | T11 → T12 / T21 → T22 | 13・23・33 | T31 edm、T32 reset、41-42 は b 接点の aux-output | PL e / Cat.4 |
+| `omron.g9sa-th301` | 押ボタンごとに `nc-no`（T12 → T11 b 接点 / T12 → T13 a 接点、T22 → T21 / T22 → T23） | 13・23・33 | T31/T32 edm | PL e / Cat.4（タイプ IIIC） |
+| `pilz.pnoz-x2-8p` / `pilz.pnoz-s4` | S11 → S12 / S21 → S22 | 13・23・33 | S34 edm（スタート回路と兼用）、41-42・Y32 は aux-output | PL e / Cat.4 / SIL3 |
+| `idec.hr6s-af` | S11 → S12 / S21 → S22（FUNCTION 1） | 13・23・33 | Y1 edm、Y2 reset、Z1 aux-output | PL e / Cat.4 / SIL3 |
+| `omron.g9sx-ns202-rt` | D1 → D40A（直列）→ D2（1 組） | S14/S24（OSSD 0.8A） | T31 edm、T32/T33 reset、X1/X2 aux-output | PL e / Cat.4（D40A と組み合わせると PL d / Cat.3） |
+| `keyence.gl-r.receiver` | | OSSD1/OSSD2（500mA） | RESET reset、EDM edm、AUX aux-output | タイプ4 / PL e / Cat.4 / SIL3 |
+| `omron.f3sg-sr.receiver` | | OSSD1/OSSD2（300mA） | RESET/EDM 兼用線は edm、MUTE A/B muting、AUX aux-output | タイプ4 / PL e / Cat.4 / SIL3 |
+| `keyence.sz-v32` | | OSSD1/OSSD2（500mA、PNP 設定時） | 入力1 reset、入力2 edm、AUX1/2 aux-output | タイプ3 / PL d / Cat.3 / SIL2 |
+| `keyence.gs-11p5` | 安全入力 1/2（`mode: 'ossd'`。前段の OSSD または +24V） | OSSD1/OSSD2（150mA） | AUX aux-output | PL e / Cat.4 / SIL3 |
+| `omron.d40a-1c5` | 白 → 黒を半導体出力（`switch: 'output'`）として G9SX-NS のループをたどる | | 黄 aux-output | PL d / Cat.3（G9SX-NS と組み合わせ） |
+| `idec.xw1e-*`、`idec.hs5d-02rn`、`omron.d4n-4c20`、`omron.er6022-021m`、`idec.hs5e-a4403-g` | b 接点は NC・直接開路、a 接点は NO | | HS5E の A2(+) は unlock-solenoid | 準拠規格のみ |
+| `idec.he1g-l21sm` | イネーブル接点 1-2・3-4 は NO（ポジション 2 で閉）+ 直接開路、モニタ 5-6 は NC・直接開路 | | | 準拠規格のみ |
+| `mitsubishi.sd-t12.dc24v`・`sd-t21.dc24v`・`s-t12.ac200v` | 主接点・a 接点 NO、b 接点 NC・ミラー接点 | | | 準拠規格のみ |
+| `omron.g7sa-3a1b`、`idec.rf1v-2a2bl-d24` | 全接点 強制ガイド | | | 準拠規格のみ |
 
 ## 2. 実装した機器（34 種）
 
@@ -111,13 +149,25 @@
 - **GC-1000 の EDM**: 専用端子はなく、任意の Si を設定ソフトで EDM に割り付ける。どの Si を使うかはプログラム次第。
 - **G9SX-NS の D3/D4**: データシートの「内部電源回路は非絶縁」との記載と配線例から、D3/D4 を A1/A2 と内部導通する端子（スイッチ用電源）として定義した。
 - **FS1B-C31S の EDM**: ロジックによって使う入力が変わる（FS1A カタログの例では T14 → 接触器 b 接点 → X14）。
+- **入力回路の電源側の極性**: G9SA の T21、PNOZ の S21 など CH2 側の電源端子は、実機では CH1 と違う電位のことがある（横絡検出のため）。
+  図ではどちらも DC24V `+` のテスト出力として定義した（接点を通って戻す配線であれば判定は変わらない）。
+- **G9SA-TH301 の押ボタン入力**: 共通側 T12/T22 をテスト出力、b 接点側・a 接点側（T11・T13 / T21・T23）を安全入力とした。内部の向きは未確認。
+- **安全コントローラーの入力の組**: GC・G9SP・MELSEC-WS・FS1B は設定で入力の組・種類・テスト出力を変えられる。`safetyChannels` は配線例に沿った既定の組で、
+  ライトカーテンの OSSD をつなぐ組や別のテスト出力を使う組は、チェックで警告が出ることがある。
+- **リセットと EDM を兼ねる端子**: PNOZ の S34、F3SG-SR の黄（RESET/EDM）は 1 つの端子に機能を 1 つしか書けないため `edm` にした。
+  G9SE などのリセット端子は手動（T32）と自動（T33）を区別していない。
+- **HE1G のイネーブル接点**: a 接点だが、ポジション 3 への握り込みで強制的に開く（IEC 60947-5-8）ため `directOpening: true` を付けた。
+- **SZ-V32 の OSSD**: PNP / NPN を設定で選ぶ機種で、図は PNP（`+` を出す）として定義した。
+- **G9SP のテスト出力の電流**: データシート F42I-E-05 は「0.3A max. per output（詳細はユーザーマニュアル）」とし、オムロンの仕様ページは T0/T1 60mA・T2 30mA・T3 300mA としている。小さいほうの値を使った [O1][O21]。
+- **FS1B のテスト出力の電流**: 確認できなかったため `limitCurrent` を書いていない。
+- **G9SE-221-T05 のオフディレー時間**: データシートでは 0、0.1〜0.8、1、1.5、2、2.5、3、4、5 秒の 16 段階。`params.offDelay` の選択肢（12 段階）とは一部違う。
 
 ## 5. 出典
 
 ### KEYENCE
 - [K1] GC シリーズ メインコントローラ 取扱説明書 96M16567（第三者サイトの写し） https://dentechindustrial.com/wp-content/uploads/2025/10/Keyence-MainController.pdf
 - [K2] GC シリーズ カタログ（端子配列 p.21） https://5.imimg.com/data5/SELLER/Doc/2025/7/530204158/CC/TD/RS/94356387/keyence-gc-1000-safety-controller.pdf
-- [K3] GC シリーズ 仕様 https://www.keyence.com/products/safety/safety-controller/gc/specs/
+- [K3] GC シリーズ 仕様（テスト出力 100mA、安全出力 500mA、PL e / Cat.4 / SIL3） https://www.keyence.com/products/safety/safety-controller/gc/specs/
 - [K4] GS シリーズ 仕様 https://www.keyence.com/products/safety/safety-interlock-switches/gs/specs/ 、GS-11P5 https://www.keyence.com/products/safety/safety-interlock-switches/gs/models/gs-11p5
 - [K5] GS 配線ナビ（GS-11P*） https://www.keyence.com/support/user/safety/wiring_navi/gs/wiring/20.jsp 、説明 https://keyence.com/support/user/safety/wiring_navi/gs/explanation 、GS-M https://keyence.com/products/safety/safety-interlock-switches/gs-m/specs
 - [K6] GL-R/GL-S カタログ https://rockfordsystems.com/wp-content/uploads/Keyence-Light-Curtains-GLR_GLS-Series.pdf
@@ -149,12 +199,15 @@
 - [O18] UMA セーフティマット https://proax.ca/en/product/1102469/omrumma050018001
 - [O19] G7Z https://files.omron.eu/downloads/latest/datasheet/en/j160_g7z_power_relays_datasheet_en.pdf
 - [O20] G9SX https://files.omron.eu/downloads/latest/datasheet/en/j150_g9sx-ad_bc_ex_datasheet_en.pdf
+- [O21] G9SP 仕様（テスト出力の定格電流） https://www.ia.omron.com/products/family/2937/specification.html
+- [O22] G9SE インストラクションシート（オフディレー時間の段階、安全性能） https://files.omron.eu/downloads/latest/manual/en/4022078_g9se-201_g9se-221-t_instruction_sheet_en.pdf
 
 ### 三菱電機
 - [M1] 安全コントローラ ユーザーズマニュアル SH-080855ENG https://www.mitsubishielectric.com/dl/fa/document/manual/plc/sh080855eng/sh080855engm.pdf
 - [M2] MS-T シリーズ カタログ L(NA)02030ENG-K https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l02030/L(NA)02030ENG-K.pdf （SD-T12 p.20/23/63、SD-T21 p.20/64、S-T12 p.18/57、UT-AX p.36/37/73）
 - [M3] SD-T シリーズ 発売案内 L02030-D https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l002030/L02030D.PDF
 - [M4] MS-T 技術資料 L(NA)02031ENG（ミラー接点の TÜV 認証 p.282） https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l02031eng/L(NA)02031ENG-L_21B.pdf
+- [M5] MELSEC-WS セレクションガイド（テスト出力 120mA） https://mx.mitsubishielectric.com/fa/es/~/media/e00bcacb905b44049242adcadcfaab06.pdf
 
 ### IDEC
 - [I1] FS1A カタログ https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/45/FS1A_Cat.pdf
