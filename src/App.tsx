@@ -22,6 +22,7 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import type { TerminalSide } from './devices/types';
+import { AboutDialog } from './editor/AboutDialog';
 import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
@@ -123,6 +124,7 @@ function Editor() {
   const [sheet, setSheet] = useState<string>(() => sheetsOf(sampleDiagram)[0].id);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
+  const [about, setAbout] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => loadToggle('conneko.markers'));
   const [showNotes, setShowNotes] = useState(() => loadToggle('conneko.notes'));
@@ -808,7 +810,9 @@ function Editor() {
           <div className="brand">
             <img src={iconUrl} alt="" />
             <span>Conneko</span>
-            <span className="brand__version">v{__APP_VERSION__}</span>
+            <button type="button" className="brand__version" onClick={() => setAbout(true)} title="バージョン・ライセンス">
+              v{__APP_VERSION__}
+            </button>
           </div>
           <div className="toolbar__group">
             <button type="button" onClick={undo} disabled={!history.canUndo} title="元に戻す（Ctrl+Z）" aria-label="元に戻す">
@@ -948,6 +952,7 @@ function Editor() {
         />
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
+      {about && <AboutDialog onClose={() => setAbout(false)} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {picker && (
         <ConnectPicker

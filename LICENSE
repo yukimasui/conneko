@@ -1,0 +1,95 @@
+Conneko ライセンス（Conneko License） 第 1.0 版
+
+Copyright (c) 2026 yukimasui
+
+このライセンスは、Conneko（ソースコード、ビルドした HTML ファイル、機器の定義データ、ドキュメントを含む。以下「本ソフトウェア」）の
+利用条件を定めるものです。日本語の本文を正とし、末尾の英語の訳は参考です。
+
+本ソフトウェアのソースコードは公開していますが、企業等による業務での利用に作成者の許諾を必要とするため、
+Open Source Initiative の定義する「オープンソース」ライセンスではありません。
+
+第 1 条（定義）
+1. 「作成者」とは、上記の著作権者をいいます。
+2. 「企業等」とは、営利を目的とする法人その他の団体（個人事業者を含む）をいいます。
+3. 「業務利用」とは、企業等またはその役員・従業員・委託先が、その事業のために本ソフトウェアを利用することのうち、
+   次のいずれかにあたるものをいいます。
+   (1) 実際の設備・装置・制御盤などの配線の設計、作図、確認、製作、保守、改造に用いること
+   (2) 本ソフトウェアで作成した図面やデータを、業務の成果物として社内外に提供すること
+   (3) 本ソフトウェアを自社の製品・サービスに組み込み、または本ソフトウェアを用いたサービスを提供すること
+4. 「評価利用」とは、企業等が、本ソフトウェアの導入を検討するために、業務利用にあたらない範囲で試しに使うことをいいます。
+
+第 2 条（無償で認める利用）
+次の利用は、このライセンスの条件を守る限り、無償で、作成者への連絡なしに行うことができます。
+1. 個人による利用（趣味、学習、研究を含む）
+2. 教育機関、研究機関、非営利団体による利用
+3. 企業等による評価利用
+
+第 3 条（企業等の業務利用）
+企業等が本ソフトウェアを業務利用する場合は、事前に作成者に連絡し、作成者の許諾（書面または電子メール）を得なければなりません。
+許諾の条件（有償か無償か、期間、範囲など）は、作成者が個別に定めます。
+連絡先: https://github.com/yukimasui （GitHub の Issues またはプロフィールに記載の連絡方法）
+
+第 4 条（複製・改変・再配布）
+1. 第 2 条または第 3 条により利用できる者は、本ソフトウェアを複製し、改変し、再配布することができます。
+2. 再配布する場合は、このライセンスの全文と上記の著作権表示を含めなければなりません。改変したものを再配布する場合は、
+   改変したことと、その内容がわかるようにしなければなりません。
+3. 本ソフトウェアおよびその改変物は、このライセンスと同じ条件でのみ再配布できます。
+4. 本ソフトウェアに含まれる第三者のソフトウェアは、それぞれのライセンスに従います（画面の「Conneko について」に一覧があります）。
+
+第 5 条（作成した図面の権利）
+本ソフトウェアで作成した図面・データ（利用者が作成したもの）の権利は、利用者に帰属します。
+
+第 6 条（無保証・免責）
+1. 本ソフトウェアは「現状のまま」提供され、明示・黙示を問わず、商品性、特定目的への適合性、正確性、権利の非侵害を含む
+   いかなる保証もありません。
+2. 本ソフトウェアの配線チェックの結果、機器の定義データ（推定の値を含みます）、作成した図面は参考であり、法令・規格
+   （電気設備技術基準、JIS、IEC、ISO 13849 など）への適合や安全を保証するものではありません。実際の設計・施工・安全の判断は、
+   有資格者・専門家の責任で行ってください。
+3. 作成者は、本ソフトウェアの利用または利用できないことにより生じたいかなる損害（設備の損傷、事故、逸失利益を含む）についても、
+   法令で認められる最大の範囲で責任を負いません。
+
+第 7 条（商標）
+本ソフトウェアに記載される会社名・製品名は、各社の商標または登録商標です。本ソフトウェアは、各メーカーとは関係がなく、
+各メーカーが承認・保証するものではありません。
+
+第 8 条（ライセンスの終了）
+このライセンスの条件に違反した場合、本ソフトウェアを利用する権利は自動的に終了します。
+
+第 9 条（準拠法）
+このライセンスは日本法に準拠します。
+
+----------------------------------------------------------------------
+
+Conneko License, Version 1.0 (English translation for reference; the Japanese text above prevails)
+
+Copyright (c) 2026 yukimasui
+
+The source code of Conneko (including the source code, the built HTML file, the device definition data and the documentation;
+the "Software") is publicly available, but this is NOT an open source license as defined by the Open Source Initiative,
+because business use by companies requires the author's permission.
+
+1. Definitions. "Company" means a for-profit corporation or other organization (including sole proprietors). "Business Use" means
+   use by a Company, or its officers, employees or contractors, for its business, that (1) designs, draws, checks, builds,
+   maintains or modifies the wiring of real equipment, machines or control panels; (2) delivers drawings or data made with the
+   Software as work products inside or outside the Company; or (3) embeds the Software in a product or service, or provides a
+   service using the Software. "Evaluation" means trial use by a Company to consider adopting the Software, excluding Business Use.
+2. Free uses. The following uses are permitted free of charge without contacting the author, subject to this license:
+   (1) use by individuals (including hobby, learning and research); (2) use by educational institutions, research institutions
+   and non-profit organizations; (3) Evaluation by Companies.
+3. Business Use. A Company must contact the author and obtain the author's permission (in writing or by e-mail) before any
+   Business Use. The author determines the terms of permission (paid or free, period, scope, etc.) case by case.
+   Contact: https://github.com/yukimasui (GitHub Issues or the contact on the profile).
+4. Copying, modification and redistribution. Anyone permitted to use the Software under section 2 or 3 may copy, modify and
+   redistribute it, provided that redistributions include this license and the copyright notice, modified versions state that
+   and how they were modified, and redistributions are made only under this same license. Third-party software included in the
+   Software is subject to its own license (listed in "About Conneko" in the application).
+5. Your drawings. Rights in drawings and data created by users with the Software belong to the users.
+6. No warranty; limitation of liability. The Software is provided "AS IS", without warranty of any kind. Check results, device
+   data (which include estimated values) and drawings are for reference only and do not guarantee compliance with laws and
+   standards or safety; actual design, construction and safety decisions are the responsibility of qualified persons. To the
+   maximum extent permitted by law, the author is not liable for any damages arising from the use of or inability to use the
+   Software, including damage to equipment, accidents and lost profits.
+7. Trademarks. Company and product names in the Software are trademarks or registered trademarks of their respective owners.
+   The Software is not affiliated with, endorsed or warranted by any manufacturer.
+8. Termination. Any violation of this license automatically terminates your rights to use the Software.
+9. Governing law. This license is governed by the laws of Japan.
