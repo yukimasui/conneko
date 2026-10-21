@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン セーフティリレーユニット G9SE-201（安全出力 2a、補助出力 1 点、Push-In Plus 端子）。
@@ -107,10 +107,28 @@ const LABELS: Record<string, string> = {
   '24': '24（安全出力 2）',
 };
 
+/** テスト出力（テストパルス。T11/T21 から接点を通って T12/T22 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  T11: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  T12: { function: 'safety-input', channel: 1 },
+  T21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  T22: { function: 'safety-input', channel: 2 },
+  // T31 から リセットスイッチ・接触器の b 接点（フィードバックループ）を通って T32（手動）/ T33（自動）へ戻す
+  T31: { function: 'edm' },
+  T32: { function: 'reset' },
+  T33: { function: 'reset' },
+  X1: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
+
 const terminal = (id: string, x: number, y: number, side: 'left' | 'right'): TerminalDef => {
   if (id === 'A1') return { id, label: 'A1（+24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
   if (id === 'A2') return { id, label: 'A2（0V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-  return { id, label: LABELS[id], x, y, side, role: 'signal', optional: true };
+  // 数字の端子は安全出力のリレー接点
+  const spec = /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+  return { id, label: LABELS[id], x, y, side, role: 'signal', optional: true, ...spec };
 };
 
 const def: DeviceDefinition = {
@@ -123,7 +141,7 @@ const def: DeviceDefinition = {
     'オムロン G9SE シリーズのセーフティリレーユニット（幅17.5mm、Push-In Plus 端子）。電源 A1(+)/A2(−) は DC24V（−15%/+10%）。安全出力はリレー接点 2a（13-14、23-24、AC250V/DC30V 5A）、補助出力 X1（PNP）。PL e / カテゴリ4、SIL3。' +
     '2 チャンネル入力: 非常停止の b 接点 1 回路目を T11-T12、2 回路目を T21-T22 に接続する（テストパルスで入力間短絡を検出）。' +
     '手動リセット: T31 → リセットスイッチ → 接触器 KM1・KM2 の b 接点（ミラー接点）→ T32 を直列に配線し、T33 を +24V に接続。自動リセット: T31 → KM の b 接点 → T33、T32 を +24V に接続。' +
-    '出力: +24V → 13-14 → KM1 コイル、+24V → 23-24 → KM2 コイルのように 2 台の接触器を駆動する。図では接点 13-14・23-24 を閉とみなす。',
+    '出力: +24V → 13-14 → KM1 コイル、+24V → 23-24 → KM2 コイルのように 2 台の接触器を駆動する。',
   labelPrefix: 'SR',
   width: W,
   height: H,
@@ -132,10 +150,16 @@ const def: DeviceDefinition = {
     ...(l ? [terminal(l, COL_L, leftY(i), 'left')] : []),
     ...(r ? [terminal(r, COL_R, rightY(i), 'right')] : []),
   ]),
+  // 安全出力のリレー接点（a 接点）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
   ],
+  safetyChannels: [
+    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
+    { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 消費電力 3W 以下 / 24V
   loadCurrent: 0.13,
 };

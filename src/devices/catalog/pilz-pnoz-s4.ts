@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * Pilz 安全リレー PNOZsigma PNOZ s4（750104、24VDC、ネジ式プラグイン端子、安全出力 3a ＋ 補助 1b ＋ 半導体出力 Y32）。
@@ -108,11 +108,28 @@ const LABELS: Record<string, string> = {
   '42': '42（補助出力 b 接点・非安全）',
 };
 
+/** 入力回路の電源側（S11/S21 から接点を通って S12/S22 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  S11: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  S12: { function: 'safety-input', channel: 1 },
+  S21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  S22: { function: 'safety-input', channel: 2 },
+  // スタート回路 S12-S34 にリセットボタンと接触器の b 接点（フィードバックループ）を直列に入れる。
+  // リセットとフィードバックを兼ねる端子だが、EDM の配線チェックを優先して edm にする
+  S34: { function: 'edm' },
+  Y32: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
+
 const row = (ids: string[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
   ids.map((id, i) => {
     if (id === 'A1') return { id, label: 'A1（+24V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
     if (id === 'A2') return { id, label: 'A2（0V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true };
+    // 数字の端子はリレー接点（41-42 は補助出力）
+    const spec = id === '41' || id === '42' ? { function: 'aux-output' as const } : /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true, ...spec };
   });
 
 const def: DeviceDefinition = {
@@ -124,18 +141,24 @@ const def: DeviceDefinition = {
   description:
     'Pilz PNOZsigma シリーズの非常停止・安全ドア用安全リレー PNOZ s4（750104、幅22.5mm）。電源 A1/A2 は DC24V。安全出力 3a（13-14、23-24、33-34、AC240V/DC24V 6A）、補助出力 1b（41-42）、半導体補助出力 Y32。PL e / カテゴリ4、SIL CL3。' +
     '2 チャンネル入力（横絡検出あり）: 非常停止の b 接点 1 回路目を S11-S12、2 回路目を S21-S22 に接続する。正面の mode スイッチで自動／手動／監視付きスタートと横絡検出の有無を選ぶ。' +
-    'スタート回路は S12-S34: 自動スタートは短絡、手動・監視付きスタートはリセットボタン（a 接点）と接触器 K5・K6 の b 接点（ミラー接点）を直列に入れる（フィードバックループ）。図では接点を閉とみなす。',
+    'スタート回路は S12-S34: 自動スタートは短絡、手動・監視付きスタートはリセットボタン（a 接点）と接触器 K5・K6 の b 接点（ミラー接点）を直列に入れる（フィードバックループ）。',
   labelPrefix: 'SR',
   width: W,
   height: H,
   svg,
   terminals: [...row(X1, Y_X1, 'top'), ...row(X3, Y_X3, 'top'), ...row(X2, Y_X2, 'bottom'), ...row(X4, Y_X4, 'bottom')],
+  // 安全出力 3a と補助出力 1b（b 接点）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
-    { from: '41', to: '42' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '33', to: '34', switch: 'NO' },
+    { from: '41', to: '42', switch: 'NC' },
   ],
+  safetyChannels: [
+    { id: 'IN', label: '安全入力（CH1: S11→S12、CH2: S21→S22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'S11', input: 'S12' }, { source: 'S21', input: 'S22' }] },
+    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 消費電力 2.5W 程度 / 24V
   loadCurrent: 0.11,
 };

@@ -103,8 +103,14 @@ const def: DeviceDefinition = {
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
     if (w.id === '+') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } };
     if (w.id === '-') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
+    if (w.id === 'AUX') return { ...base, role: 'signal' as const, optional: true, function: 'aux-output' as const, signal: { dir: 'out' as const, kind: 'pnp' as const } };
     return { ...base, role: 'signal' as const, optional: true };
   }),
+  // 扉閉（アクチュエータ検出）で、白（入力）に来た G9SX-NS の信号を黒（出力）から次段へ渡す。
+  // 接点ではなく半導体の出力なので switch: 'output'（from に出力の黒、to に基準側の白）とする
+  links: [{ from: 'OUT', to: 'IN', switch: 'output' }],
+  // G9SX-NS と組み合わせたときの性能（D40A 単体には定めがない）
+  safety: { pl: 'd', category: '3', standards: ['ISO 13849-1', 'ISO 14119'] },
   // 0.6W / 24V
   loadCurrent: 0.025,
 };

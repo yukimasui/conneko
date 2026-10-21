@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン 両手操作コントローラ G9SA-TH301（24VAC/DC、安全出力 3a ＋ 補助 1b、M3 ネジ端子 21 個）。
@@ -129,6 +129,22 @@ const LABELS: Record<string, string> = {
   '42': '42（補助出力 b 接点・非安全）',
 };
 
+/** 押ボタンの共通側（T12/T22）から b 接点・a 接点を通って T11・T13 / T21・T23 へ戻す */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  T12: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  T11: { function: 'safety-input', channel: 1 },
+  T13: { function: 'safety-input', channel: 1 },
+  T22: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  T21: { function: 'safety-input', channel: 2 },
+  T23: { function: 'safety-input', channel: 2 },
+  // 接触器の b 接点（フィードバックループ）を T31-T32 間に入れる
+  T31: { function: 'edm' },
+  T32: { function: 'edm' },
+};
+
 const row = (cells: Cell[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
   cells.flatMap((id, i): TerminalDef[] => {
     if (!id) return [];
@@ -136,7 +152,9 @@ const row = (cells: Cell[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
     if (id === 'A1') return [{ id, label: 'A1（+24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } }];
     if (id === 'A2') return [{ id, label: 'A2（0V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } }];
     if (id === 'PE') return [{ id, label: 'PE（保護接地）', x, y, side, role: 'ground' }];
-    return [{ id, label: LABELS[id], x, y, side, role: 'signal', optional: true }];
+    // 数字の端子はリレー接点（41-42 は補助出力）
+    const spec = id === '41' || id === '42' ? { function: 'aux-output' as const } : /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+    return [{ id, label: LABELS[id], x, y, side, role: 'signal', optional: true, ...spec }];
   });
 
 const def: DeviceDefinition = {
@@ -149,7 +167,7 @@ const def: DeviceDefinition = {
     'オムロン G9SA シリーズの両手操作コントローラ（幅45mm、M3 ネジ端子）。プレスなどで作業者の両手を危険区域の外に置かせるため、2 個の押ボタンを 0.5 秒以内に同時に押している間だけ安全出力が閉じる。' +
     '電源 A1/A2 は 24V（AC/DC。図では DC24V として扱い A2 が −）。安全出力 3a（13-14、23-24、33-34）、補助出力 1b（41-42）。PE は保護接地。' +
     '押ボタンはそれぞれ 1a1b（a 接点と b 接点）を使う: 押ボタン S12 は共通を T12、b 接点を T11、a 接点を T13 へ、押ボタン S11 は共通を T22、b 接点を T21、a 接点を T23 へ配線する。' +
-    'フィードバック: 接触器 KM1・KM2 の b 接点（ミラー接点）を直列にして T31-T32 へ。図では接点を閉とみなす。',
+    'フィードバック: 接触器 KM1・KM2 の b 接点（ミラー接点）を直列にして T31-T32 へ。',
   labelPrefix: 'SR',
   width: W,
   height: H,
@@ -160,12 +178,20 @@ const def: DeviceDefinition = {
     ...row(BOT_IN, Y_BOT_IN, 'bottom'),
     ...row(BOT_OUT, Y_BOT_OUT, 'bottom'),
   ],
+  // 安全出力 3a と補助出力 1b（b 接点）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
-    { from: '41', to: '42' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '33', to: '34', switch: 'NO' },
+    { from: '41', to: '42', switch: 'NC' },
   ],
+  safetyChannels: [
+    // 押ボタンごとに b 接点と a 接点を監視する（非等価入力）
+    { id: 'S12', label: '押ボタン S12（b 接点: T12→T11、a 接点: T12→T13）', kind: 'input', mode: 'nc-no', channels: [{ source: 'T12', input: 'T11' }, { source: 'T12', input: 'T13' }] },
+    { id: 'S11', label: '押ボタン S11（b 接点: T22→T21、a 接点: T22→T23）', kind: 'input', mode: 'nc-no', channels: [{ source: 'T22', input: 'T21' }, { source: 'T22', input: 'T23' }] },
+    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  ],
+  safety: { pl: 'e', category: '4', standards: ['ISO 13849-1', 'ISO 13851（EN 574）タイプ IIIC'] },
   // 消費電力 1.7W / 24V
   loadCurrent: 0.07,
 };

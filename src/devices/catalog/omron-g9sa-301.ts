@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン セーフティリレーユニット G9SA-301（24VAC/DC、安全出力 3a ＋ 補助 1b、M3 ネジ端子 20 個）。
@@ -129,6 +129,20 @@ const LABELS: Record<string, string> = {
   '42': '42（補助出力 b 接点・非安全）',
 };
 
+/** 入力回路の電源側（T11/T21 から接点を通って T12/T22 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  T11: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  T12: { function: 'safety-input', channel: 1 },
+  T21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  T22: { function: 'safety-input', channel: 2 },
+  // T31-T32 間にリセットボタンと接触器の b 接点（フィードバックループ）を直列に入れる
+  T31: { function: 'edm' },
+  T32: { function: 'reset' },
+};
+
 const row = (cells: Cell[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
   cells.flatMap((id, i): TerminalDef[] => {
     if (!id) return [];
@@ -136,7 +150,9 @@ const row = (cells: Cell[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
     if (id === 'A1') return [{ id, label: 'A1（+24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } }];
     if (id === 'A2') return [{ id, label: 'A2（0V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } }];
     if (id === 'PE') return [{ id, label: 'PE（保護接地）', x, y, side, role: 'ground' }];
-    return [{ id, label: LABELS[id], x, y, side, role: 'signal', optional: true }];
+    // 数字の端子はリレー接点（41-42 は補助出力）
+    const spec = id === '41' || id === '42' ? { function: 'aux-output' as const } : /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+    return [{ id, label: LABELS[id], x, y, side, role: 'signal', optional: true, ...spec }];
   });
 
 const def: DeviceDefinition = {
@@ -148,7 +164,7 @@ const def: DeviceDefinition = {
   description:
     'オムロン G9SA シリーズのセーフティリレーユニット（幅45mm、M3 ネジ端子）。電源 A1/A2 は 24V（AC/DC、85〜110%。図では DC24V として扱い A2 が −）。安全出力 3a（13-14、23-24、33-34、AC250V/DC30V 5A）、補助出力 1b（41-42）。PL e / カテゴリ4。PE は保護接地（PTC で地絡・チャンネル間短絡を検出）。' +
     '2 チャンネル入力: 非常停止の b 接点 1 回路目を T11-T12、2 回路目を T21-T22 に接続する。' +
-    'リセット: A-B 開放で手動リセット（T31-T32 間にリセットボタンと接触器 KM1・KM2 の b 接点＝ミラー接点を直列に入れる）、A-B 短絡で自動リセット（T31-T32 間はフィードバック接点のみ）。図では接点を閉とみなす。',
+    'リセット: A-B 開放で手動リセット（T31-T32 間にリセットボタンと接触器 KM1・KM2 の b 接点＝ミラー接点を直列に入れる）、A-B 短絡で自動リセット（T31-T32 間はフィードバック接点のみ）。',
   labelPrefix: 'SR',
   width: W,
   height: H,
@@ -159,12 +175,18 @@ const def: DeviceDefinition = {
     ...row(BOT_IN, Y_BOT_IN, 'bottom'),
     ...row(BOT_OUT, Y_BOT_OUT, 'bottom'),
   ],
+  // 安全出力 3a と補助出力 1b（b 接点）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
-    { from: '41', to: '42' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '33', to: '34', switch: 'NO' },
+    { from: '41', to: '42', switch: 'NC' },
   ],
+  safetyChannels: [
+    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
+    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  ],
+  safety: { pl: 'e', category: '4', standards: ['ISO 13849-1', 'IEC 60204-1'] },
   // 消費電力 1.7W / 24V
   loadCurrent: 0.07,
 };

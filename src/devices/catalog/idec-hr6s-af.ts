@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * IDEC セーフティモジュール HR6S-AF（非常停止・安全ドア用、安全出力 3a、着脱式プッシュイン端子台）。
@@ -137,11 +137,28 @@ const LABELS: Record<string, string> = {
   '34': '34（安全出力 3）',
 };
 
+/** テストパルス出力（S11/S21 から接点を通って S12/S22 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  S11: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  S12: { function: 'safety-input', channel: 1 },
+  S21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  S22: { function: 'safety-input', channel: 2 },
+  // Y1 から リセットボタン・接触器の b 接点（フィードバックループ）を通って Y2 へ戻す
+  Y1: { function: 'edm' },
+  Y2: { function: 'reset' },
+  Z1: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
+
 const row = (ids: string[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
   ids.map((id, i) => {
     if (id === 'A1') return { id, label: 'A1（+24V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
     if (id === 'A2') return { id, label: 'A2（0V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true };
+    // 数字の端子はリレー接点
+    const spec = /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true, ...spec };
   });
 
 const def: DeviceDefinition = {
@@ -153,7 +170,7 @@ const def: DeviceDefinition = {
   description:
     'IDEC HR6S シリーズの非常停止・安全ドア用セーフティモジュール（幅22.5mm、着脱式端子台。プッシュイン HR6S-AF1C／ネジ HR6S-AF1P）。電源 A1/A2 は DC24V（±20%。AC24V 品としても使える）。安全出力 3a（13-14、23-24、33-34、DC-13 24V 3A）。PL e / カテゴリ4、SIL3。' +
     '2 チャンネル入力（FUNCTION 1）: 非常停止の b 接点 1 回路目を S11-S12、2 回路目を S21-S22 に接続する（S11/S21 のテストパルスで横絡を検出）。' +
-    'スタート: START スイッチで自動／手動／監視付きを選ぶ。自動は Y1-Y2 を短絡、手動はリセットボタンと接触器の b 接点（ミラー接点）を直列にして Y1-Y2 に入れる（フィードバックループ）。図では接点を閉とみなす。',
+    'スタート: START スイッチで自動／手動／監視付きを選ぶ。自動は Y1-Y2 を短絡、手動はリセットボタンと接触器の b 接点（ミラー接点）を直列にして Y1-Y2 に入れる（フィードバックループ）。',
   labelPrefix: 'SR',
   width: W,
   height: H,
@@ -164,11 +181,18 @@ const def: DeviceDefinition = {
     ...row(BOT_IN, Y_BOT_IN, 'bottom'),
     ...row(BOT_OUT, Y_BOT_OUT, 'bottom'),
   ],
+  // 安全出力 3a
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '33', to: '34', switch: 'NO' },
   ],
+  // FUNCTION 1（2 チャンネルの b 接点入力）の場合
+  safetyChannels: [
+    { id: 'IN', label: '安全入力（CH1: S11→S12、CH2: S21→S22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'S11', input: 'S12' }, { source: 'S21', input: 'S22' }] },
+    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   params: [
     {
       key: 'start',
