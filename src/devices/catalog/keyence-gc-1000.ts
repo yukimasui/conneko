@@ -206,7 +206,7 @@ const terminals: TerminalDef[] = [
   ...LOWER.slice(0, 7).flatMap(([l, r], i) => [ioTerminal(l, HOLE_L, LOW_Y[i], 'L'), ioTerminal(r, HOLE_R, LOW_Y[i], 'R')]),
   { id: '+24V', label: '+24V（電源）', x: HOLE_L, y: LOW_Y[7], side: 'left', role: 'input', accepts: { ...power, conductors: ['+'] } },
   { id: '0V', label: '0V（電源）', x: HOLE_R, y: LOW_Y[7], side: 'right', role: 'input', accepts: { ...power, conductors: ['-'] } },
-  { id: 'LAN', label: 'Ethernet', x: LAN_X, y: LAN_Y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: LAN_W }, optional: true },
+  { id: 'LAN', label: 'Ethernet', x: LAN_X, y: LAN_Y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: LAN_W, protocols: ['ethernet'] }, optional: true },
 ];
 
 const def: DeviceDefinition = {

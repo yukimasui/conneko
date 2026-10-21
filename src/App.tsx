@@ -38,8 +38,8 @@ import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
-import { applyIoCandidate, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
-import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
+import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
+import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -168,7 +168,8 @@ function Editor() {
     const out = new Map<string, 'left' | 'right'>();
     const byId = new Map(nodes.map((n) => [n.id, n]));
     for (const n of nodes) {
-      if (n.data.deviceType !== LINK_TYPE || (n.data.params?.side ?? 'auto') !== 'auto') continue;
+      const nodeDef = getDeviceDefinition(n.data.deviceType);
+      if (!nodeDef?.netLabel || (n.data.params?.side ?? 'auto') !== 'auto') continue;
       const e = edges.find((x) => x.source === n.id || x.target === n.id);
       const other = e && byId.get(e.source === n.id ? e.target : e.source);
       const def = other && getDeviceDefinition(other.data.deviceType);
@@ -291,10 +292,10 @@ function Editor() {
   const linkPeers = useMemo(() => {
     const out = new Map<string, { id: string; sheet: string; sheetName: string }[]>();
     for (const d of diagram.devices) {
-      if (d.type !== LINK_TYPE) continue;
-      const name = String(d.params?.name ?? '').trim();
+      if (!getDeviceDefinition(d.type)?.netLabel) continue;
+      const k = linkKey(d.type, String(d.params?.name ?? '').trim());
       const sheetId = d.sheet ?? sheets[0].id;
-      out.set(name, [...(out.get(name) ?? []), { id: d.id, sheet: sheetId, sheetName: sheets.find((s) => s.id === sheetId)?.name ?? '' }]);
+      out.set(k, [...(out.get(k) ?? []), { id: d.id, sheet: sheetId, sheetName: sheets.find((s) => s.id === sheetId)?.name ?? '' }]);
     }
     return out;
   }, [topo]);
@@ -370,7 +371,12 @@ function Editor() {
   );
 
   // リンクの名前がなくなったら（リンクの削除・名前の変更・I/O の切断など）、「名前-2」などを元の名前に戻す
-  const linkNameKey = [...linkPeers.keys()].filter(Boolean).sort().join('\n');
+  const linkNameKey = [...linkPeers.keys()]
+    .filter((k) => k.startsWith(`${LINK_TYPE}|`))
+    .map((k) => k.slice(LINK_TYPE.length + 1))
+    .filter(Boolean)
+    .sort()
+    .join('\n');
   const prevLinkNames = useRef(linkNameKey);
   const skipPromote = useRef(false);
   useEffect(() => {
@@ -510,7 +516,9 @@ function Editor() {
       const target = event.target as Element | null;
       if (!target?.closest('.react-flow__pane')) return;
       const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
-      if (terminalOf(from.device, from.terminal)?.connector) return;
+      // コネクタは LAN ポート（ネットワークの候補を出す）だけ
+      const conn = terminalOf(from.device, from.terminal)?.connector;
+      if (conn && !(conn.pins === 0 && conn.kind === 'RJ45')) return;
       const point = 'changedTouches' in event ? event.changedTouches[0] : event;
       setPicker({
         x: point.clientX,
@@ -629,7 +637,7 @@ function Editor() {
       const def = getDeviceDefinition(node.data.deviceType);
       const others = sheets.filter((s) => s.id !== node.data.sheet);
       const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
-      const peers = (linkPeers.get(name) ?? []).filter((p) => p.id !== node.id);
+      const peers = (linkPeers.get(linkKey(node.data.deviceType, name)) ?? []).filter((p) => p.id !== node.id);
       const items: MenuItem[] = [
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
@@ -662,8 +670,8 @@ function Editor() {
             onClick: () => changeWire(edge.id, { bend: undefined, route: undefined }),
           },
           {
-            label: 'リンクで分ける（電線を図から消す）',
-            disabled: isCable,
+            label: isCable ? 'ネットワークリンクで分ける（LAN ケーブルを図から消す）' : 'リンクで分ける（電線を図から消す）',
+            disabled: isCable && !isLanCable(diagram, flowToDiagram([], [edge]).wires[0], getDeviceDefinition),
             onClick: () => applyDiagram(splitWireWithLinks(diagram, edge.id, getDeviceDefinition), '電線を両端のリンクに置き換えました'),
           },
           { label: '削除', danger: true, separator: true, hint: 'Delete', onClick: () => deleteElements({ edges: [{ id: edge.id }] }) },
@@ -682,6 +690,7 @@ function Editor() {
         y: e.clientY,
         items: [
           { label: 'ここにリンクを置く', onClick: () => addDevice(LINK_TYPE, at) },
+          { label: 'ここにネットワークリンク（LAN）を置く', onClick: () => addDevice(NET_LINK_TYPE, at) },
           { label: 'シートを追加', separator: true, onClick: addSheet },
         ],
       });
@@ -906,6 +915,10 @@ function Editor() {
           onIo={(c) => {
             setPicker(null);
             applyDiagram(applyIoCandidate(diagram, picker.from, c, wireDefaults, getDeviceDefinition), `${picker.from.device}.${picker.from.terminal} を ${c.point.address}（${c.point.device}）につなぎました`);
+          }}
+          onNetwork={(name) => {
+            setPicker(null);
+            applyDiagram(applyNetwork(diagram, picker.from, name, picker.at, getDeviceDefinition), `ネットワークリンク「${name}」を置いてつなぎました`);
           }}
           onLink={(name) => {
             setPicker(null);

@@ -12,7 +12,7 @@ import { resolveDevice } from '../devices/resolve';
 import { resolveNum, type Conductor, type DeviceDefinition, type PowerSystem } from '../devices/types';
 import type { Diagram, TerminalRef } from './diagram';
 import { connectIo, ioHosts, ioSystem, type IoPoint } from './io';
-import { LINK_TYPE, linkNames, linkTerminal, placeLinkAt, uniqueLinkName, type WireAttrs } from './ops';
+import { LINK_TYPE, linkNames, linkTerminal, NET_LINK_TYPE, placeLinkAt, uniqueLinkName, type WireAttrs } from './ops';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
 
@@ -38,6 +38,8 @@ export interface IoCandidate {
 export interface Suggestions {
   power: PowerCandidate[];
   io: IoCandidate[];
+  /** LAN ポートから引いた場合: 図面にあるネットワークリンクの名前（選ぶとネットワークリンクを置いてつなぐ） */
+  networks?: string[];
 }
 
 const DEFAULT_CONDUCTORS: Record<PowerSystem, Conductor[]> = { AC: ['R', 'S', 'T', 'L', 'N'], DC: ['+', '-'] };
@@ -77,6 +79,11 @@ export function suggestConnections(d: Diagram, from: TerminalRef, lookup: DefLoo
   const info = m.terminals.get(k);
   if (!info) return { power: [], io: [] };
   const t = info.terminal;
+  if (t.connector) {
+    // LAN ポート（ピンのない RJ-45）ならネットワークの候補、ほかのコネクタは候補なし
+    const lan = t.connector.pins === 0 && t.connector.kind === 'RJ45';
+    return { power: [], io: [], ...(lan ? { networks: [...linkNames(d, NET_LINK_TYPE)].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })) } : {}) };
+  }
   const ownRoot = m.fixed.find(k);
 
   // --- 電源 ---
@@ -162,4 +169,9 @@ export function applyPowerCandidate(d: Diagram, from: TerminalRef, c: PowerCandi
 /** PLC の入出力の候補を選んだときの処理（I/O の接続と同じ） */
 export function applyIoCandidate(d: Diagram, from: TerminalRef, c: IoCandidate, base: WireAttrs, lookup: DefLookup): Diagram {
   return connectIo(d, c.point, from, wireFor('dc-control', base), lookup);
+}
+
+/** ネットワークを選んだ（または新しい名前を入れた）ときの処理: 離した位置にネットワークリンクを置いてつなぐ */
+export function applyNetwork(d: Diagram, from: TerminalRef, name: string, at: { x: number; y: number }, lookup: DefLookup): Diagram {
+  return placeLinkAt(d, from, name, at, { color: 'black', sizeSq: 0, wireType: 'CABLE', wireNo: name }, lookup, NET_LINK_TYPE);
 }

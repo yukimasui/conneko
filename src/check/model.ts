@@ -223,6 +223,8 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
 
   const wires: DiagramWire[] = [];
   const cablePairs: [string, string][] = [];
+  /** ケーブルでつないだコネクタの組（通信ポートも含む） */
+  const cables: { a: string; b: string; wire: string }[] = [];
   for (const w of diagram.wires) {
     const bad = [w.from, w.to].filter((r) => !terminals.has(key(r.device, r.terminal)));
     if (bad.length) {
@@ -240,6 +242,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     const b = terminals.get(key(w.to.device, w.to.terminal))!.terminal.connector;
     if (a || b) {
       if (a && b && connectorsMate(a, b)) {
+        cables.push({ a: key(w.from.device, w.from.terminal), b: key(w.to.device, w.to.terminal), wire: w.id });
         // ケーブル: 両端の同じ番号のピンどうしが導通する
         for (let i = 1; i <= Math.min(a.pins, b.pins); i++) {
           cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${i}`)]);
@@ -289,26 +292,51 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     }
   }
 
-  // リンク: 名前が同じリンクの端子どうしを常時導通とみなす
-  const linkNets = new Map<string, string[]>();
+  // リンク: 名前が同じリンクの端子どうしを常時導通とみなす（リンクの種類ごとに別の名前の空間）
+  const cabled = new Set(cables.flatMap((c) => [c.a, c.b]));
+  const linkNets = new Map<string, { name: string; kind: string; keys: string[] }>();
   const labelLinks: [string, string][] = [];
   for (const { device, def, r } of devices.values()) {
     if (!def.netLabel) continue;
     const name = String(r.params[def.netLabel.param] ?? '').trim();
     const k = key(device.id, def.netLabel.terminal);
     if (!name) {
-      push({ severity: 'warning', rule: 'link-unnamed', message: `${device.id}: リンクに名前がありません（同じ名前のリンクどうしがつながります）`, devices: [device.id], wires: [] });
+      push({ severity: 'warning', rule: 'link-unnamed', message: `${device.id}: ${def.name}に名前がありません（同じ名前の${def.name}どうしがつながります）`, devices: [device.id], wires: [] });
       continue;
     }
-    linkNets.set(name, [...(linkNets.get(name) ?? []), k]);
-    if (!wiresAt.has(k)) {
-      push({ severity: 'warning', rule: 'link-unwired', message: `${device.id}: リンク「${name}」に電線がつながっていません`, devices: [device.id], wires: [] });
+    const net = linkNets.get(`${def.type}|${name}`) ?? { name, kind: def.name, keys: [] };
+    net.keys.push(k);
+    linkNets.set(`${def.type}|${name}`, net);
+    if (!wiresAt.has(k) && !cabled.has(k)) {
+      push({ severity: 'warning', rule: 'link-unwired', message: `${device.id}: ${def.name}「${name}」に${r.terminal(def.netLabel.terminal)?.connector ? 'ケーブル' : '電線'}がつながっていません`, devices: [device.id], wires: [] });
     }
   }
-  for (const [name, ks] of linkNets) {
+  for (const { name, kind, keys: ks } of linkNets.values()) {
     if (ks.length === 1) {
       const id = ks[0].split(':')[0];
-      push({ severity: 'warning', rule: 'link-alone', message: `${id}: リンク「${name}」の相手がありません（同じ名前のリンクを置きます）`, devices: [id], wires: [] });
+      push({ severity: 'warning', rule: 'link-alone', message: `${id}: ${kind}「${name}」の相手がありません（同じ名前の${kind}を置きます）`, devices: [id], wires: [] });
+    }
+    // 通信ポートのネットワーク: 同じ名前のリンクにケーブルでつないだポートどうしの通信方式を確かめる
+    const ports = ks.flatMap((lk) =>
+      cables
+        .filter((c) => c.a === lk || c.b === lk)
+        .map((c) => (c.a === lk ? c.b : c.a))
+        .map((pk) => ({ key: pk, protocols: terminals.get(pk)?.terminal.connector?.protocols ?? [] }))
+        .filter((p) => p.protocols.length && !ks.includes(p.key)),
+    );
+    for (let i = 0; i < ports.length; i++) {
+      const bad = ports.slice(i + 1).find((q) => !q.protocols.some((x) => ports[i].protocols.includes(x)));
+      if (!bad) continue;
+      const [a, b] = [ports[i], bad];
+      push({
+        severity: 'warning',
+        rule: 'protocol-mismatch',
+        message: `${kind}「${name}」: ${a.key.replace(':', '.')}（${a.protocols.join('/')}）と ${b.key.replace(':', '.')}（${b.protocols.join('/')}）に共通の通信方式がありません`,
+        devices: [a.key.split(':')[0], b.key.split(':')[0]],
+        wires: [],
+        key: `protocol-network:${name}:${a.key}:${b.key}`,
+      });
+      break;
     }
     for (let i = 1; i < ks.length; i++) {
       fixedLinks.push([ks[0], ks[i]]);

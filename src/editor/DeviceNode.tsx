@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
+import { linkKey } from '../model/ops';
 import type { TerminalDef, TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode } from './flow';
@@ -126,7 +127,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
       {def.netLabel && (
         <LinkPeers
           self={id}
-          peers={linkPeers.get(String(params?.[def.netLabel.param] ?? '').trim()) ?? []}
+          peers={linkPeers.get(linkKey(def.type, String(params?.[def.netLabel.param] ?? '').trim())) ?? []}
           sheet={data.sheet}
           onJump={onJump}
         />

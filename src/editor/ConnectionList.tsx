@@ -29,7 +29,8 @@ export function ConnectionList({ diagram, onSelectWire, onJump }: { diagram: Dia
     const devices = new Map(diagram.devices.map((d) => [d.id, d]));
     const name = (r: TerminalRef) => {
       const d = devices.get(r.device);
-      if (d?.type === LINK_TYPE) return `リンク「${String(d.params?.name ?? '')}」`;
+      const def = d && getDeviceDefinition(d.type);
+      if (def?.netLabel) return `${def.name}「${String(d!.params?.name ?? '')}」`;
       const t = m.terminals.get(key(r.device, r.terminal))?.terminal;
       return `${r.device}.${r.terminal}${t?.label && t.label !== r.terminal ? `（${t.label}）` : ''}`;
     };
@@ -60,10 +61,12 @@ export function ConnectionList({ diagram, onSelectWire, onJump }: { diagram: Dia
       };
     });
     rows.sort((a, b) => a.sheetIndex - b.sheetIndex || collator.compare(a.wireNo || '~', b.wireNo || '~') || collator.compare(a.id, b.id));
+    // リンクの名前ごとの置き場所（ネットワークリンクは名前の前に「LAN」を付けて区別する）
     const byName = new Map<string, { id: string; sheet: string }[]>();
     for (const d of diagram.devices) {
-      if (d.type !== LINK_TYPE) continue;
-      const n = String(d.params?.name ?? '').trim();
+      const def = getDeviceDefinition(d.type);
+      if (!def?.netLabel) continue;
+      const n = `${d.type === LINK_TYPE ? '' : 'LAN '}${String(d.params?.name ?? '').trim()}`;
       byName.set(n, [...(byName.get(n) ?? []), { id: d.id, sheet: sheetOf(diagram, d) }]);
     }
     const links = [...byName].sort((a, b) => collator.compare(a[0], b[0]));

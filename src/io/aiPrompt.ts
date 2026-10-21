@@ -92,7 +92,7 @@ function linkText(l: InternalLink): string {
 
 function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamValues | undefined, sheetName: string): string {
   if (def.netLabel) {
-    return `- ${d.id}: リンク「${String(params?.[def.netLabel.param] ?? '')}」（シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
+    return `- ${d.id}: ${def.name}「${String(params?.[def.netLabel.param] ?? '')}」（type: ${def.type}、シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
   }
   const lines = [`- ${d.id}: ${def.name} ${def.model}（type: ${def.type}、シート: ${sheetName}）`];
   if (d.note) lines.push(`  用途: ${d.note}`);
@@ -178,6 +178,7 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
   - 端子IDは下の「機器と端子」に書かれているものだけを使ってください（印字ではなく ID）。
 - コネクタ（MIL40, RJ45 など）どうしは、同じ種類（または変換ケーブルでつなげると書かれた種類）のコネクタ間をケーブルでつなぎます。ケーブルは wireType を "CABLE" にした電線として書きます（color/sizeSq は任意）。ケーブルでつなぐと両端の同じ番号のピンが導通します。通信ポートは通信方式が同じものどうしをつなぎます。
 - 図面はシート（sheets）に分かれています。電線は同じシートの機器どうしだけをつなぎます。別のシートの機器へは、両方のシートにリンク（type: "generic.link"、params: {"name": "名前"}）を置き、名前を同じにしてそれぞれ電線でつなぎます（同じ名前のリンクどうしが導通します）。新しく置く機器には sheet にシートの id を書いてください。シートをまたいだ電線を書いた場合は、アプリが自動でリンクに置き換えます。
+- LAN ケーブルも同様に、別のシートの機器へはネットワークリンク（type: "generic.network-link"、端子 "LAN"）を置き、同じ名前のネットワークリンクに LAN ケーブル（wireType "CABLE"）でつなぎます。同じ名前のネットワークリンクにつないだ機器どうしは同じネットワークになります（電線用のリンクとは名前が別の空間です）。
 - PLC の入出力の電線は、線番を入出力番号（例: R000）にすると分かりやすくなります。コメント（comments）は入出力の用途です。
 - 電源出力から保護機器（ブレーカー・サーキットプロテクタ）を通して負荷へ給電してください。
 - 三相の負荷には R/S/T の3相を、それぞれ別の端子に接続してください。直流は +/- の極性に注意してください。

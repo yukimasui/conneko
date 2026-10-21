@@ -11,6 +11,14 @@ import { CABLE_WIRE_TYPE, nextDeviceId, nextWireId, sheetOf, type Diagram, type 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
 
 export const LINK_TYPE = 'generic.link';
+/** LAN ケーブルを飛ばすネットワークリンク */
+export const NET_LINK_TYPE = 'generic.network-link';
+
+/** リンクの種類と名前の組のキー（種類ごとに名前の空間が別） */
+export const linkKey = (type: string, name: string) => `${type}|${name}`;
+
+/** ケーブルの属性（ネットワークリンクとポートをつなぐ LAN ケーブル） */
+const CABLE_ATTRS = { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE };
 
 export type WireAttrs = Pick<DiagramWire, 'color' | 'sizeSq' | 'wireType'> & { wireNo?: string };
 
@@ -22,32 +30,45 @@ export function terminalPoint(d: Diagram, ref: TerminalRef, lookup: DefLookup): 
   return dev && t ? { x: dev.x + t.x, y: dev.y + t.y, side: t.side } : undefined;
 }
 
-/** 図面で使われているリンクの名前 */
-export function linkNames(d: Diagram): Set<string> {
-  return new Set(d.devices.filter((x) => x.type === LINK_TYPE).map((x) => String(x.params?.name ?? '').trim()).filter(Boolean));
+/** 図面で使われているリンクの名前（linkType はリンクの種類。電線用とネットワーク用で名前の空間が別） */
+export function linkNames(d: Diagram, linkType = LINK_TYPE): Set<string> {
+  return new Set(d.devices.filter((x) => x.type === linkType).map((x) => String(x.params?.name ?? '').trim()).filter(Boolean));
 }
 
-/** 使われていないリンク名（base、base-2、base-3 …） */
-export function uniqueLinkName(d: Diagram, base: string): string {
-  const used = linkNames(d);
+/** 使われていないリンク名（base、base-2、base-3 …。base が空なら L1, L2 … / LAN1, LAN2 …） */
+export function uniqueLinkName(d: Diagram, base: string, linkType = LINK_TYPE): string {
+  const used = linkNames(d, linkType);
   const b = base.trim();
   if (!b) {
-    for (let n = 1; ; n++) if (!used.has(`L${n}`)) return `L${n}`;
+    const prefix = linkType === NET_LINK_TYPE ? 'LAN' : 'L';
+    for (let n = 1; ; n++) if (!used.has(`${prefix}${n}`)) return `${prefix}${n}`;
   }
   if (!used.has(b)) return b;
   for (let n = 2; ; n++) if (!used.has(`${b}-${n}`)) return `${b}-${n}`;
 }
 
 /** 同じ名前のリンクを、この距離[px]以内にあれば新しく置かずに使う */
-const REUSE_DISTANCE = 320;
+const REUSE_DISTANCE = 450;
 
 /**
  * 端子の近くにリンクを置いてつなぐ（置いたリンクの機器と、リンクと端子をつなぐ電線を返す）。
  * リンクは端子から電線が出る向きに離して置き、電線をつなぐ側を端子に向ける。ほかの機器と重なる場合はずらす。
  * 同じシートの近くに同じ名前のリンクがあれば、それにつなぐ（device は undefined）。
  */
-function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: string, sheet: string, attrs: WireAttrs, lookup: DefLookup, usedIds: string[], usedWires: string[]) {
-  const linkDef = lookup(LINK_TYPE)!;
+function linkAt(
+  d: Diagram,
+  placed: DiagramDevice[],
+  ref: TerminalRef,
+  name: string,
+  sheet: string,
+  attrs: WireAttrs,
+  lookup: DefLookup,
+  usedIds: string[],
+  usedWires: string[],
+  linkType = LINK_TYPE,
+) {
+  const linkDef = lookup(linkType)!;
+  const port = linkDef.netLabel?.terminal ?? 'T';
   const p = terminalPoint(d, ref, lookup) ?? { x: 0, y: 0, side: 'right' as TerminalSide };
   const W = linkDef.width;
   const H = linkDef.height;
@@ -55,11 +76,13 @@ function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: str
   const wire = (to: string): DiagramWire => {
     const wid = nextWireId(usedWires);
     usedWires.push(wid);
-    return { id: wid, from: ref, to: { device: to, terminal: 'T' }, ...attrs };
+    return { id: wid, from: ref, to: { device: to, terminal: port }, ...attrs };
   };
 
+  // 同じ操作で置いたリンクは使わない（同じシートで電線をリンクで分けるときに、両端が同じリンクになってしまうため）
   const near = all
-    .filter((x) => x.type === LINK_TYPE && String(x.params?.name ?? '').trim() === name)
+    .filter((x) => !placed.includes(x))
+    .filter((x) => x.type === linkType && String(x.params?.name ?? '').trim() === name)
     .map((x) => ({ x, dist: Math.hypot(x.x + W / 2 - p.x, x.y + H / 2 - p.y) }))
     .filter((c) => c.dist <= REUSE_DISTANCE)
     .sort((a, b) => a.dist - b.dist)[0];
@@ -86,7 +109,7 @@ function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: str
   const id = nextDeviceId(linkDef.labelPrefix, usedIds);
   usedIds.push(id);
   // 向きは「自動」（相手の端子の側に向く）
-  const device: DiagramDevice = { id, type: LINK_TYPE, x: Math.round(x), y: Math.round(y), params: { name, side: 'auto' }, sheet };
+  const device: DiagramDevice = { id, type: linkType, x: Math.round(x), y: Math.round(y), params: { name, side: 'auto' }, sheet };
   return { device, wire: wire(id) };
 }
 
@@ -94,7 +117,16 @@ function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: str
  * 2 つの端子をつなぐ。同じシートなら電線 1 本、違うシートなら同じ名前のリンクを両方のシートに置いてつなぐ。
  * linkName を省略すると線番（なければ「L」）からリンク名を作る。
  */
-export function connectTerminals(d: Diagram, a: TerminalRef, b: TerminalRef, attrs: WireAttrs, lookup: DefLookup, linkName?: string, forceLink = false): Diagram {
+export function connectTerminals(
+  d: Diagram,
+  a: TerminalRef,
+  b: TerminalRef,
+  attrs: WireAttrs,
+  lookup: DefLookup,
+  linkName?: string,
+  forceLink = false,
+  linkType = LINK_TYPE,
+): Diagram {
   const da = d.devices.find((x) => x.id === a.device);
   const db = d.devices.find((x) => x.id === b.device);
   if (!da || !db) return d;
@@ -106,11 +138,11 @@ export function connectTerminals(d: Diagram, a: TerminalRef, b: TerminalRef, att
     return { ...d, wires: [...d.wires, { id: nextWireId(usedWires), from: a, to: b, ...attrs }] };
   }
   // 名前を指定した場合はそのまま使う（同じネットのリンクにまとめるため）。指定しなければ線番から重ならない名前を作る
-  const name = linkName ?? uniqueLinkName(d, attrs.wireNo ?? '');
+  const name = linkName ?? uniqueLinkName(d, attrs.wireNo ?? '', linkType);
   const placed: DiagramDevice[] = [];
-  const la = linkAt(d, placed, a, name, sa, attrs, lookup, usedIds, usedWires);
+  const la = linkAt(d, placed, a, name, sa, attrs, lookup, usedIds, usedWires, linkType);
   if (la.device) placed.push(la.device);
-  const lb = linkAt(d, placed, b, name, sb, attrs, lookup, usedIds, usedWires);
+  const lb = linkAt(d, placed, b, name, sb, attrs, lookup, usedIds, usedWires, linkType);
   if (lb.device) placed.push(lb.device);
   return { ...d, devices: [...d.devices, ...placed], wires: [...d.wires, la.wire, lb.wire] };
 }
@@ -122,7 +154,18 @@ export function connectTerminals(d: Diagram, a: TerminalRef, b: TerminalRef, att
 export function splitCrossSheetWires(d: Diagram, lookup: DefLookup): Diagram {
   if (!lookup(LINK_TYPE)) return d;
   const sheet = new Map(d.devices.map((x) => [x.id, sheetOf(d, x)]));
-  const cross = d.wires.filter((w) => w.wireType !== CABLE_WIRE_TYPE && sheet.get(w.from.device) !== sheet.get(w.to.device));
+  const crossing = (w: DiagramWire) => sheet.get(w.from.device) !== sheet.get(w.to.device);
+  const cross = d.wires.filter((w) => w.wireType !== CABLE_WIRE_TYPE && crossing(w));
+  // シートをまたぐ LAN ケーブルは、両端にネットワークリンクを置いた形にする
+  const lanCross = d.wires.filter((w) => crossing(w) && isLanCable(d, w, lookup));
+  if (lanCross.length && lookup(NET_LINK_TYPE)) {
+    let out: Diagram = { ...d, wires: d.wires.filter((w) => !lanCross.includes(w)) };
+    for (const w of lanCross) {
+      const name = uniqueLinkName(out, w.wireNo ?? '', NET_LINK_TYPE);
+      out = connectTerminals(out, w.from, w.to, { ...CABLE_ATTRS, wireNo: name }, lookup, name, true, NET_LINK_TYPE);
+    }
+    return splitCrossSheetWires(out, lookup);
+  }
   if (!cross.length) return d;
   // 同じネット（置き換える前に電線でつながっている範囲）の電線は、同じ名前のリンクにまとめる
   const m = buildModel(d, lookup, () => {});
@@ -147,10 +190,29 @@ export function splitCrossSheetWires(d: Diagram, lookup: DefLookup): Diagram {
 /** 電線を、両端に置いた同じ名前のリンクの組に置き換える（長い電線を図から消して見やすくする） */
 export function splitWireWithLinks(d: Diagram, wireId: string, lookup: DefLookup): Diagram {
   const w = d.wires.find((x) => x.id === wireId);
-  if (!w || w.wireType === CABLE_WIRE_TYPE) return d;
+  if (!w) return d;
+  if (isLanCable(d, w, lookup)) {
+    const rest = { ...d, wires: d.wires.filter((x) => x !== w) };
+    const name = uniqueLinkName(rest, w.wireNo ?? '', NET_LINK_TYPE);
+    return connectTerminals(rest, w.from, w.to, { ...CABLE_ATTRS, wireNo: name }, lookup, name, true, NET_LINK_TYPE);
+  }
+  if (w.wireType === CABLE_WIRE_TYPE) return d;
   const { color, sizeSq, wireType, wireNo } = w;
   const rest = { ...d, wires: d.wires.filter((x) => x !== w) };
   return connectTerminals(rest, w.from, w.to, { color, sizeSq, wireType, ...(wireNo ? { wireNo } : {}) }, lookup, uniqueLinkName(rest, wireNo ?? ''), true);
+}
+
+/** 通信ポートどうしをつなぐ LAN ケーブル（ピンのない RJ-45 などのコネクタ）か */
+export function isLanCable(d: Diagram, w: DiagramWire, lookup: DefLookup): boolean {
+  if (w.wireType !== CABLE_WIRE_TYPE) return false;
+  const conn = (r: TerminalRef) => {
+    const dev = d.devices.find((x) => x.id === r.device);
+    const def = dev && lookup(dev.type);
+    return def ? resolveDevice(def, dev.params).terminal(r.terminal)?.connector : undefined;
+  };
+  const a = conn(w.from);
+  const b = conn(w.to);
+  return !!a && !!b && a.pins === 0 && b.pins === 0 && a.kind === 'RJ45' && b.kind === 'RJ45';
 }
 
 /** 装着の親・子を含めて、一緒に動く機器の ID */
@@ -199,20 +261,29 @@ export function linkTerminal(d: Diagram, ref: TerminalRef, name: string, attrs: 
  * 指定した位置（キャンバス上の点。リンクの中心）にリンクを置き、端子とつなぐ。
  * リンクの電線をつなぐ側は、端子のある側に向ける。
  */
-export function placeLinkAt(d: Diagram, ref: TerminalRef, name: string, at: { x: number; y: number }, attrs: WireAttrs, lookup: DefLookup): Diagram {
+export function placeLinkAt(
+  d: Diagram,
+  ref: TerminalRef,
+  name: string,
+  at: { x: number; y: number },
+  attrs: WireAttrs,
+  lookup: DefLookup,
+  linkType = LINK_TYPE,
+): Diagram {
   const dev = d.devices.find((x) => x.id === ref.device);
-  const linkDef = lookup(LINK_TYPE);
+  const linkDef = lookup(linkType);
   if (!dev || !linkDef) return d;
   const id = nextDeviceId(linkDef.labelPrefix, d.devices.map((x) => x.id));
   const device: DiagramDevice = {
     id,
-    type: LINK_TYPE,
+    type: linkType,
     x: Math.round(at.x - linkDef.width / 2),
     y: Math.round(at.y - linkDef.height / 2),
     params: { name, side: 'auto' },
     sheet: sheetOf(d, dev),
   };
-  const wire: DiagramWire = { id: nextWireId(d.wires.map((w) => w.id)), from: ref, to: { device: id, terminal: 'T' }, ...attrs };
+  const port = linkDef.netLabel?.terminal ?? 'T';
+  const wire: DiagramWire = { id: nextWireId(d.wires.map((w) => w.id)), from: ref, to: { device: id, terminal: port }, ...(linkType === NET_LINK_TYPE ? { ...CABLE_ATTRS, wireNo: name } : attrs) };
   return { ...d, devices: [...d.devices, device], wires: [...d.wires, wire] };
 }
 

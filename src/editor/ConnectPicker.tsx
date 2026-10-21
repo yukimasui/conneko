@@ -10,6 +10,8 @@ interface Props {
   onPower: (c: PowerCandidate) => void;
   onIo: (c: IoCandidate) => void;
   onLink: (name: string) => void;
+  /** LAN ポートの場合: ネットワーク名を選ぶ・入れる */
+  onNetwork: (name: string) => void;
   onClose: () => void;
 }
 
@@ -19,7 +21,7 @@ const IO_LIMIT = 40;
  * 端子から電線を引いて何もないところで離したときの、接続先の候補。
  * 電源（リンクの名前）・空いている PLC の入出力・名前を入れてリンクを置く、から選ぶ。
  */
-export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, onClose }: Props) {
+export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, onNetwork, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const [linkName, setLinkName] = useState('');
@@ -42,7 +44,15 @@ export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, 
   const match = (text: string) => !words || text.toLowerCase().includes(words);
   const power = suggestions.power.filter((p) => match(`${p.name} ${p.detail}`));
   const io = suggestions.io.filter((c) => match(`${c.point.address} ${c.point.comment} ${c.point.device}`));
+  const lan = !!suggestions.networks;
+  const networks = (suggestions.networks ?? []).filter((n) => match(n));
+  const place = (name: string) => (lan ? onNetwork(name) : onLink(name));
   const first = () => {
+    if (lan) {
+      if (networks[0]) onNetwork(networks[0]);
+      else if (query.trim()) onNetwork(query.trim());
+      return;
+    }
     if (power[0]) onPower(power[0]);
     else if (io[0]) onIo(io[0]);
     else if (query.trim()) onLink(query.trim());
@@ -68,6 +78,17 @@ export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, 
         onKeyDown={(e) => e.key === 'Enter' && first()}
       />
       <div className="connect-picker__body">
+        {networks.length > 0 && (
+          <section>
+            <h4>ネットワーク</h4>
+            {networks.map((n) => (
+              <button key={n} type="button" className="connect-picker__item" onClick={() => onNetwork(n)}>
+                <span className="connect-picker__name">{n}</span>
+                <span className="muted">同じネットワークにつなぐ</span>
+              </button>
+            ))}
+          </section>
+        )}
         {power.length > 0 && (
           <section>
             <h4>電源</h4>
@@ -95,17 +116,19 @@ export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, 
             {io.length > IO_LIMIT && <p className="muted small">ほか {io.length - IO_LIMIT} 点（絞り込んでください）</p>}
           </section>
         )}
-        {!power.length && !io.length && <p className="muted small">候補がありません。名前を入れてリンクを置けます。</p>}
+        {!power.length && !io.length && !networks.length && (
+          <p className="muted small">候補がありません。名前を入れて{lan ? 'ネットワークリンク' : 'リンク'}を置けます。</p>
+        )}
       </div>
       <div className="connect-picker__link">
         <input
-          placeholder="リンクの名前"
+          placeholder={lan ? 'ネットワークの名前（例: 制御LAN）' : 'リンクの名前'}
           value={linkName}
           onChange={(e) => setLinkName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && linkName.trim() && onLink(linkName.trim())}
+          onKeyDown={(e) => e.key === 'Enter' && linkName.trim() && place(linkName.trim())}
         />
-        <button type="button" disabled={!linkName.trim()} onClick={() => onLink(linkName.trim())}>
-          リンクを置く
+        <button type="button" disabled={!linkName.trim()} onClick={() => place(linkName.trim())}>
+          {lan ? 'ネットワークリンクを置く' : 'リンクを置く'}
         </button>
       </div>
     </div>

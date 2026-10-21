@@ -225,7 +225,7 @@ const def: DeviceDefinition = {
       y: LAN_Y,
       side: 'bottom',
       role: 'connector',
-      connector: { kind: 'RJ45', pins: 0, width: LAN_W },
+      connector: { kind: 'RJ45', pins: 0, width: LAN_W, protocols: ['ethernet'] },
       optional: true,
     },
   ],
