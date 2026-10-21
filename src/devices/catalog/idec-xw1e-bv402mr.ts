@@ -3,7 +3,8 @@ import type { DeviceDefinition } from '../types';
 /**
  * IDEC 非常停止用押ボタンスイッチ XW1E-BV402MR（Φ22 取付、Φ40 キノコ形、プッシュロック・ターンリセット、2b）。
  * 左に正面から見た操作部（黄色の非常停止銘板＋赤いキノコ形ボタン）、右に背面の接点ブロック
- * （直接開路動作の b 接点ブロック 2 個）を並べた概念図。縮尺は 1mm ≒ 1.5px。
+ * （直接開路動作の b 接点 2 個。端子 21-22・41-42）を並べた概念図。縮尺は 1mm ≒ 1.5px。
+ * 銘板は別売の黄色い非常停止用銘板（φ60、HWAV-27-Y など）を付けた状態で描く。
  */
 
 const W = 210;
@@ -16,10 +17,13 @@ const CY = 64;
 const PLATE_R = 45;
 const HEAD_R = 30;
 
-/** 接点ブロックのネジ位置（左のブロックが NC1 = 11-12、右のブロックが NC2 = 21-22） */
+/**
+ * 接点ブロックのネジ位置。XW の端子番号は「1 桁目 = 接点の位置（上 1・左 2・下 3・右 4）、2 桁目 = 1-2 が b 接点」。
+ * 2b 品は左（位置 2）と右（位置 4）に b 接点があるので 21-22 と 41-42 になる。
+ */
 const BLOCKS = [
-  { x: 146, top: '11', bottom: '12' },
-  { x: 182, top: '21', bottom: '22' },
+  { x: 146, top: '21', bottom: '22' },
+  { x: 182, top: '41', bottom: '42' },
 ];
 const TOP_Y = 26;
 const BOT_Y = 102;
@@ -45,7 +49,7 @@ const block = (x: number, n: number) => `
   <!-- 接点ブロック NC${n} -->
   <rect x="${x - 15}" y="12" width="30" height="104" rx="2" fill="url(#block-{{uid}})" stroke="#8f897b" stroke-width="0.8"/>
   <rect x="${x - 12}" y="40" width="24" height="48" rx="1.5" fill="#f6f3ec" stroke="#a49e90" stroke-width="0.5"/>
-  ${text(x, 48, `NC${n}`, 5.2, '#c0161b')}
+  ${text(x, 48, 'NC', 5.2, '#c0161b')}
   ${ncSymbol(x, 52)}
   ${directOpening(x, 82)}
   ${screw(x, TOP_Y)}
@@ -115,7 +119,7 @@ const svg = `
 
   <!-- 接点ブロック（2b） -->
   ${BLOCKS.map((b, i) => block(b.x, i + 1)).join('')}
-  ${BLOCKS.map((b) => text(b.x + 11, TOP_Y - 8, b.top, 5.6) + text(b.x + 11, BOT_Y + 13, b.bottom, 5.6)).join('')}
+  ${BLOCKS.map((b) => text(b.x, TOP_Y + 12.5, b.top, 5) + text(b.x, BOT_Y - 8.6, b.bottom, 5)).join('')}
   ${text(164, 124, 'XW1E-BV402MR', 5, '#333', 'normal')}
 `;
 
@@ -126,14 +130,15 @@ const def: DeviceDefinition = {
   maker: 'IDEC',
   category: 'control',
   description:
-    'IDEC XW シリーズの非常停止用押ボタンスイッチ（Φ22 取付、Φ40 キノコ形、プッシュロック・ターンリセット）。直接開路動作の b 接点（NC）を 2 回路持ち、安全リレー・安全コントローラーの 2 チャンネル入力（例: T11-T12 と T21-T22）にそれぞれ 1 回路ずつ接続する。図では接点を閉（押されていない状態）とみなす。',
+    'IDEC XW シリーズの非常停止用押ボタンスイッチ（Φ22 取付、Φ40 キノコ形、プッシュロック・ターンリセット、M3 ネジ端子）。直接開路動作（IEC 60947-5-5）の b 接点（NC）21-22・41-42 の 2 回路を持ち（DC-13 30V 1A）、安全リレー・安全コントローラーの 2 チャンネル入力（例: G9SE の T11-T12 と T21-T22）にそれぞれ 1 回路ずつ接続する。' +
+    '接点ブロックが外れると b 接点が開くセーフブレークアクション付き。図では接点を閉（押されていない状態）とみなす。',
   labelPrefix: 'EMG',
   width: W,
   height: H,
   svg,
   terminals: BLOCKS.flatMap((b, i) => [
-    { id: b.top, label: `${b.top}（NC${i + 1}）`, x: b.x, y: TOP_Y, side: 'top' as const, role: 'signal' as const },
-    { id: b.bottom, label: `${b.bottom}（NC${i + 1}）`, x: b.x, y: BOT_Y, side: 'bottom' as const, role: 'signal' as const },
+    { id: b.top, label: `${b.top}（b 接点 ${i + 1}・直接開路）`, x: b.x, y: TOP_Y, side: 'top' as const, role: 'signal' as const },
+    { id: b.bottom, label: `${b.bottom}（b 接点 ${i + 1}・直接開路）`, x: b.x, y: BOT_Y, side: 'bottom' as const, role: 'signal' as const },
   ]),
   links: BLOCKS.map((b) => ({ from: b.top, to: b.bottom })),
 };
