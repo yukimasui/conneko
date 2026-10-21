@@ -1,6 +1,6 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { NC_H, NC_W, ncBody } from '../keyence/kv-nc';
-import { INPUT_COM_ACCEPTS, kvDefs, text } from '../keyence/kv-parts';
+import { KV_NANO_BUS, ioProps, kvDefs, kvUnitBus, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE 拡張入力ユニット KV-NC32EXE（32点、DC24V、ヨーロピアン端子台＝プッシュイン式）。
@@ -53,13 +53,14 @@ const svg = `
   ${text(38.5, COM_Y + 1, 'C', 2.4, '#e6e7e9', 'middle', 'normal')}
 `;
 
-const terminals: TerminalDef[] = [
+/** 端子（ラベルはリレー番号。左列 = 先頭チャネル、右列 = 次のチャネル） */
+const terminals = (p: ParamValues): TerminalDef[] => [
   ...rows.flatMap((r, i): TerminalDef[] => [
-    { id: r.left, label: `IN ${r.left}（${r.lpin}）`, x: XL, y: rowY(i), side: 'left', role: 'signal', optional: true },
-    { id: r.right, label: `IN ${r.right}（${r.rpin}）`, x: XR, y: rowY(i), side: 'right', role: 'signal', optional: true },
+    { id: r.left, x: XL, y: rowY(i), side: 'left', ...ioProps({ id: r.left, kind: 'in', index: i, common: 'COM0', suffix: `（${r.lpin}）` }, p) },
+    { id: r.right, x: XR, y: rowY(i), side: 'right', ...ioProps({ id: r.right, kind: 'in', index: 16 + i, common: 'COM0', suffix: `（${r.rpin}）` }, p) },
   ]),
-  { id: 'COM0', label: 'COM0（下端子台 No.17）', x: XL, y: COM_Y, side: 'left', role: 'input', accepts: INPUT_COM_ACCEPTS, optional: true },
-  { id: 'COM1', label: 'COM1（下端子台 No.18）', x: XR, y: COM_Y, side: 'right', role: 'input', accepts: INPUT_COM_ACCEPTS, optional: true },
+  { id: 'COM0', x: XL, y: COM_Y, side: 'left', ...ioProps({ id: 'COM0', kind: 'com-in', label: 'COM0', suffix: '（下端子台 No.17）', note: '入力のコモン（COM1 と内部で短絡）' }, p) },
+  { id: 'COM1', x: XR, y: COM_Y, side: 'right', ...ioProps({ id: 'COM1', kind: 'com-in', label: 'COM1', suffix: '（下端子台 No.18）', note: '入力のコモン（COM0 と内部で短絡）' }, p) },
 ];
 
 const def: DeviceDefinition = {
@@ -69,13 +70,14 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE の 32点 DC 入力ユニット（DC24V、3.7mA、ヨーロピアン端子台＝プッシュイン式）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。上の端子台が IN 000〜007（左列）と IN 100〜107（右列）、下の端子台が IN 008〜015・IN 108〜115 と COM0・COM1（COM は内部で短絡、双方向）。端子ID は信号名（000〜015、100〜115）と COM0 / COM1。信号名はユニットの先頭リレー番号からの相対番号。',
+    'KEYENCE の 32点 DC 入力ユニット（DC24V、3.7mA、ヨーロピアン端子台＝プッシュイン式）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。上の端子台が IN 000〜007（左列）と IN 100〜107（右列）、下の端子台が IN 008〜015・IN 108〜115 と COM0・COM1（COM は内部で短絡、双方向）。端子ID はユニット内の信号名（000〜015、100〜115）と COM0 / COM1。端子のラベルはリレー番号（装着位置から決まる先頭番号 + 点数）。内部消費電流 20mA（KV-NC32EX と同じと仮定）。',
   labelPrefix: 'IN',
   width: NC_W,
   height: NC_H,
   svg,
   terminals,
   links: [{ from: 'COM0', to: 'COM1' }],
+  bus: kvUnitBus(20, { inputs: 32 }, KV_NANO_BUS),
 };
 
 export default def;

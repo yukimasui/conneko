@@ -1,4 +1,5 @@
-import type { AcceptSpec, DeviceDefinition, PinDef } from '../types';
+import { ioOutputLinks, ioPins, kvUnitBus, mil34IoPins, milConnector } from '../keyence/kv-parts';
+import type { DeviceDefinition } from '../types';
 
 /**
  * KEYENCE KV-8000 シリーズ 出力ユニット KV-C32TC（32点 コネクタタイプ、トランジスタ出力 NPN/シンク）。
@@ -23,33 +24,20 @@ const COL_R = CN.x + 2.54;
 const ROW0 = CN.y - 8 * 5.08;
 const PITCH = 5.08;
 
-/**
- * 割付の先頭チャンネル。CPU の右隣 1 台目に 32点入力ユニット（R000〜R115）、
- * 2 台目にこのユニットを装着し、KV STUDIO で自動割付した場合を想定（R200 から）。
- */
-const CH_L = 2;
-const CH_H = 3;
-
-const relay = (ch: number, bit: number) => `R${ch}${String(bit).padStart(2, '0')}`;
-
 /** KEYENCE のピン番号（1〜34）→ MIL 標準の千鳥番号 */
 const stdNo = (k: number) => (k <= 17 ? 2 * k - 1 : 2 * (k - 17));
 
-/** 負荷電源（定格負荷 DC30V 0.2A/点）の 0V 側を COM につなぐ */
-const COM_ACCEPTS: AcceptSpec = { system: 'DC', minVoltage: 5, maxVoltage: 30, conductors: ['-'] };
-
-const pins: PinDef[] = [];
-for (let k = 1; k <= 34; k++) {
-  const id = `CN1#${stdNo(k)}`;
-  if (k === 17 || k === 34) {
-    // シンク出力のコモン（負荷電源の 0V 側）。外部の +V 供給端子はない
-    pins.push({ id, label: `COM${k === 17 ? 0 : 1} (No.${k}) 0V`, role: 'input', accepts: COM_ACCEPTS, optional: true });
-  } else {
-    const r = k < 17 ? relay(CH_L, k - 1) : relay(CH_H, k - 18);
-    pins.push({ id, label: `${r} (No.${k})`, role: 'signal', optional: true });
-  }
-}
-pins.sort((a, b) => Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]));
+/**
+ * ピン（ラベルはリレー番号。装着位置から決まる先頭番号 + 点数。例: CPU の右隣 1 台目に 32点入力ユニット、
+ * 2 台目にこのユニットを装着すると KV STUDIO の自動割付と同じく R200〜R315）。
+ * COM はシンク出力のコモン（負荷電源の 0V 側）。外部の +V 供給端子はない。
+ * 出力 ON で出力ピンと COM0（No.17）が導通する（COM0・COM1 は内部で共通）。
+ */
+const points = mil34IoPins(
+  'CN1',
+  { offset: 0, kind: 'out', com: 'com-sink', comName: 'COM0 0V' },
+  { offset: 16, kind: 'out', com: 'com-sink', comName: 'COM1 0V' },
+).map((p) => (p.kind === 'out' ? { ...p, common: `CN1#${stdNo(17)}` } : p));
 
 const text = (x: number, y: number, t: string, size = 4, fill = '#d8dadd', anchor = 'middle', weight = 'bold') =>
   `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${t}</text>`;
@@ -135,7 +123,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-8000 シリーズの 32点 トランジスタ出力ユニット（NPN/シンク、コネクタタイプ）。定格負荷 DC30V 0.2A/点、32点 1コモン。出力 ON で負荷電流が出力ピンから COM（負荷電源の 0V）へ流れる。負荷のもう一端は負荷電源の +24V につなぐ。COM0・COM1 は内部で共通。図面上は出力 ON（出力ピンと COM が導通）とみなしてチェックする。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = R200〜R215、17 = COM0、右列 18〜33 = R300〜R315、34 = COM1）。デバイス番号は CPU の右隣 1 台目に 32点入力ユニット、2 台目にこのユニットを装着し KV STUDIO で自動割付した場合（先頭 R200）の想定で、装着位置・割付設定により変わる。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
+    'KEYENCE KV-8000 シリーズの 32点 トランジスタ出力ユニット（NPN/シンク、コネクタタイプ）。定格負荷 DC30V 0.2A/点、32点 1コモン、内部消費電流 55mA。出力 ON で負荷電流が出力ピンから COM（負荷電源の 0V）へ流れる。負荷のもう一端は負荷電源の +24V につなぐ。COM0・COM1 は内部で共通。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = 先頭チャネル、17 = COM0、右列 18〜33 = 次のチャネル、34 = COM1）。ピンのラベルはリレー番号で、CPU に装着すると装着位置から自動で決まる（例: 右隣 1 台目に 32点入力ユニット、2 台目にこのユニットなら R200〜R315）。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
   labelPrefix: 'OUT',
   width: W,
   height: H,
@@ -148,17 +136,17 @@ const def: DeviceDefinition = {
       y: CN.y,
       side: 'bottom',
       role: 'connector',
-      connector: { kind: 'MIL34', pins: 34, width: CN.w },
+      connector: milConnector(34),
       optional: true,
     },
   ],
-  pins,
+  pins: ioPins(points, { outSignal: 'npn' }),
   links: [
     // COM0（No.17）と COM1（No.34）は内部で共通
     { from: `CN1#${stdNo(17)}`, to: `CN1#${stdNo(34)}` },
-    // 図面上は出力 ON（出力ピンと COM が導通）とみなしてチェックする（他の出力ユニットと同じ扱い）
-    ...pins.filter((p) => p.role === 'signal').map((p) => ({ from: p.id, to: `CN1#${stdNo(17)}` })),
+    ...ioOutputLinks(points, 0.2),
   ],
+  bus: kvUnitBus(55, { outputs: 32 }),
 };
 
 export default def;

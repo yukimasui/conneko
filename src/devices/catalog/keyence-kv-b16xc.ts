@@ -1,4 +1,4 @@
-import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
+import { INPUT_MODE_PARAM, buildBlockUnit, inputComAccepts, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 入力ユニット KV-B16XC（16点 ネジ端子台、DC24V/DC5V 入力）。
@@ -13,10 +13,10 @@ import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
 const LEFT = ['1', '3', '5', '7', 'C0', '9', '11', '13', '15'];
 const RIGHT = ['0', '2', '4', '6', '8', '10', '12', '14', 'C1'];
 
-const points: Record<string, { label: string; kind: IoKind }> = {};
-for (let i = 0; i < 16; i++) points[String(i)] = { label: `IN ${String(i).padStart(3, '0')}`, kind: 'in' };
-points.C0 = { label: 'COM0', kind: 'com-in' };
-points.C1 = { label: 'COM1', kind: 'com-in' };
+const points: BlockUnitSpec['points'] = {};
+for (let i = 0; i < 16; i++) points[String(i)] = { kind: 'in', index: i, common: 'C0' };
+points.C0 = { kind: 'com-in', label: 'COM0', note: '入力のコモン（C1 と内部で共通）。プラスコモンなら +24V、マイナスコモンなら 0V をつなぐ' };
+points.C1 = { kind: 'com-in', label: 'COM1', note: '入力のコモン（C0 と内部で共通）' };
 
 export default buildBlockUnit({
   type: 'keyence.kv-b16xc',
@@ -24,11 +24,14 @@ export default buildBlockUnit({
   name: 'PLC 入力ユニット',
   labelPrefix: 'IN',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの 16点 DC 入力ユニット（脱着式ネジ端子台）。DC24V/DC5V 入力（モード切替、24V モード 5.3mA・最小 ON 電圧 19V・最大 26.4V）、16点 1コモン（C0・C1 の 2 端子は内部で共通）。双方向フォトカプラ入力のため COM はプラスコモン/マイナスコモンどちらでも使える。端子 0〜15 の信号名 000〜015 はユニットの先頭リレー番号からの相対番号（例: 先頭 R000 なら R000〜R015）。内部消費電流 15mA（CPU から供給）。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの 16点 DC 入力ユニット（脱着式ネジ端子台）。DC24V/DC5V 入力（モード切替、24V モード 5.3mA・最小 ON 電圧 19V・最大 26.4V）、16点 1コモン（C0・C1 の 2 端子は内部で共通）。双方向フォトカプラ入力のため COM はプラスコモン/マイナスコモンどちらでも使える。端子のラベルはリレー番号（装着位置から決まる先頭番号 + 端子番号。例: 先頭 R000 なら R000〜R015）。入力モードは params の inputMode（DC24V / DC5V）。内部消費電流 15mA（CPU から供給）。',
   left: LEFT,
   right: RIGHT,
   points,
   links: [{ from: 'C0', to: 'C1' }],
+  io: { inputs: 16, inputAccepts: inputComAccepts },
+  params: [INPUT_MODE_PARAM],
+  bus: kvUnitBus(15, { inputs: 16 }),
   window: 'switch',
   tag: 'IN',
 });

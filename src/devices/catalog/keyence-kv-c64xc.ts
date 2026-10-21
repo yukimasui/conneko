@@ -1,4 +1,4 @@
-import { buildMilUnit, mil34IoPins } from '../keyence/kv-parts';
+import { buildMilUnit, kvUnitBus, mil34IoPins } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 入力ユニット KV-C64XC（64点 コネクタタイプ、DC24V 入力）。
@@ -13,8 +13,8 @@ import { buildMilUnit, mil34IoPins } from '../keyence/kv-parts';
  */
 
 const pins = [
-  ...mil34IoPins('CN1', { ch: 0, kind: 'in', com: 'com-in', comName: 'COM0' }, { ch: 1, kind: 'in', com: 'com-in', comName: 'COM1' }),
-  ...mil34IoPins('CN2', { ch: 2, kind: 'in', com: 'com-in', comName: 'COM2' }, { ch: 3, kind: 'in', com: 'com-in', comName: 'COM3' }),
+  ...mil34IoPins('CN1', { offset: 0, kind: 'in', com: 'com-in', comName: 'COM0' }, { offset: 16, kind: 'in', com: 'com-in', comName: 'COM1' }),
+  ...mil34IoPins('CN2', { offset: 32, kind: 'in', com: 'com-in', comName: 'COM2' }, { offset: 48, kind: 'in', com: 'com-in', comName: 'COM3' }),
 ];
 
 export default buildMilUnit({
@@ -23,7 +23,7 @@ export default buildMilUnit({
   name: 'PLC 入力ユニット',
   labelPrefix: 'IN',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの 64点 DC 入力ユニット（コネクタタイプ）。DC24V 入力（4.1mA、最小 ON 電圧 19V、最大 26.4V）、32点 1コモン × 2。外部接続は MIL 規格 34極コネクタ × 2（CN1 = L 側: IN 000〜015・100〜115、COM0/COM1。CN2 = H 側: IN 200〜215・300〜315、COM2/COM3）。L 側・H 側それぞれの 2 つの COM は内部で共通、L 側と H 側は独立。双方向フォトカプラ入力のため COM はプラス/マイナスどちらのコモンでもよい。ピン名の (No.n) は KEYENCE のピン番号（左列 1〜17、右列 18〜34）、ピンID は MIL 標準の千鳥番号。信号名はユニットの先頭リレー番号からの相対番号。適合コネクタは OP-42224（34極）。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの 64点 DC 入力ユニット（コネクタタイプ）。DC24V 入力（4.1mA、最小 ON 電圧 19V、最大 26.4V）、32点 1コモン × 2。外部接続は MIL 規格 34極コネクタ × 2（CN1 = L 側: IN 000〜015・100〜115、COM0/COM1。CN2 = H 側: IN 200〜215・300〜315、COM2/COM3）。L 側・H 側それぞれの 2 つの COM は内部で共通、L 側と H 側は独立。双方向フォトカプラ入力のため COM はプラス/マイナスどちらのコモンでもよい。ピン名の (No.n) は KEYENCE のピン番号（左列 1〜17、右列 18〜34）、ピンID は MIL 標準の千鳥番号。ピンのラベルはリレー番号（装着位置から決まる先頭番号 + 点数）。適合コネクタは OP-42224（34極）。EV シリーズの 2 線式近接センサは使えない（KEYENCE 仕様の注記）。内部消費電流 25mA。',
   width: 58,
   connectors: [
     { id: 'CN1', cx: 15.5, cy: 110, poles: 34, label: 'CN1 L側 (MIL 34P)', tag: 'L' },
@@ -34,4 +34,6 @@ export default buildMilUnit({
     { from: 'CN1#33', to: 'CN1#34' },
     { from: 'CN2#33', to: 'CN2#34' },
   ],
+  io: { inputs: 64 },
+  bus: kvUnitBus(25, { inputs: 64 }),
 });

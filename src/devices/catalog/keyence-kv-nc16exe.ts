@@ -1,4 +1,5 @@
 import { buildNc16E } from '../keyence/kv-nc';
+import { INPUT_MODE_PARAM, KV_NANO_BUS, inputComAccepts, kvUnitBus } from '../keyence/kv-parts';
 
 /**
  * KEYENCE 拡張入力ユニット KV-NC16EXE（16点、DC24V/DC5V、ヨーロピアン端子台＝プッシュイン式）。
@@ -14,8 +15,8 @@ const rows = Array.from({ length: 16 }, (_, i) => {
   const pin = (i % 8) * 2 + 1;
   const blk = i < 8 ? '上' : '下';
   return {
-    left: { id: String(i), label: `IN ${String(i).padStart(3, '0')}（${blk}端子台 No.${pin}）`, kind: 'in' as const },
-    right: { id: `C${i}`, label: `COM0（${blk}端子台 No.${pin + 1}）`, kind: 'com-in' as const },
+    left: { id: String(i), kind: 'in' as const, index: i, common: 'C0', suffix: `（${blk}端子台 No.${pin}）` },
+    right: { id: `C${i}`, kind: 'com-in' as const, label: 'COM0', suffix: `（${blk}端子台 No.${pin + 1}）`, note: '入力のコモン（16 端子すべて内部で短絡）' },
     num: String(i),
   };
 });
@@ -26,8 +27,11 @@ export default buildNc16E({
   name: 'PLC 拡張入力ユニット',
   labelPrefix: 'IN',
   description:
-    'KEYENCE の 16点 DC 入力ユニット（ヨーロピアン端子台＝プッシュイン式、DC24V/DC5V モード、24V で 5.2mA）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。各段が「入力 + COM」のペアになっていて、COM0 は全端子が内部で短絡（双方向入力のためプラス/マイナスどちらのコモンでもよい）。端子ID は入力が信号番号 0〜15、その隣の COM が C0〜C15。信号名はユニットの先頭リレー番号からの相対番号。内部消費電流 20mA。',
+    'KEYENCE の 16点 DC 入力ユニット（ヨーロピアン端子台＝プッシュイン式、DC24V/DC5V モード、24V で 5.2mA）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。各段が「入力 + COM」のペアになっていて、COM0 は全端子が内部で短絡（双方向入力のためプラス/マイナスどちらのコモンでもよい）。端子ID は入力が信号番号 0〜15、その隣の COM が C0〜C15。端子のラベルはリレー番号（装着位置から決まる先頭番号 + 信号番号）。入力モードは params の inputMode。内部消費電流 20mA。',
   head: ['IN', 'COM'],
   rows,
   links: rows.slice(1).map((r) => ({ from: 'C0', to: r.right.id })),
+  io: { inputs: 16, inputAccepts: inputComAccepts },
+  params: [INPUT_MODE_PARAM],
+  bus: kvUnitBus(20, { inputs: 16 }, KV_NANO_BUS),
 });

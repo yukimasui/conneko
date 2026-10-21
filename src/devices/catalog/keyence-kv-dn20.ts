@@ -1,5 +1,5 @@
 import type { DeviceDefinition, TerminalDef } from '../types';
-import { kvBody, kvDefs, led, plugBlockV, screw, text } from '../keyence/kv-parts';
+import { kvBody, kvDefs, kvUnitBus, led, plugBlockV, screw, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000 シリーズ DeviceNet ユニット KV-DN20（マスタ/スレーブ）。
@@ -67,6 +67,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals,
+  bus: kvUnitBus(45),
 };
 
 export default def;

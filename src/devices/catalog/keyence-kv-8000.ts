@@ -1,3 +1,4 @@
+import { KV_BUS, KV_RAIL, PROTO, rj45Connector } from '../keyence/kv-parts';
 import type { DeviceDefinition } from '../types';
 
 /**
@@ -166,7 +167,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-8000 シリーズのビルディングブロック型 PLC の CPU ユニット。電源は DC24V（KV-8000/7000 シリーズ拡張ユニットのみの構成で −15%〜+20%、KV-5000/3000 シリーズ拡張ユニット併用時は ±10%）。右側に I/O ユニットなどの拡張ユニットを連結し、拡張ユニットの内部電源も CPU の電源端子から供給される（内部消費電流 CPU 単体 400mA 以下、拡張ユニット込み最大 3.2A）。Ethernet ポート（EtherNet/IP 対応）でタッチパネル（VT5 など）や PC と LAN ケーブルでつなぐ。電源端子は実機では底面にある。',
+    'KEYENCE KV-8000 シリーズのビルディングブロック型 PLC の CPU ユニット。電源は DC24V（KV-8000/7000 シリーズ拡張ユニットのみの構成で −15%〜+20%、KV-5000/3000 シリーズ拡張ユニット併用時は ±10%）。右側に I/O ユニットなどの拡張ユニットを最大 16 台連結し（図面では拡張ユニットの mount に CPU を指定する）、拡張ユニットの内部電源も CPU の電源端子から供給される（内部消費電流 CPU 単体 400mA 以下、拡張ユニット込み最大 3.2A。装着したユニットの内部消費電流の合計をチェックする）。拡張ユニットのリレー番号は装着順に R000 から 16 点（1 チャネル）単位で自動で割り付ける（KV STUDIO の自動割付と同じ）。Ethernet ポート（EtherNet/IP 対応）でタッチパネル（VT5 など）や PC と LAN ケーブルでつなぐ。電源端子は実機では底面にある。',
   labelPrefix: 'PLC',
   width: W,
   height: H,
@@ -198,27 +199,19 @@ const def: DeviceDefinition = {
       y: ETH.y,
       side: 'bottom',
       role: 'connector',
-      connector: { kind: 'RJ45', pins: 0, width: ETH.w },
+      connector: rj45Connector(PROTO.ethernetIp),
       optional: true,
     },
   ],
-  params: [
-    {
-      // 拡張ユニットの内部消費電流も CPU の電源端子から流れるため、構成に合わせて選ぶ
-      key: 'consumption',
-      label: '消費電流（拡張ユニット込み）',
-      unit: 'A',
-      options: [
-        { value: 0.4, label: '0.4A（CPU 単体）' },
-        { value: 0.5, label: '0.5A（CPU + I/O ユニット数台）' },
-        { value: 1, label: '1A' },
-        { value: 2, label: '2A' },
-        { value: 3.2, label: '3.2A（最大）' },
-      ],
-      default: 0.5,
-    },
-  ],
-  loadCurrent: { param: 'consumption' },
+  // CPU 単体の消費電流（拡張ユニットの分は bus の load として合計する）
+  loadCurrent: 0.4,
+  bus: {
+    kind: KV_BUS,
+    host: { slots: 16, numbering: { mode: 'shared', unit: 16, start: { input: 0, output: 0 } } },
+    // 拡張ユニット込みの上限 3.2A。CPU 自身の 0.4A も同じ電源から流れるので load に入れる
+    supply: { [KV_RAIL]: 3.2 },
+    load: { [KV_RAIL]: 0.4 },
+  },
 };
 
 export default def;

@@ -1,5 +1,5 @@
 import type { DeviceDefinition, PinDef } from '../types';
-import { INPUT_COM_ACCEPTS, SINK_COM_ACCEPTS, kvBody2, kvDefs, milHeaderV } from '../keyence/kv-parts';
+import { SINK_COM_ACCEPTS, kvBody2, kvDefs, kvUnitBus, milConnector, milHeaderV } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ 高速カウンタユニット KV-SSC02（2ch、単相 4MHz / 2相4逓倍 16MHz、シリアルエンコーダ対応）。
@@ -35,10 +35,10 @@ for (const ch of [0, 1]) {
     );
   });
   pins.push(
-    { id: n(12), label: `ch${ch} インプットキャプチャ0（イネーブル）入力`, role: 'signal', optional: true },
-    { id: n(13), label: `ch${ch} インプットキャプチャ1 入力`, role: 'signal', optional: true },
-    { id: n(14), label: `ch${ch} OUT0（一致出力）`, role: 'signal', optional: true },
-    { id: n(15), label: `ch${ch} OUT1（一致出力）`, role: 'signal', optional: true },
+    { id: n(12), label: `ch${ch} インプットキャプチャ0（イネーブル）入力`, role: 'signal', signal: { dir: 'in', kind: 'dc', common: 'CN1#39' }, optional: true },
+    { id: n(13), label: `ch${ch} インプットキャプチャ1 入力`, role: 'signal', signal: { dir: 'in', kind: 'dc', common: 'CN1#39' }, optional: true },
+    { id: n(14), label: `ch${ch} OUT0（一致出力）`, role: 'signal', signal: { dir: 'out', kind: 'npn' }, optional: true },
+    { id: n(15), label: `ch${ch} OUT1（一致出力）`, role: 'signal', signal: { dir: 'out', kind: 'npn' }, optional: true },
   );
 }
 pins.push(
@@ -48,7 +48,7 @@ pins.push(
   { id: 'CN1#36', label: 'CLK−（シリアルエンコーダ）', role: 'signal', optional: true },
   { id: 'CN1#37', label: 'エンコーダ用 DC5V 電源出力（300mA）', role: 'supply', supply: { system: 'DC', voltage: 5, conductor: '+', limitCurrent: 0.3 }, optional: true },
   { id: 'CN1#38', label: 'SG（信号グランド）', role: 'signal', optional: true },
-  { id: 'CN1#39', label: '制御入力コモン（DC12〜24V）', role: 'input', accepts: INPUT_COM_ACCEPTS, optional: true },
+  { id: 'CN1#39', label: '制御入力コモン（DC12〜24V）', role: 'input', accepts: { system: 'DC', minVoltage: 10.2, maxVoltage: 26.4, conductors: ['+', '-'] }, optional: true },
   { id: 'CN1#40', label: '出力コモン（0V）', role: 'input', accepts: SINK_COM_ACCEPTS, optional: true },
 );
 pins.sort((a, b) => Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]));
@@ -73,19 +73,21 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-X/KV-8000/KV-7000 シリーズ専用の高速カウンタユニット（2ch、単相 4MHz・2相4逓倍 16MHz、EnDat2.2/BiSS-C/安川シリアルのアブソリュートエンコーダにも対応）。エンコーダの A/B/Z 相は電圧（24V/12V/5V）に合ったピンと各相のコモンに配線する（ラインドライバ出力も可）。外部接続は MIL 規格 40極コネクタ（ピン番号は MIL 標準の千鳥番号、奇数 = ch0、偶数 = ch1）。制御入力（キャプチャ/イネーブル、DC12〜24V）のコモンは 39、一致出力 OUT0/OUT1（DC30V 0.2A）の出力コモンは 40（SG と内部短絡、負荷電源の 0V をつなぐ）。37 はエンコーダ用 DC5V 電源出力。図面上は一致出力を ON（出力コモンと導通）とみなしてチェックする。内部消費電流 190mA。',
+    'KEYENCE KV-X/KV-8000/KV-7000 シリーズ専用の高速カウンタユニット（2ch、単相 4MHz・2相4逓倍 16MHz、EnDat2.2/BiSS-C/安川シリアルのアブソリュートエンコーダにも対応）。エンコーダの A/B/Z 相は電圧（24V/12V/5V）に合ったピンと各相のコモンに配線する（ラインドライバ出力も可）。外部接続は MIL 規格 40極コネクタ（ピン番号は MIL 標準の千鳥番号、奇数 = ch0、偶数 = ch1）。制御入力（キャプチャ/イネーブル、DC12〜24V）のコモンは 39、一致出力 OUT0/OUT1（DC30V 0.2A）の出力コモンは 40（SG と内部短絡、負荷電源の 0V をつなぐ）。37 はエンコーダ用 DC5V 電源出力。A/B/Z 相の入力はエンコーダの出力形式（オープンコレクタ・電圧出力・ラインドライバ）で配線が変わるため、信号の種類は指定していない。内部消費電流 190mA。',
   labelPrefix: 'CNT',
   width: W,
   height: H,
   svg,
   terminals: [
-    { id: 'CN1', label: 'CN1 I/O (MIL 40P)', x: CN.x, y: CN.y, side: 'bottom', role: 'connector', connector: { kind: 'MIL40', pins: 40, width: 23 }, optional: true },
+    { id: 'CN1', label: 'CN1 I/O (MIL 40P)', x: CN.x, y: CN.y, side: 'bottom', role: 'connector', connector: milConnector(40), optional: true },
   ],
   pins,
   links: [
     { from: 'CN1#38', to: 'CN1#40' },
-    ...['CN1#29', 'CN1#30', 'CN1#31', 'CN1#32'].map((p) => ({ from: p, to: 'CN1#40' })),
+    // 一致出力（シンク出力 DC30V 0.2A）は ON で出力コモン（0V）と導通する
+    ...['CN1#29', 'CN1#30', 'CN1#31', 'CN1#32'].map((p) => ({ from: p, to: 'CN1#40', switch: 'output' as const, ratedCurrent: 0.2 })),
   ],
+  bus: kvUnitBus(190),
 };
 
 export default def;

@@ -1,5 +1,5 @@
 import type { DeviceDefinition } from '../types';
-import { kvBody2, kvDefs, screw, text } from '../keyence/kv-parts';
+import { kvBody2, kvDefs, kvUnitBus, screw, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ 位置決め・モーションユニット KV-XH04ML（MECHATROLINK-III、4 軸）。
@@ -40,15 +40,17 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-X/KV-8000/KV-7000 シリーズの位置決め・モーションユニット（MECHATROLINK-III マスタ、4 軸、制御周期 500µs〜）。MECHATROLINK-III 対応サーボアンプ（安川電機 Σ-7 など）を専用ケーブルでデイジーチェーン接続する（コネクタは RJ-45 と非互換のため connector.kind は MECHATROLINK3）。FG 端子は盤の接地へ。内部消費電流 160mA。',
+    'KEYENCE KV-X/KV-8000/KV-7000 シリーズの位置決め・モーションユニット（MECHATROLINK-III マスタ、4 軸、制御周期 500µs〜）。MECHATROLINK-III 対応サーボアンプ（安川電機 Σ-7 など）を専用ケーブルでデイジーチェーン接続する（コネクタは RJ-45 と非互換のため connector.kind は MECHATROLINK3）。FG 端子は盤の接地へ。内部消費電流 160mA。リレーを 576 点（36 チャネル）占有するので、後ろに装着したユニットの先頭番号はその分ずれる。',
   labelPrefix: 'MC',
   width: W,
   height: H,
   svg,
   terminals: [
-    { id: 'PORT', label: 'MECHATROLINK-III', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: { kind: 'MECHATROLINK3', pins: 0, width: 22 }, optional: true },
+    { id: 'PORT', label: 'MECHATROLINK-III', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: { kind: 'MECHATROLINK3', pins: 0, width: 22, protocols: ['mechatrolink-iii'] }, optional: true },
     { id: 'FG', label: 'FG', x: FG.x, y: FG.y, side: 'bottom', role: 'ground' },
   ],
+  // 占有デバイス: リレー 576 点（36 チャネル）。入出力の内訳は公開資料にないため入力として数える
+  bus: kvUnitBus(160, { inputs: 576 }),
 };
 
 export default def;

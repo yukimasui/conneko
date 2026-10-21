@@ -6,8 +6,8 @@
  * その下にプッシュイン式の端子台（2列 × 8段）が 2 個。外側の列にオレンジの解除ボタン、内側の列に電線の差込口がある。
  * 右端に信号番号（0〜15）が印字される。
  */
-import type { DeviceDefinition, TerminalDef } from '../types';
-import { ioRole, kvDefs, milHeaderV, milHeaderVHeight, text, toPins, type IoKind, type IoPoint } from './kv-parts';
+import type { BusSpec, CommonLimit, DeviceDefinition, InternalLink, ParamDef, ParamValues, TerminalDef } from '../types';
+import { ioPins, ioProps, kvDefs, milConnector, milHeaderV, milHeaderVHeight, text, type IoContext, type IoPoint } from './kv-parts';
 
 export const NC_W = 44;
 export const NC_H = 180;
@@ -54,35 +54,51 @@ function pushInDouble(xL: number, xR: number, rows: number) {
   return s;
 }
 
-export interface NcUnitSpec {
+/** KV-NC 系ユニットの電気的な定義 */
+interface NcElectrical {
+  io?: IoContext;
+  links?: InternalLink[];
+  params?: ParamDef[];
+  bus?: BusSpec;
+  commonLimits?: CommonLimit[];
+}
+
+const electrical = (s: NcElectrical) => ({
+  links: s.links,
+  ...(s.params ? { params: s.params } : {}),
+  ...(s.bus ? { bus: s.bus } : {}),
+  ...(s.commonLimits ? { commonLimits: s.commonLimits } : {}),
+});
+
+export interface NcUnitSpec extends NcElectrical {
   type: string;
   model: string;
   name: string;
   description: string;
   labelPrefix: string;
   /** 各段（0〜15）の左列・右列の端子 */
-  rows: { left: { id: string; label: string; kind: IoKind }; right: { id: string; label: string; kind: IoKind }; num: string }[];
+  rows: { left: IoPoint; right: IoPoint; num: string }[];
   /** 端子台の上に印字する列名（例: ['IN', 'COM']） */
   head: [string, string];
-  links?: { from: string; to: string }[];
 }
 
 /**
  * MIL コネクタタイプの KV-NC 系ユニット（KV-NC16EX / NC16ET / NC32EX / NC32ET など）。
  * ピン番号はマニュアルどおり MIL 標準の千鳥番号（左列 = 奇数、右列 = 偶数）。
  */
-export function buildNcMil(s: {
-  type: string;
-  model: string;
-  name: string;
-  description: string;
-  labelPrefix: string;
-  poles: 20 | 34;
-  pins: IoPoint[];
-  links?: { from: string; to: string }[];
-  /** 入力モード切替スイッチ（24V/5V）を描く */
-  modeSwitch?: boolean;
-}): DeviceDefinition {
+export function buildNcMil(
+  s: NcElectrical & {
+    type: string;
+    model: string;
+    name: string;
+    description: string;
+    labelPrefix: string;
+    poles: 20 | 34;
+    pins: IoPoint[];
+    /** 入力モード切替スイッチ（24V/5V）を描く */
+    modeSwitch?: boolean;
+  },
+): DeviceDefinition {
   const h = milHeaderVHeight(s.poles);
   const cy = +(NC_H - h / 2 - 5).toFixed(2);
   const cx = 19;
@@ -117,12 +133,12 @@ export function buildNcMil(s: {
         y: cy,
         side: 'bottom',
         role: 'connector',
-        connector: { kind: `MIL${s.poles}`, pins: s.poles, width: 23 },
+        connector: milConnector(s.poles),
         optional: true,
       },
     ],
-    pins: toPins(s.pins),
-    links: s.links,
+    pins: ioPins(s.pins, s.io),
+    ...electrical(s),
   };
 }
 
@@ -138,10 +154,11 @@ export function buildNc16E(s: NcUnitSpec): DeviceDefinition {
   ${pushInDouble(XL, XR, s.rows.length)}
   ${s.rows.map((r, i) => text(38.5, ncRowY(i) + 1, r.num, 2.6, i < 8 ? '#e6e7e9' : '#ff8a80', 'middle', 'normal')).join('')}
 `;
-  const terminals: TerminalDef[] = s.rows.flatMap((r, i): TerminalDef[] => [
-    { id: r.left.id, label: r.left.label, x: XL, y: ncRowY(i), side: 'left', ...ioRole(r.left.kind), optional: true },
-    { id: r.right.id, label: r.right.label, x: XR, y: ncRowY(i), side: 'right', ...ioRole(r.right.kind), optional: true },
-  ]);
+  const terminals = (p: ParamValues): TerminalDef[] =>
+    s.rows.flatMap((r, i): TerminalDef[] => [
+      { id: r.left.id, x: XL, y: ncRowY(i), side: 'left', ...ioProps(r.left, p, s.io) },
+      { id: r.right.id, x: XR, y: ncRowY(i), side: 'right', ...ioProps(r.right, p, s.io) },
+    ]);
   return {
     type: s.type,
     name: s.name,
@@ -154,6 +171,6 @@ export function buildNc16E(s: NcUnitSpec): DeviceDefinition {
     height: NC_H,
     svg,
     terminals,
-    links: s.links,
+    ...electrical(s),
   };
 }

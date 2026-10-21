@@ -1,5 +1,5 @@
 import type { DeviceDefinition } from '../types';
-import { kvBody2, kvDefs, rj45, screw, text } from '../keyence/kv-parts';
+import { PROTO, kvBody2, kvDefs, kvUnitBus, rj45, rj45Connector, screw, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ 位置決め・モーションユニット KV-XH16EC（EtherCAT、16 軸）。
@@ -44,9 +44,10 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: 'PORT', label: 'EtherCAT (RJ45)', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 22 }, optional: true },
+    { id: 'PORT', label: 'EtherCAT (RJ45)', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: rj45Connector(PROTO.ethercat), optional: true },
     { id: 'FG', label: 'FG', x: FG.x, y: FG.y, side: 'bottom', role: 'ground' },
   ],
+  bus: kvUnitBus(160),
 };
 
 export default def;

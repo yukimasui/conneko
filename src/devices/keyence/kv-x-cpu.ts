@@ -8,7 +8,7 @@
  * 電源は底面のプラグイン端子（約 14.3mm 下に突き出す）から DC24V を入れる。
  */
 import type { DeviceDefinition, TerminalDef } from '../types';
-import { kvDefs, rj45, screw, text } from './kv-parts';
+import { KV_BUS, KV_RAIL, PROTO, kvDefs, rj45, rj45Connector, screw, text } from './kv-parts';
 
 export interface KvXCpuSpec {
   model: 'KV-X550' | 'KV-X530' | 'KV-X520' | 'KV-X500';
@@ -126,7 +126,7 @@ export function buildKvXCpu(s: KvXCpuSpec): DeviceDefinition {
         y: p.y + 2,
         side: 'left',
         role: 'connector',
-        connector: { kind: 'RJ45', pins: 0, width: 22 },
+        connector: rj45Connector(i === 2 ? PROTO.ethercat : PROTO.ethernetIp, 'left'),
         optional: true,
       }),
     ),
@@ -140,7 +140,7 @@ export function buildKvXCpu(s: KvXCpuSpec): DeviceDefinition {
     category: 'plc',
     description:
       `KEYENCE KV-X シリーズの CPU ユニット ${s.model}。電源は DC24V（KV-8000/7000 シリーズ拡張ユニットのみの構成で −15%〜+20%、KV-5000/3000 シリーズ拡張ユニット併用時は ±10%）を底面の電源端子に入れる（端子の並びは左から +・−・FG と推定）。` +
-      `内部消費電流 600mA 以下（拡張ユニット込み最大 3.4A）。右側に KV-8000/7000 用の拡張ユニット（I/O・アナログ・通信など、最大 48 台）を連結し、拡張ユニットの電源も CPU から供給される。` +
+      `内部消費電流 600mA 以下（拡張ユニット込み最大 3.4A）。右側に KV-8000/7000 用の拡張ユニット（I/O・アナログ・通信など、最大 16 台。KV-EB1 経由で KV-5000/3000 用を含め 48 台）を連結し（図面では拡張ユニットの mount に CPU を指定する）、拡張ユニットの電源も CPU から供給される。拡張ユニットのリレー番号は装着順に R000 から 16 点（1 チャネル）単位で自動で割り付ける。` +
       (s.model === 'KV-X500'
         ? 'Ethernet ポート 2 個（PORT1/PORT2、1Gbps、EtherNet/IP・OPC UA 対応）。EtherCAT・モーションは非内蔵。'
         : `Ethernet ポート 2 個（PORT1/PORT2、1Gbps、EtherNet/IP・OPC UA 対応）と EtherCAT ポート（PORT3、100Mbps）を内蔵し、内蔵モーションで最大 ${s.axes} 軸を制御できる。`),
@@ -149,20 +149,15 @@ export function buildKvXCpu(s: KvXCpuSpec): DeviceDefinition {
     height: H,
     svg,
     terminals,
-    params: [
-      {
-        key: 'consumption',
-        label: '消費電流（拡張ユニット込み）',
-        unit: 'A',
-        options: [
-          { value: 0.6, label: '0.6A（CPU 単体）' },
-          { value: 1, label: '1A' },
-          { value: 2, label: '2A' },
-          { value: 3.4, label: '3.4A（最大）' },
-        ],
-        default: 1,
-      },
-    ],
-    loadCurrent: { param: 'consumption' },
+    // CPU 単体の消費電流（拡張ユニットの分は bus の load として合計する）
+    loadCurrent: 0.6,
+    bus: {
+      kind: 'kv-x',
+      // KV-8000/7000 シリーズ用の拡張ユニットをそのまま連結できる（KV-EB1 経由の KV-5000/3000 用は対象外）
+      host: { accepts: ['kv-x', KV_BUS], slots: 16, numbering: { mode: 'shared', unit: 16, start: { input: 0, output: 0 } } },
+      // 拡張ユニット込みの上限 3.4A。CPU 自身の 0.6A も同じ電源から流れるので load に入れる
+      supply: { [KV_RAIL]: 3.4 },
+      load: { [KV_RAIL]: 0.6 },
+    },
   };
 }

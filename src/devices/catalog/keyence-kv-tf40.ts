@@ -1,4 +1,4 @@
-import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
+import { buildBlockUnit, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 温度調節ユニット KV-TF40（4ch、PID 制御）。
@@ -17,17 +17,19 @@ const L_RIGHT = ['CT0', 'CT1', 'NC3', 'CT2', 'CT3', 'NC4', '1B', '1b', '1A'];
 const R_LEFT = ['OUT0', 'C0', 'ALM0', 'OUT1', 'C1', 'ALM1', '2B', '2b', '2A'];
 const R_RIGHT = ['OUT2', 'C2', 'ALM2', 'OUT3', 'C3', 'ALM3', '3B', '3b', '3A'];
 
-const points: Record<string, { label: string; kind: IoKind; print?: string }> = {};
+const points: BlockUnitSpec['points'] = {};
 for (const n of [1, 2, 3, 4]) points[`NC${n}`] = { label: 'NC（未使用）', kind: 'nc', print: 'NC' };
+// 温度入力（熱電対・測温抵抗体）と CT 入力は専用の入力なので信号の種類は付けない。制御出力・警報出力は NPN（シンク）
+const NPN_OUT = { dir: 'out', kind: 'npn' } as const;
 for (const c of [0, 1, 2, 3]) {
-  points[`CT${c}`] = { label: `CT${c}（ヒータ断線検出 CT 入力）`, kind: 'in' };
-  points[`CT${c}G`] = { label: `CT${c}G（CT 入力 GND）`, kind: 'in' };
-  points[`${c}B`] = { label: `ch${c} B/+（熱電対 +・測温抵抗体 B）`, kind: 'in', print: `${c}B/+` };
-  points[`${c}b`] = { label: `ch${c} b/−（熱電対 −・測温抵抗体 b）`, kind: 'in', print: `${c}b/-` };
-  points[`${c}A`] = { label: `ch${c} A（測温抵抗体 A）`, kind: 'in', print: `${c}A` };
-  points[`OUT${c}`] = { label: `ch${c} 制御出力`, kind: 'out' };
-  points[`ALM${c}`] = { label: `ch${c} 警報出力`, kind: 'out' };
-  points[`C${c}`] = { label: `ch${c} 出力コモン (0V)`, kind: 'com-sink' };
+  points[`CT${c}`] = { label: `CT${c}（ヒータ断線検出 CT 入力）`, kind: 'sig' };
+  points[`CT${c}G`] = { label: `CT${c}G（CT 入力 GND）`, kind: 'sig' };
+  points[`${c}B`] = { label: `ch${c} B/+（熱電対 +・測温抵抗体 B）`, kind: 'sig', print: `${c}B/+` };
+  points[`${c}b`] = { label: `ch${c} b/−（熱電対 −・測温抵抗体 b）`, kind: 'sig', print: `${c}b/-` };
+  points[`${c}A`] = { label: `ch${c} A（測温抵抗体 A）`, kind: 'sig', print: `${c}A` };
+  points[`OUT${c}`] = { label: `ch${c} 制御出力`, kind: 'sig', signal: NPN_OUT };
+  points[`ALM${c}`] = { label: `ch${c} 警報出力`, kind: 'sig', signal: NPN_OUT };
+  points[`C${c}`] = { label: `ch${c} 出力コモン (0V)`, kind: 'com-sink', note: `ch${c} の制御出力・警報出力のコモン。負荷電源の 0V をつなぐ` };
 }
 
 export default buildBlockUnit({
@@ -36,17 +38,19 @@ export default buildBlockUnit({
   name: 'PLC 温度調節ユニット',
   labelPrefix: 'TC',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの温度調節ユニット（4ch、PID/加熱冷却/ON-OFF 制御、脱着式ネジ端子台 × 2）。入力は熱電対・測温抵抗体（ch ごとに選択）、ヒータ断線検出用 CT 入力 4 点（CT は OP-6694 など別売）。制御出力 OUT0〜3・警報出力 ALM0〜3 はトランジスタ シンク出力（DC30V 100mA）で、ch ごとの出力コモン Cn に負荷電源の 0V をつなぐ（負荷のもう一端は +24V）。LEFT 端子台は CT 入力と ch0/ch1、RIGHT 端子台は出力と ch2/ch3。内部消費電流 210mA。図面上は出力 ON（出力端子と Cn が導通）とみなしてチェックする。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの温度調節ユニット（4ch、PID/加熱冷却/ON-OFF 制御、脱着式ネジ端子台 × 2）。入力は熱電対・測温抵抗体（ch ごとに選択）、ヒータ断線検出用 CT 入力 4 点（CT は OP-6694 など別売）。制御出力 OUT0〜3・警報出力 ALM0〜3 はトランジスタ シンク出力（DC30V 100mA）で、ch ごとの出力コモン Cn に負荷電源の 0V をつなぐ（負荷のもう一端は +24V）。LEFT 端子台は CT 入力と ch0/ch1、RIGHT 端子台は出力と ch2/ch3。内部消費電流 210mA。',
   width: 116,
   blocks: [
     { x: 8, w: 48, left: L_LEFT, right: L_RIGHT },
     { x: 64, w: 48, left: R_LEFT, right: R_RIGHT },
   ],
   points,
+  // 制御出力・警報出力（トランジスタ シンク出力 DC30V 100mA）は ON で ch ごとの出力コモンと導通する
   links: [0, 1, 2, 3].flatMap((c) => [
-    { from: `OUT${c}`, to: `C${c}` },
-    { from: `ALM${c}`, to: `C${c}` },
+    { from: `OUT${c}`, to: `C${c}`, switch: 'output' as const, ratedCurrent: 0.1 },
+    { from: `ALM${c}`, to: `C${c}`, switch: 'output' as const, ratedCurrent: 0.1 },
   ]),
+  bus: kvUnitBus(210),
   window: 'off',
   extra: `
   <text x="32" y="176" text-anchor="middle" font-family="sans-serif" font-size="3.6" font-weight="bold" fill="#b9bcc1">LEFT</text>
