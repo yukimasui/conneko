@@ -126,7 +126,11 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
   // ネジ端子と同じ番号のピンをつなぐだけの経路（変換端子台）はまとめて書く
   const isPinToScrew = (l: InternalLink) => !l.switch && ((l.from.includes('#') && l.from.split('#')[1] === l.to) || (l.to.includes('#') && l.to.split('#')[1] === l.from));
   if (r.links.some(isPinToScrew)) lines.push('  コネクタのピン n はネジ端子 n と導通しています');
-  const links = r.links.filter((l) => !isPinToScrew(l));
+  // 出力はコモンごとにまとめる
+  const outputs = new Map<string, string[]>();
+  for (const l of r.links) if (l.switch === 'output') outputs.set(l.to, [...(outputs.get(l.to) ?? []), l.from]);
+  for (const [com, points] of outputs) lines.push(`  出力（ON で ${com} と導通）: ${points.join(', ')}`);
+  const links = r.links.filter((l) => !isPinToScrew(l) && l.switch !== 'output');
   if (links.length) {
     const shown = links.slice(0, 24).map(linkText);
     lines.push(`  内部の導通: ${shown.join(', ')}${links.length > shown.length ? ` ほか ${links.length - shown.length} 件` : ''}`);
