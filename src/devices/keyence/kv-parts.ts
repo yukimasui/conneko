@@ -365,55 +365,72 @@ export interface BlockUnitSpec {
   name: string;
   description: string;
   labelPrefix: string;
-  /** 左列・右列の端子ID（上から） */
-  left: string[];
-  right: string[];
+  /** 左列・右列の端子ID（上から）。blocks を指定した場合は使わない */
+  left?: string[];
+  right?: string[];
+  /** 端子台が複数ある場合（KV-TF40 など）。x は端子台の左端、w は幅 */
+  blocks?: { x: number; w: number; left: string[]; right: string[] }[];
   /** 端子ごとの表示名と種類（print は端子台の印字。省略時は ID） */
   points: Record<string, { label: string; kind: IoKind; print?: string }>;
   links?: { from: string; to: string }[];
-  /** 左上の小窓（'switch' は 24V/5V 切替スイッチ、'none' は小窓のみ） */
-  window?: 'switch' | 'none';
+  /** 左上の小窓（'switch' は 24V/5V 切替スイッチ、'none' は小窓のみ、'off' は描かない） */
+  window?: 'switch' | 'none' | 'off';
   /** 左下の表示（IN / OUT / I/O） */
   tag: string;
+  /** 本体幅[px]（既定 58 = 29mm） */
+  width?: number;
+  /** 本体の上に重ねて描く要素 */
+  extra?: string;
+  /** 端子台のピッチ[px] */
+  pitch?: number;
 }
 
-/** 幅 29mm の 18端子 ネジ端子台ユニットを作る */
+/** 18端子 ネジ端子台ユニットを作る（既定は幅 29mm・端子台 1 個） */
 export function buildBlockUnit(s: BlockUnitSpec): DeviceDefinition {
-  const W = 58;
+  const W = s.width ?? 58;
   const H = KV_H;
-  const block = staggeredBlock({
-    x: 15,
-    y: 22,
-    w: 41,
-    rows: Math.max(s.left.length, s.right.length),
-    pitch: 15.6,
-    left: s.left,
-    right: s.right,
-    labels: Object.fromEntries(Object.entries(s.points).map(([id, p]) => [id, p.print ?? id])),
-  });
+  const labels = Object.fromEntries(Object.entries(s.points).map(([id, p]) => [id, p.print ?? id]));
+  const specs = s.blocks ?? [{ x: 15, w: 41, left: s.left ?? [], right: s.right ?? [] }];
+  const blocks = specs.map((b) => ({
+    b,
+    block: staggeredBlock({
+      x: b.x,
+      y: 22,
+      w: b.w,
+      rows: Math.max(b.left.length, b.right.length),
+      pitch: s.pitch ?? 15.6,
+      left: b.left,
+      right: b.right,
+      labels,
+    }),
+  }));
   const win =
-    s.window === 'switch'
-      ? `
+    s.window === 'off'
+      ? ''
+      : s.window === 'switch'
+        ? `
   <rect x="3.5" y="22" width="10" height="20" rx="1" fill="#1d1f22" stroke="#4a4d52" stroke-width="0.5"/>
   <rect x="6" y="24" width="5" height="16" rx="0.8" fill="#0d0e0f"/>
   <rect x="6.5" y="24.6" width="4" height="7" rx="0.6" fill="#d9dadc" stroke="#8a8d92" stroke-width="0.4"/>
   ${text(8.5, 46.5, '24V', 3, '#c9ccd0')}
   ${text(8.5, 50.5, '5V', 3, '#9a9da2', 'middle', 'normal')}`
-      : `
+        : `
   <rect x="3.5" y="22" width="10" height="20" rx="1" fill="#1d1f22" stroke="#4a4d52" stroke-width="0.5"/>
   <rect x="5" y="23.5" width="7" height="17" rx="0.6" fill="#141517"/>`;
   const svg = `
   ${kvDefs()}
   ${kvBody(W, H, s.model)}
   ${win}
-  <rect x="12.5" y="21" width="2.5" height="${+(block.height + 2).toFixed(2)}" rx="1" fill="#1a1b1d"/>
-  ${block.svg}
+  ${blocks.map(({ b, block }) => `<rect x="${b.x - 2.5}" y="21" width="2.5" height="${+(block.height + 2).toFixed(2)}" rx="1" fill="#1a1b1d"/>${block.svg}`).join('')}
+  ${s.extra ?? ''}
   ${text(8.5, 172, s.tag, 3.6, '#b9bcc1')}`;
-  const terminals: TerminalDef[] = [...s.left, ...s.right].map((id) => {
-    const p = block.pos[id];
-    const pt = s.points[id];
-    return { id, label: pt.label, x: p.x, y: p.y, side: p.side, ...ioRole(pt.kind), optional: true };
-  });
+  const terminals: TerminalDef[] = blocks.flatMap(({ b, block }) =>
+    [...b.left, ...b.right].map((id) => {
+      const p = block.pos[id];
+      const pt = s.points[id];
+      return { id, label: pt.label, x: p.x, y: p.y, side: p.side, ...ioRole(pt.kind), optional: true };
+    }),
+  );
   return {
     type: s.type,
     name: s.name,
