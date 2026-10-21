@@ -21,20 +21,18 @@ import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagr
 import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
-import type { TerminalSide } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
-import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
-import { FAN_LENGTH } from './editor/CableGraphics';
-import { EditorContext, type WireGeometry } from './editor/EditorContext';
+import { DeviceNode } from './editor/DeviceNode';
+import { linkSidesOf, wireLayout } from './editor/geometry';
+import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
 import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
-import { assignLanes, stubLength, type LaneInput } from './editor/routing';
 import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
@@ -115,6 +113,11 @@ function saveToggle(key: string, on: boolean) {
   }
 }
 
+/** 画面の機器を、電線の計算に使う形（位置つき）にする */
+function layoutDevices(ns: DeviceFlowNode[]) {
+  return ns.map((n) => ({ id: n.id, type: n.data.deviceType, x: n.position.x, y: n.position.y }));
+}
+
 function Editor() {
   const initial = useMemo(() => diagramToFlow(sampleDiagram), []);
   const [nodes, setNodesRaw] = useState<DeviceFlowNode[]>(() => arrangeMounted(initial.nodes));
@@ -167,24 +170,10 @@ function Editor() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const params = useMemo(() => new Map(diagram.devices.map((d) => [d.id, effectiveParams(d, bus)])), [bus, topo]);
   // 向きが「自動」のリンクは、つないだ相手の端子のある側に電線をつなぐ（相手が右にあれば右につなぎ、矢印は左を向く）
-  const linkSides = useMemo(() => {
-    const out = new Map<string, 'left' | 'right'>();
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-    for (const n of nodes) {
-      const nodeDef = getDeviceDefinition(n.data.deviceType);
-      if (!nodeDef?.netLabel || (n.data.params?.side ?? 'auto') !== 'auto') continue;
-      const e = edges.find((x) => x.source === n.id || x.target === n.id);
-      const other = e && byId.get(e.source === n.id ? e.target : e.source);
-      const def = other && getDeviceDefinition(other.data.deviceType);
-      const handle = e && (e.source === n.id ? e.targetHandle : e.sourceHandle);
-      const t = other && def && handle ? resolveDevice(def, params.get(other.id)).terminal(handle) : undefined;
-      const linkDef = getDeviceDefinition(LINK_TYPE);
-      if (!other || !t || !linkDef) continue;
-      // side は電線をつなぐ側。相手が左にあれば左につなぐ（矢印は右＝飛び先を向く）
-      out.set(n.id, other.position.x + t.x < n.position.x + linkDef.width / 2 ? 'left' : 'right');
-    }
-    return out;
-  }, [nodes, edges, params]);
+  const linkSides = useMemo(
+    () => linkSidesOf(layoutDevices(nodes), flowToDiagram([], edges).wires, (id) => params.get(id), getDeviceDefinition),
+    [nodes, edges, params],
+  );
   const shownParams = useMemo(() => {
     if (!linkSides.size) return params;
     const out = new Map(params);
@@ -200,57 +189,17 @@ function Editor() {
     [shownParams],
   );
 
-  // --- 配線のスタブ長とレーン（重なり回避） ---
-  const { lanes, geometry } = useMemo(() => {
-    // 表示中のシートの電線だけで重なりを避ける
-    const byId = new Map(nodes.filter((n) => n.data.sheet === sheet).map((n) => [n.id, n]));
-    const inputs: LaneInput[] = [];
-    const geometry = new Map<string, WireGeometry>();
-    const linkDef = getDeviceDefinition(LINK_TYPE);
-    for (const e of edges) {
-      const raw = (nodeId: string, handle?: string | null) => {
-        const n = byId.get(nodeId);
-        const def = n && getDeviceDefinition(n.data.deviceType);
-        const t = n && handle ? resolvedOf(n.id, n.data.deviceType)?.terminal(handle) : undefined;
-        return n && def && t ? { n, def, t, x: n.position.x + t.x, y: n.position.y + t.y } : null;
-      };
-      const a = raw(e.source, e.sourceHandle);
-      const b = raw(e.target, e.targetHandle);
-      if (!a || !b) continue;
-      /** 電線を出す向き: 手動の指定、なければ相手がリンクで左右に出る端子ならリンクのある側 */
-      const sideOf = (me: NonNullable<typeof a>, other: NonNullable<typeof a>, manual?: TerminalSide): TerminalSide => {
-        if (manual) return manual;
-        const horizontal = me.t.side === 'left' || me.t.side === 'right';
-        if (horizontal && !me.t.connector && other.n.data.deviceType === LINK_TYPE && me.n.data.deviceType !== LINK_TYPE && linkDef) {
-          return other.n.position.x + linkDef.width / 2 < me.x ? 'left' : 'right';
-        }
-        return me.t.side;
-      };
-      const end = (me: NonNullable<typeof a>, side: TerminalSide) => {
-        const { t, def } = me;
-        const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[side];
-        // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
-        // 正面向きのコネクタは、プラグの端からケーブルが出る
-        const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 - HANDLE_DEPTH / 2 : 12;
-        const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 8 + exit) : stubLength(toEdge);
-        return { side, stub, connector: t.connector };
-      };
-      const s = end(a, sideOf(a, b, e.data?.fromSide));
-      const t = end(b, sideOf(b, a, e.data?.toSide));
-      geometry.set(e.id, {
-        sStub: s.stub,
-        tStub: t.stub,
-        sSide: s.side,
-        tSide: t.side,
-        sCenter: { x: a.x, y: a.y },
-        tCenter: { x: b.x, y: b.y },
-        sConnector: s.connector,
-        tConnector: t.connector,
-      });
-      inputs.push({ id: e.id, sx: a.x, sy: a.y, sSide: s.side, sStub: s.stub, tx: b.x, ty: b.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend || !!e.data?.route });
-    }
-    return { lanes: assignLanes(inputs), geometry };
-  }, [nodes, edges, resolvedOf, sheet]);
+  // --- 配線のスタブ長とレーン（重なり回避）。表示中のシートの電線だけで重なりを避ける ---
+  const { lanes, geometry } = useMemo(
+    () =>
+      wireLayout(
+        layoutDevices(nodes.filter((n) => n.data.sheet === sheet)),
+        flowToDiagram([], edges).wires,
+        (id) => shownParams.get(id),
+        getDeviceDefinition,
+      ),
+    [nodes, edges, shownParams, sheet],
+  );
 
   // --- シートと移動 ---
   const nodesRef = useRef(nodes);
