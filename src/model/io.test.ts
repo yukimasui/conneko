@@ -48,7 +48,7 @@ describe('I/O の一覧と接続', () => {
     expect(p.endpoint?.device).toBe(tb.id);
   });
 
-  it('別のシートのセンサーへは入出力番号のリンクでつなぎ、コメントにセンサーの名前を入れる。外すとリンクも消える', () => {
+  it('別のシートのセンサーへは入出力番号のリンクでつなぎ、コメントにセンサーの名前を入れる。外すとリンクとコメントも消える', () => {
     let d = addTerminalBlock(base(), 'IN1', 'CN1', deviceDefinitions, lookup);
     const p = ioSystem(d, 'PLC1', lookup)!.units[0].points[0];
     d = connectIo(d, p, { device: 'S1', terminal: 'BK' }, attrs, lookup);
@@ -67,6 +67,8 @@ describe('I/O の一覧と接続', () => {
     const removed = disconnectIo(d, after, after.connections[0].ref, lookup);
     expect(removed.devices.filter((x) => x.type === 'generic.link')).toEqual([]);
     expect(ioSystem(removed, 'PLC1', lookup)!.units[0].points[0].connections).toEqual([]);
+    // つながっている機器がなくなったので、コメントも消える
+    expect(ioSystem(removed, 'PLC1', lookup)!.units[0].points[0].comment).toBe('');
   });
 
   it('同じシートの負荷へは電線 1 本でつなぐ', () => {

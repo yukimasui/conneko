@@ -166,7 +166,10 @@ export function connectIo(d: Diagram, point: IoPoint, target: TerminalRef, attrs
   return out;
 }
 
-/** I/O 点と現場の機器の端子の接続を外す（間にあるリンクも、使われなくなれば消す） */
+/**
+ * I/O 点と現場の機器の端子の接続を外す（間にあるリンクも、使われなくなれば消す）。
+ * ほかにつながっている機器がなくなれば、I/O のコメントも消す。
+ */
 export function disconnectIo(d: Diagram, point: IoPoint, target: TerminalRef, lookup: DefLookup): Diagram {
   if (!point.endpoint) return d;
   const m = buildModel(d, lookup, noop);
@@ -197,7 +200,9 @@ export function disconnectIo(d: Diagram, point: IoPoint, target: TerminalRef, lo
       wires = wires.filter((w) => !remove.has(w.from.device) && !remove.has(w.to.device));
     }
   }
-  return { ...d, devices, wires };
+  const out = { ...d, devices, wires };
+  const others = point.connections.filter((c) => c.ref.device !== target.device || c.ref.terminal !== target.terminal);
+  return others.length ? out : setComment(out, point.device, point.terminal, '');
 }
 
 /**
