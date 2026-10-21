@@ -1,4 +1,5 @@
-import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef } from '../types';
+import { FX5_BUS, ioLabel, relayCommonAccepts } from '../mitsubishi/melsec';
+import type { AcceptSpec, CommonLimit, DeviceDefinition, InternalLink, ParamValues, TerminalDef } from '../types';
 
 /**
  * 三菱電機 MELSEC iQ-F シリーズ 入力ユニット FX5-16EX/ES（増設ケーブルタイプ、DC24V 入力 16点、端子台 M3）。
@@ -10,8 +11,8 @@ import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef } from '..
  * 端子配列（マニュアルの図、上から）:
  *   左列: S/S 1 3 5 6 7 X0 1 3 5 7（X0 以降が上位番号）
  *   右列: X0 2 4（4 段分なし）2 4 6 •
- * 端子ID は下位 X0〜X7、上位 X10〜X17（ユニット内の相対番号。実際の入力番号は割付けの先頭番号を加える。
- * FX5U-32M の右隣 1 台目なら X20〜X37）。
+ * 端子ID は下位 X0〜X7、上位 X10〜X17（ユニット内の相対番号。8 進）。CPU ユニットに増設（mount）すると
+ * 先頭番号（ioIn / ioOut）が決まり、端子のラベルが実際の入出力番号になる（FX5U-32M の右隣 1 台目なら X20〜X37）。
  *
  * 出力ユニット FX5-16EYR/ES・FX5-16EYT/ES も外形・端子の並びが共通なので、定義の生成は buildFx5Ext16 にまとめている。
  */
@@ -23,6 +24,8 @@ export interface Fx5Ext16Options {
   description: string;
   labelPrefix: string;
   kind: 'input' | 'relay' | 'transistor';
+  /** 内部消費電流[A]（増設ケーブル経由で CPU ユニットから供給） */
+  load: { '5V': number; '24V': number };
 }
 
 const W = 80;
@@ -169,26 +172,48 @@ export function buildFx5Ext16(o: Fx5Ext16Options): DeviceDefinition {
 
   const in24: AcceptSpec = { system: 'DC', minVoltage: 20.4, maxVoltage: 28.8, conductors: ['+', '-'] };
   const outCom: AcceptSpec = { system: 'DC', minVoltage: 5, maxVoltage: 30, conductors: ['-'] };
+  const dir = o.kind === 'input' ? 'in' : 'out';
 
-  const terminals: TerminalDef[] = list
-    .filter((s) => s.id !== '')
-    .map((s): TerminalDef => {
-      const base = { id: s.id, x: s.x, y: s.y, side: s.side, optional: true };
-      if (s.id === 'S/S') return { ...base, label: 'S/S（入力コモン）', role: 'input', accepts: in24 };
-      if (s.id.startsWith('COM')) {
-        return o.kind === 'transistor' ? { ...base, role: 'input', accepts: outCom } : { ...base, role: 'signal' };
-      }
-      return { ...base, role: 'signal' };
-    });
+  const terminals = (p: ParamValues): TerminalDef[] =>
+    list
+      .filter((s) => s.id !== '')
+      .map((s): TerminalDef => {
+        const base = { id: s.id, x: s.x, y: s.y, side: s.side, optional: true };
+        if (s.id === 'S/S') {
+          return { ...base, label: 'S/S', note: '入力コモン（24V につなぐとシンク入力、0V につなぐとソース入力）', role: 'input', accepts: in24 };
+        }
+        if (s.id.startsWith('COM')) {
+          const note = s.id === 'COM0' ? '出力コモン（下位 8 点）' : '出力コモン（上位 8 点）';
+          return o.kind === 'transistor'
+            ? { ...base, note: `${note}・負荷電源の 0V`, role: 'input', accepts: outCom }
+            : { ...base, note, role: 'input', accepts: relayCommonAccepts(240, 30) };
+        }
+        // 入出力点: ユニット内の番号（8 進）に先頭番号を足したものをラベルにする
+        const offset = parseInt(s.id.slice(1), 8);
+        return {
+          ...base,
+          label: ioLabel('octal', dir, p, offset),
+          note: `ユニット内 ${s.id}`,
+          role: 'signal',
+          signal:
+            o.kind === 'input'
+              ? { dir: 'in', kind: 'dc', common: 'S/S' }
+              : { dir: 'out', kind: o.kind === 'relay' ? 'contact' : 'npn' },
+        };
+      });
 
-  // 出力は ON（リレー接点は閉、トランジスタは導通）とみなし、各出力とコモンをつなぐ
+  // 出力（リレー接点・トランジスタ）: 出力点からコモンへ。1 点 2A（リレー）/ 0.5A（トランジスタ）、
+  // 8 点 1 コモンで 8A（リレー）/ 1.6A（トランジスタ）
+  const rated = o.kind === 'relay' ? 2 : 0.5;
   const links: InternalLink[] =
     o.kind === 'input'
       ? []
       : [0, 1, 2, 3, 4, 5, 6, 7].flatMap((k) => [
-          { from: `Y${k}`, to: 'COM0' },
-          { from: `Y${10 + k}`, to: 'COM1' },
+          { from: `Y${k}`, to: 'COM0', switch: 'output' as const, ratedCurrent: rated },
+          { from: `Y${10 + k}`, to: 'COM1', switch: 'output' as const, ratedCurrent: rated },
         ]);
+  const commonLimits: CommonLimit[] =
+    o.kind === 'input' ? [] : ['COM0', 'COM1'].map((common) => ({ common, current: o.kind === 'relay' ? 8 : 1.6 }));
 
   return {
     type: o.type,
@@ -203,6 +228,12 @@ export function buildFx5Ext16(o: Fx5Ext16Options): DeviceDefinition {
     svg,
     terminals,
     ...(links.length ? { links } : {}),
+    ...(commonLimits.length ? { commonLimits } : {}),
+    bus: {
+      kind: FX5_BUS,
+      load: o.load,
+      io: { [o.kind === 'input' ? 'inputs' : 'outputs']: 16, format: 'octal' },
+    },
   };
 }
 
@@ -212,8 +243,9 @@ const def: DeviceDefinition = buildFx5Ext16({
   name: 'PLC 増設入力ユニット',
   labelPrefix: 'IN',
   kind: 'input',
+  load: { '5V': 0.1, '24V': 0.085 },
   description:
-    '三菱電機 MELSEC iQ-F シリーズの増設入力ユニット FX5-16EX/ES（増設ケーブルタイプ、DC24V 入力 16点、端子台 M3）。入力 DC24V +20%/−15%、4.0mA、シンク/ソース共用（S/S を 24V につなぐとシンク入力、0V につなぐとソース入力）。16点1コモン（S/S）。内部電源（DC5V 100mA・DC24V 85mA）は増設ケーブル経由で CPU ユニットから供給される。端子ID は下位 X0〜X7・上位 X10〜X17 のユニット内の相対番号で、実際の入力番号は割付けの先頭番号を加えたもの（FX5U-32M の右隣 1 台目なら X20〜X37）。右列の最下段は空き端子。',
+    '三菱電機 MELSEC iQ-F シリーズの増設入力ユニット FX5-16EX/ES（増設ケーブルタイプ、DC24V 入力 16点、端子台 M3）。入力 DC24V +20%/−15%、4.0mA、シンク/ソース共用（S/S を 24V につなぐとシンク入力、0V につなぐとソース入力）。16点1コモン（S/S）。内部電源（DC5V 100mA・DC24V 85mA）は増設ケーブル経由で CPU ユニットから供給される。端子ID は下位 X0〜X7・上位 X10〜X17 のユニット内の相対番号で、CPU ユニットに増設すると端子のラベルが実際の入力番号（先頭番号を加えたもの。FX5U-32M の右隣 1 台目なら X20〜X37）になる。右列の最下段は空き端子。',
 });
 
 export default def;

@@ -1,4 +1,5 @@
-import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef, TerminalRole } from '../types';
+import { FX5_BUS, relayCommonAccepts } from '../mitsubishi/melsec';
+import type { AcceptSpec, CommonLimit, DeviceDefinition, InternalLink, TerminalDef, TerminalRole } from '../types';
 
 /**
  * 三菱電機 MELSEC iQ-F シリーズ CPU ユニット FX5U-32MR/ES（AC 電源、DC 入力 16点、リレー出力 16点）。
@@ -13,6 +14,10 @@ import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef, TerminalR
  *   下側端子台 内側: Y0 2 • Y4 6 • Y10 12 • Y14 16 •
  *           外側: COM0 1 3 COM1 5 7 COM2 11 13 COM3 15 17
  * （• は空き端子。外側の列は内側の列に対して半ピッチずれる）
+ *
+ * 増設ユニット（FX5-16EX/ES など）は右側に増設する（バスの親。図面の mount の位置 1, 2, … の順に右へ並ぶ）。
+ * 入出力番号は入力 X・出力 Y を別々に 8 進で数え、本体の X0〜X17 / Y0〜Y17 の後ろ（X20 / Y20）から 8 点単位で割り付ける。
+ * 内部電源は DC5V 900mA と DC24V 400mA（サービス電源と共用）を増設ユニットへ供給する。
  *
  * トランジスタ出力（FX5U-32MT/ES）は端子配列・外形が同じなので、定義の生成は buildFx5u32m にまとめている。
  */
@@ -254,6 +259,7 @@ export function buildFx5u32m(o: Fx5u32mOptions): DeviceDefinition {
 
   const accepts24: AcceptSpec = { system: 'DC', minVoltage: 20.4, maxVoltage: 28.8, conductors: ['+', '-'] };
   const outCom: AcceptSpec = { system: 'DC', minVoltage: 5, maxVoltage: 30, conductors: ['-'] };
+  const relay = o.output === 'relay';
 
   const terminals: TerminalDef[] = SLOTS.filter((s) => s.name !== '').map((s) => {
     const base = { id: s.name, x: s.x, y: s.y, side: s.side };
@@ -266,31 +272,38 @@ export function buildFx5u32m(o: Fx5u32mOptions): DeviceDefinition {
       case '24V':
         return {
           ...base,
-          label: '24V（サービス電源）',
+          label: '24V', note: 'サービス電源 +24V（400mA。増設ユニットの消費分と共用）',
           role: 'supply' as TerminalRole,
           supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.4 },
         };
       case '0V':
         return {
           ...base,
-          label: '0V（サービス電源）',
+          label: '0V', note: 'サービス電源 0V',
           role: 'supply' as TerminalRole,
           supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: 0.4 },
         };
       case 'S/S':
-        return { ...base, label: 'S/S（入力コモン）', role: 'input' as TerminalRole, accepts: accepts24, optional: true };
+        return { ...base, label: 'S/S', note: '入力コモン（24V につなぐとシンク入力、0V につなぐとソース入力）', role: 'input' as TerminalRole, accepts: accepts24, optional: true };
       default:
         if (s.name.startsWith('COM')) {
-          return o.output === 'relay'
-            ? { ...base, role: 'signal' as TerminalRole, optional: true }
-            : { ...base, role: 'input' as TerminalRole, accepts: outCom, optional: true };
+          const note = `出力コモン（${COMMONS[s.name].join('・')}）`;
+          return relay
+            ? { ...base, note, role: 'input' as TerminalRole, accepts: relayCommonAccepts(240, 30), optional: true }
+            : { ...base, note: `${note}・負荷電源の 0V`, role: 'input' as TerminalRole, accepts: outCom, optional: true };
         }
-        return { ...base, role: 'signal' as TerminalRole, optional: true };
+        if (s.name.startsWith('X')) {
+          return { ...base, role: 'signal' as TerminalRole, signal: { dir: 'in', kind: 'dc', common: 'S/S' }, optional: true };
+        }
+        return { ...base, role: 'signal' as TerminalRole, signal: { dir: 'out', kind: relay ? 'contact' : 'npn' }, optional: true };
     }
   });
 
-  // 出力は ON（リレー接点は閉、トランジスタは導通）とみなし、各出力とコモンをつなぐ
-  const links: InternalLink[] = Object.entries(COMMONS).flatMap(([com, ys]) => ys.map((y) => ({ from: y, to: com })));
+  // 出力（リレー接点・トランジスタ）: 出力点からコモンへ。1 点 2A（リレー）/ 0.5A（トランジスタ）、4 点 1 コモンで 8A / 0.8A
+  const links: InternalLink[] = Object.entries(COMMONS).flatMap(([com, ys]) =>
+    ys.map((y) => ({ from: y, to: com, switch: 'output' as const, ratedCurrent: relay ? 2 : 0.5 })),
+  );
+  const commonLimits: CommonLimit[] = Object.keys(COMMONS).map((common) => ({ common, current: relay ? 8 : 0.8 }));
 
   return {
     type: o.type,
@@ -312,11 +325,19 @@ export function buildFx5u32m(o: Fx5u32mOptions): DeviceDefinition {
         y: ETH.y,
         side: 'left',
         role: 'connector',
-        connector: { kind: 'RJ45', pins: 0, width: ETH.h },
+        connector: { kind: 'RJ45', pins: 0, width: ETH.h, protocols: ['ethernet', 'slmp', 'cc-link-ie-field-basic'], facing: 'front', length: ETH.w },
         optional: true,
       },
     ],
     links,
+    commonLimits,
+    // 増設ユニットの親。増設できるのは 16 台まで（拡張ボード・拡張アダプタを除く）
+    bus: {
+      kind: FX5_BUS,
+      host: { slots: 16, numbering: { mode: 'separate', unit: 8 } },
+      supply: { '5V': 0.9, '24V': 0.4 },
+      io: { inputs: 16, outputs: 16, format: 'octal' },
+    },
     // 最大消費電力 30W（サービス電源をフルに使った場合）から求めた AC100V 時の入力電流の目安
     loadCurrent: 0.5,
     distinctGroups: [['L', 'N']],
@@ -328,7 +349,7 @@ const def: DeviceDefinition = buildFx5u32m({
   model: 'FX5U-32MR/ES',
   output: 'relay',
   description:
-    '三菱電機 MELSEC iQ-F シリーズの CPU ユニット FX5U-32MR/ES（AC 電源、DC24V 入力 16点、リレー出力 16点、端子台 M3）。電源 AC100〜240V（85〜264V）50/60Hz、消費電力 30W、突入電流 25A 5ms 以下/AC100V。DC24V サービス電源（24V / 0V 端子）400mA（入力回路に使う場合）。入力 X0〜X17: DC24V 5.3mA、シンク/ソース共用（S/S を 24V につなぐとシンク入力、0V につなぐとソース入力）。出力 Y0〜Y17: リレー 2A/点、4点1コモン 8A 以下（COM0 = Y0〜Y3、COM1 = Y4〜Y7、COM2 = Y10〜Y13、COM3 = Y14〜Y17）、AC240V/DC30V 以下。チェックでは出力接点を閉とみなし、各出力とコモンを導通扱い。⏚ は機能接地（D 種接地）。Ethernet ポート（CC-Link IE フィールドネットワーク Basic 対応）でタッチパネル（GOT）や PC とつなぐ。増設 I/O（FX5-16EX/ES など）は右側の増設コネクタに接続し、入出力番号は X20・Y20 から続く。',
+    '三菱電機 MELSEC iQ-F シリーズの CPU ユニット FX5U-32MR/ES（AC 電源、DC24V 入力 16点、リレー出力 16点、端子台 M3）。電源 AC100〜240V（85〜264V）50/60Hz、消費電力 30W、突入電流 25A 5ms 以下/AC100V。DC24V サービス電源（24V / 0V 端子）400mA（入力回路に使う場合）。入力 X0〜X17: DC24V 5.3mA、シンク/ソース共用（S/S を 24V につなぐとシンク入力、0V につなぐとソース入力）。出力 Y0〜Y17: リレー 2A/点、4点1コモン 8A 以下（COM0 = Y0〜Y3、COM1 = Y4〜Y7、COM2 = Y10〜Y13、COM3 = Y14〜Y17）、AC240V/DC30V 以下。⏚ は機能接地（D 種接地）。Ethernet ポート（CC-Link IE フィールドネットワーク Basic 対応）でタッチパネル（GOT）や PC とつなぐ。増設 I/O（FX5-16EX/ES など）は右側の増設コネクタに接続し（最大 16 台）、入出力番号は X20・Y20 から 8 進で続く。内部電源 DC5V 900mA・DC24V 400mA（サービス電源と共用）を増設ユニットへ供給する。',
 });
 
 export default def;
