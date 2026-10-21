@@ -1,0 +1,522 @@
+:root {
+  --bg: #eef1f5;
+  --panel: #ffffff;
+  --border: #d7dde5;
+  --text: #1f2933;
+  --muted: #6b7785;
+  --accent: #2563eb;
+  --error: #dc2626;
+  --warning: #d97706;
+  --info: #0284c7;
+  --ok: #16a34a;
+  font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+button,
+select,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  padding: 5px 12px;
+}
+button:hover {
+  background: #f3f6fa;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.primary:disabled {
+  opacity: 0.5;
+}
+button.danger {
+  color: var(--error);
+  border-color: #f3c4c4;
+  margin-top: 8px;
+}
+
+select,
+input,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  width: 100%;
+}
+
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+
+.app {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 240px 1fr 300px;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'palette canvas inspector'
+    'palette issues inspector';
+}
+
+.panel-title {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+/* --- ツールバー --- */
+.toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 18px;
+  margin-right: 8px;
+}
+.brand img {
+  height: 30px;
+}
+.toolbar__group {
+  display: flex;
+  gap: 6px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+/* --- パレット --- */
+.palette {
+  grid-area: palette;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+}
+.palette__hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.palette h3 {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 6px;
+  margin-bottom: 4px;
+  border-color: transparent;
+}
+.palette__item:hover {
+  border-color: var(--border);
+}
+.palette__thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+.palette__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.palette__name {
+  font-weight: 600;
+}
+.palette__model {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- キャンバス --- */
+/* 電線と線番は機器より手前に描く（端子ネジに電線がつながって見えるように） */
+.react-flow__edgelabel-renderer {
+  z-index: 1002;
+}
+
+.canvas {
+  grid-area: canvas;
+  position: relative;
+  min-height: 0;
+}
+
+.device-node {
+  position: relative;
+}
+.device-node__svg {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 3px 4px rgba(15, 23, 42, 0.25));
+}
+.device-node__label {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+}
+.device-node__label span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.device-node.is-selected .device-node__svg {
+  filter: drop-shadow(0 0 0 2px var(--accent)) drop-shadow(0 0 6px rgba(37, 99, 235, 0.7));
+}
+.device-node.has-error .device-node__label {
+  background: #fee2e2;
+  color: var(--error);
+}
+.device-node.has-warning .device-node__label {
+  background: #fef3c7;
+}
+.device-node--unknown {
+  padding: 16px;
+  border: 2px dashed var(--error);
+  background: #fff;
+}
+
+.react-flow__handle.terminal {
+  width: 10px;
+  height: 10px;
+  min-width: 0;
+  min-height: 0;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.react-flow__node:hover .react-flow__handle.terminal,
+.react-flow__node.selected .react-flow__handle.terminal,
+.react-flow__handle.terminal.connectingfrom,
+.react-flow__handle.terminal.connectingto,
+.react-flow.is-connecting .react-flow__handle.terminal {
+  opacity: 1;
+}
+.react-flow__handle.terminal.connectingto.valid {
+  background: var(--accent);
+}
+
+.wire__selected {
+  fill: none;
+  stroke: rgba(37, 99, 235, 0.35);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+.wire__alert {
+  fill: none;
+  stroke: rgba(220, 38, 38, 0.35);
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-dasharray: 2 6;
+}
+
+.wire-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #cbd2db;
+  white-space: nowrap;
+}
+.wire-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  font-size: 8px;
+  line-height: 10px;
+  font-weight: 700;
+  padding: 0 3px;
+  border-radius: 2px;
+  background: #fbfbf7;
+  border: 1px solid #b9bfc8;
+  color: #1f2933;
+  white-space: nowrap;
+}
+.wire-marker.has-error {
+  border-color: var(--error);
+  color: var(--error);
+}
+.wire-label.is-selected {
+  border-color: var(--accent);
+}
+.wire-label.has-error {
+  border-color: var(--error);
+  color: var(--error);
+}
+.wire-label__spec {
+  font-weight: 400;
+  color: var(--muted);
+}
+.wire-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: all;
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+}
+.wire-grip.is-horizontal {
+  width: 22px;
+  height: 10px;
+  cursor: ns-resize;
+}
+.wire-grip.is-vertical {
+  width: 10px;
+  height: 22px;
+  cursor: ew-resize;
+}
+
+.toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2933;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* --- インスペクタ --- */
+.inspector {
+  grid-area: inspector;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.error-text {
+  color: var(--error);
+}
+.device-info__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.device-info p {
+  margin: 4px 0 0;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #c3cad3;
+}
+.swatch.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.terminal-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.terminal-chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f1f4f8;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.terminal-chip.is-connected {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+.mini-issues {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+.help {
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.help p {
+  margin: 6px 0;
+}
+
+.sev-error {
+  color: var(--error);
+}
+.sev-warning {
+  color: #92400e;
+}
+.sev-info {
+  color: #075985;
+}
+
+/* --- チェック結果 --- */
+.issues {
+  grid-area: issues;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 34vh;
+}
+.issues__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 0;
+  padding: 8px 12px;
+  text-align: left;
+}
+.issues__toggle {
+  margin-left: auto;
+  color: var(--muted);
+}
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: #fff;
+}
+.badge--error {
+  background: var(--error);
+}
+.badge--warning {
+  background: var(--warning);
+}
+.badge--info {
+  background: var(--info);
+}
+.badge--ok {
+  background: var(--ok);
+}
+.issues__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+}
+.issue {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.issue__sev {
+  flex: none;
+  width: 3.5em;
+  font-weight: 700;
+}
+
+/* --- モーダル --- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 20px;
+  width: min(720px, calc(100vw - 32px));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+.modal h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.modal textarea {
+  height: 50vh;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 12px;
+}
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
