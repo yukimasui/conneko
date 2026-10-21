@@ -90,7 +90,9 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
   `function: 'ossd'`、`channel: 1 | 2` にする。電源とみなすのでコイルを直接駆動でき、OSSD どうしや電源と同じ電位になると短絡として検出する。
 - テスト出力は `role: 'supply'`、`supply: { ..., kind: 'test' }`、`function: 'test-output'`、`channel`。
 - 安全入力は `role: 'signal'`、`function: 'safety-input'`、`channel`。リセット・EDM なども `function` を付ける
-  （`reset` / `start` / `muting` / `edm` / `safety-contact` / `aux-output` / `unlock-solenoid` / `lock-solenoid`）。
+  （`reset` / `reset-auto` / `start` / `muting` / `edm` / `safety-contact` / `aux-output` / `unlock-solenoid` / `lock-solenoid`）。
+  1 つの端子が複数の機能を持つ場合は配列にする（例: リセットと EDM を兼ねる端子は `['reset', 'edm']`）。
+  `reset-auto` は配線すると自動リセットになる端子（G9SE の T32 など）。
 - 2 チャンネルの組は `safetyChannels` に書く。
 
   ```ts
@@ -101,7 +103,10 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
   ```
 
   `mode` は `nc-nc`（等価。既定）/ `nc-no`（非等価。channels[0] が b 接点、[1] が a 接点）/ `ossd`（OSSD 出力機器を直接つなぐ）。
-- 安全性能は `safety: { pl: 'e', category: '4', sil: 3, esType: 4 }`。図面の「要求PL」を下回る機器を警告する。
+  どちらも受けられる入力は配列にする（`['nc-nc', 'ossd']`）。安全コントローラーの汎用入力のように使い方をプログラムで決める組は
+  `configurable: true` にする（片側だけの配線などを注意にとどめる）。機器の設定スイッチで組が変わる場合は `safetyChannels` を関数にする。
+- 強制開離するイネーブルスイッチの a 接点は `{ switch: 'NO', directOpening: true }` にすると安全入力に使える。
+- 安全性能は `safety: { pl: 'e', category: '4', sil: 3, esType: 4 }`（スイッチ・接触器は `b10d` も書ける）。図面の「要求PL」を下回る機器を警告する。
 - 主な安全チェック: 2 チャンネルの片側だけの配線、チャンネル間のクロス、OSSD の短絡、安全入力に a 接点、直接開路動作でない接点、
   EDM の未配線・EDM ループにミラー接点がない、冗長化されていない出力、自動リセット、スプリングロックの常時通電、0V の不一致。
 
@@ -122,6 +127,8 @@ bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } }
 - 装着したユニットには、先頭番号（点数）が `params.ioIn` / `params.ioOut` として渡る（装着していなければ 0、または図面で指定した値）。
   ラベルに反映するには `pins` / `terminals` を関数にし、`ioName(format, 'in', p.ioIn + i)`（`src/devices/resolve.ts`）で番号を作る。
 - `host.accepts` で、親が受け入れるユニットのバスの種類を複数にできる。
+- ベースユニットのようにスロットの位置が決まっている親は `host.slotX`（位置ごとの x 座標）、専用の位置は `host.slotRoles: { 1: 'power', 2: 'cpu' }`
+  とユニット側の `bus.role` で表す。空きスロットが番号を占有する場合は `numbering.emptySlot` に点数を書く。
 
 ## パラメータで変わる端子・ピン・内部経路
 
