@@ -403,7 +403,7 @@ export interface DeviceDefinition {
    */
   distinctGroups?: string[][];
   /** コモンあたりの電流の上限 */
-  commonLimits?: CommonLimit[];
+  commonLimits?: ParamDependent<CommonLimit[]>;
   /** 安全回路のチャンネルの組 */
   safetyChannels?: ParamDependent<SafetyChannelGroup[]>;
   /** 安全性能 */

@@ -50,7 +50,7 @@ describe('三菱電機 機器定義', () => {
       expect(byId.get(l.from)?.signal?.dir, `${l.from} の signal`).toBe('out');
     }
     // コモンあたりの上限は出力のコモンに付ける
-    for (const c of d.commonLimits ?? []) {
+    for (const c of r.commonLimits) {
       expect(r.links.some((l) => l.switch === 'output' && l.to === c.common), `commonLimits ${c.common}`).toBe(true);
     }
     // DC 入力点のコモンは受電端子（+/− 共用）

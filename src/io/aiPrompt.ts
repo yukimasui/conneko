@@ -131,7 +131,7 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
     const shown = links.slice(0, 24).map(linkText);
     lines.push(`  内部の導通: ${shown.join(', ')}${links.length > shown.length ? ` ほか ${links.length - shown.length} 件` : ''}`);
   }
-  for (const c of def.commonLimits ?? []) {
+  for (const c of r.commonLimits) {
     const v = resolveNum(c.current, def, params);
     if (v !== undefined) lines.push(`  コモン ${c.common} の上限: ${v}A`);
   }

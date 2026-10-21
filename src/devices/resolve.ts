@@ -8,6 +8,7 @@ import {
   paramsWithDefaults,
   resolveNum,
   type AcceptSpec,
+  type CommonLimit,
   type ConnectorSpec,
   type DeviceDefinition,
   type InternalLink,
@@ -38,6 +39,7 @@ export interface ResolvedDevice {
   pins: PinDef[];
   links: InternalLink[];
   safetyChannels: SafetyChannelGroup[];
+  commonLimits: CommonLimit[];
   /** 端子IDまたはピンID → 受電条件（配列に正規化、電圧は数値） */
   accepts: Map<string, ResolvedAccept[]>;
   terminal(id: string): TerminalDef | undefined;
@@ -48,6 +50,19 @@ const cache = new WeakMap<DeviceDefinition, Map<string, ResolvedDevice>>();
 
 const evaluate = <T,>(v: ParamDependent<T> | undefined, params: ParamValues, fallback: T): T =>
   v === undefined ? fallback : typeof v === 'function' ? (v as (p: ParamValues) => T)(params) : v;
+
+/**
+ * 入出力の先頭番号（ioIn / ioOut）の既定値を補う。装着していない場合は入力が 0 から、
+ * 出力は入力と同じ番号の並び（KV・iQ-R）なら入力の後ろから、別に数える（FX）なら 0 から。
+ */
+function withIoDefaults(def: DeviceDefinition, p: ParamValues): ParamValues {
+  const io = def.bus?.io;
+  if (!io || (p.ioIn !== undefined && p.ioOut !== undefined)) return p;
+  const ioIn = Number(p.ioIn ?? 0) || 0;
+  const shared = io.format !== 'octal';
+  const ioOut = p.ioOut !== undefined ? p.ioOut : shared ? ioIn + Math.ceil((io.inputs ?? 0) / 16) * 16 : 0;
+  return { ...p, ioIn, ioOut };
+}
 
 /** 受電条件を配列に正規化し、電圧を数値に解決する */
 export function resolveAccepts(
@@ -75,11 +90,12 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
   const hit = byParams.get(cacheKey);
   if (hit) return hit;
 
-  const p = paramsWithDefaults(def, params);
+  const p = withIoDefaults(def, paramsWithDefaults(def, params));
   const terminals = evaluate(def.terminals, p, []);
   const pins = evaluate(def.pins, p, []);
   const links = evaluate(def.links, p, []);
   const safetyChannels = evaluate(def.safetyChannels, p, []);
+  const commonLimits = evaluate(def.commonLimits, p, []);
   const accepts = new Map<string, ResolvedAccept[]>();
   for (const t of [...terminals, ...pins]) {
     if (t.accepts) accepts.set(t.id, resolveAccepts(t.accepts, def, p));
@@ -93,6 +109,7 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     pins,
     links,
     safetyChannels,
+    commonLimits,
     accepts,
     terminal: (id) => tById.get(id),
     pin: (id) => pById.get(id),

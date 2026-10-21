@@ -53,7 +53,7 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   for (const g of def.distinctGroups ?? []) {
     for (const id of g) if (!ids.has(id)) problems.push(`distinctGroups に存在しない端子: ${id}`);
   }
-  for (const c of def.commonLimits ?? []) {
+  for (const c of r.commonLimits) {
     if (!ids.has(c.common)) problems.push(`commonLimits に存在しない端子: ${c.common}`);
   }
   for (const g of r.safetyChannels) {

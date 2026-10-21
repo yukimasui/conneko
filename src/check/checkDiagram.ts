@@ -72,10 +72,12 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
 
 /** 未接続の端子 */
 function checkUnconnected(m: Model, push: Push) {
+  // ケーブルでつないだコネクタのピンは接続済み（電源が来ているかは受電条件の検査で確かめる）
+  const cabled = new Set(m.cablePairs.flat());
   for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
     if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector') continue;
-    if (m.wiresAt.has(k)) continue;
+    if (m.wiresAt.has(k) || cabled.has(k)) continue;
     if (t.role === 'ground') {
       push({ severity: 'warning', rule: 'ground-missing', message: `${device.id}: 接地端子 ${t.id} が接地されていません`, devices: [device.id], wires: [], key: `unconnected:${k}` });
     } else {
@@ -108,9 +110,10 @@ function checkSupplyConflicts(m: Model, push: Push): Set<string> {
 
 /** 受電端子・接地端子の電源条件 */
 function checkInputs(m: Model, push: Push) {
+  const cabled = new Set(m.cablePairs.flat());
   for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
-    const connected = (m.allMembers.get(m.all.find(k)) ?? []).some((x) => m.wiresAt.has(x));
+    const connected = (m.allMembers.get(m.all.find(k)) ?? []).some((x) => m.wiresAt.has(x) || cabled.has(x));
     if (!connected) continue;
     const p = m.potentialOf(k);
     const wires = (m.wiresAt.get(k) ?? []).map((w) => w.id);
@@ -274,7 +277,7 @@ const amp = (n: number) => `${Math.round(n * 1000) / 1000}A`;
 
 /** 出力 1 点の定格とコモンあたりの上限 */
 function checkOutputCurrents(m: Model, push: Push) {
-  for (const { device, def } of m.devices.values()) {
+  for (const { device, def, r } of m.devices.values()) {
     const outputs = m.switchLinks.filter((s) => s.device === device.id && s.link.switch === 'output');
     if (!outputs.length) continue;
     const loads = new Map(outputs.map((s) => [s, outputLoad(m, device.id, s.a)]));
@@ -292,7 +295,7 @@ function checkOutputCurrents(m: Model, push: Push) {
         });
       }
     }
-    for (const c of def.commonLimits ?? []) {
+    for (const c of r.commonLimits) {
       const limit = resolveNum(c.current, def, device.params);
       if (limit === undefined) continue;
       const members = outputs.filter((s) => s.link.to === c.common);
