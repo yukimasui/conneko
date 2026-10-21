@@ -142,7 +142,7 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 |---|---|
 | KV-8000 CPU、KV-C32XC、KV-C32TC | 別担当が作成（指示により作らない） |
 | KV-PU1（AC 電源ユニット） | 端子台（8端子: AC 入力・LG/FG・サービス電源・エラー出力）の並びが公開ページで確認できず、AC 電源の誤配線につながるため未実装 |
-| KV-7000/KV-5000 系の旧機種（KV-7500、KV-5500 など）、KV Nano CPU（KV-N24/N40/N60/NC32T など） | 現行の KV-X/KV-8000 を優先。KV Nano CPU は端子配列の調査が未着手 |
+| KV-7000/KV-5000 系の旧機種（KV-7500、KV-5500 など）、KV Nano CPU（KV-N24/N40/N60/NC32T など） | 現行の KV-X/KV-8000 を優先。KV Nano は keyence.co.jp の商品一覧に見当たらず（海外サイトのみ: https://www.keyence.com.ph/products/controls/plc-terminal-block-type/kv_nano/specs/ ）、CPU の端子配列は未調査。拡張ユニット（KV-NC 系）は KV-EC01 のリモート I/O としても使うため実装した |
 | KV-NC32ETE / KV-NC16EXTE | 公式ページに入出力回路図がない（端子配列未確認） |
 | KV-CA02（カメラ入力）+ KV-CA1H など | 専用ケーブル（USB 形状のカメラポート）で電気配線の対象が少ないため後回し |
 | KV-EB1（増設ユニット）、KV-N1/KV-NC1（変換ユニット）、KV-B1（電池） | 配線がない／専用ケーブルのみ |
