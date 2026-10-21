@@ -7,7 +7,7 @@
  * 右端に信号番号（0〜15）が印字される。
  */
 import type { DeviceDefinition, TerminalDef } from '../types';
-import { ioRole, kvDefs, text, type IoKind } from './kv-parts';
+import { ioRole, kvDefs, milHeaderV, milHeaderVHeight, text, toPins, type IoKind, type IoPoint } from './kv-parts';
 
 export const NC_W = 44;
 export const NC_H = 180;
@@ -65,6 +65,65 @@ export interface NcUnitSpec {
   /** 端子台の上に印字する列名（例: ['IN', 'COM']） */
   head: [string, string];
   links?: { from: string; to: string }[];
+}
+
+/**
+ * MIL コネクタタイプの KV-NC 系ユニット（KV-NC16EX / NC16ET / NC32EX / NC32ET など）。
+ * ピン番号はマニュアルどおり MIL 標準の千鳥番号（左列 = 奇数、右列 = 偶数）。
+ */
+export function buildNcMil(s: {
+  type: string;
+  model: string;
+  name: string;
+  description: string;
+  labelPrefix: string;
+  poles: 20 | 34;
+  pins: IoPoint[];
+  links?: { from: string; to: string }[];
+  /** 入力モード切替スイッチ（24V/5V）を描く */
+  modeSwitch?: boolean;
+}): DeviceDefinition {
+  const h = milHeaderVHeight(s.poles);
+  const cy = +(NC_H - h / 2 - 5).toFixed(2);
+  const cx = 19;
+  const svg = `
+  ${kvDefs()}
+  ${ncBody(s.model, Array.from({ length: s.poles === 34 ? 16 : 16 }, (_, i) => String(i)))}
+  ${milHeaderV(cx, cy, s.poles)}
+  ${
+    s.modeSwitch
+      ? `<rect x="35" y="${cy + h / 2 - 22}" width="6" height="14" rx="0.8" fill="#0d0e0f" stroke="#4a4d52" stroke-width="0.4"/>
+  <rect x="35.6" y="${cy + h / 2 - 21.4}" width="4.8" height="6" rx="0.6" fill="#d9dadc"/>
+  ${text(38, cy + h / 2 - 24, '24V', 2.4, '#c9ccd0', 'middle', 'normal')}
+  ${text(38, cy + h / 2 - 4, '5V', 2.4, '#c9ccd0', 'middle', 'normal')}`
+      : ''
+  }`;
+  return {
+    type: s.type,
+    name: s.name,
+    model: s.model,
+    maker: 'KEYENCE',
+    category: 'plc',
+    description: s.description,
+    labelPrefix: s.labelPrefix,
+    width: NC_W,
+    height: NC_H,
+    svg,
+    terminals: [
+      {
+        id: 'CN1',
+        label: `CN1 (MIL ${s.poles}P)`,
+        x: cx,
+        y: cy,
+        side: 'bottom',
+        role: 'connector',
+        connector: { kind: `MIL${s.poles}`, pins: s.poles, width: 23 },
+        optional: true,
+      },
+    ],
+    pins: toPins(s.pins),
+    links: s.links,
+  };
 }
 
 /** KV-NC16EXE / KV-NC16ETE / KV-NC16ETPE 型（16点、各段が「信号 + COM」のペア） */
