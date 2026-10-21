@@ -17,7 +17,7 @@
  * PIO（40 極）のピンは pio.ts の positionerPio40。I/O 種類（NP/PN/PLN/PLP/フィールドネットワーク）は params.io で選ぶ。
  */
 import type { DeviceDefinition, InternalLink, ParamDef, ParamValues, PinDef, TerminalDef } from '../types';
-import { fieldbusBlock, ioOf, ioTypeParam, isPio, NETWORK_NAMES, polarityOf, POSITIONER_IO_TYPES } from './fieldbus';
+import { fieldbusBlock, ioOf, ioTypeParam, isPio, NETWORK_NAMES, polarityOf, POSITIONER_IO_TYPES, type IoType } from './fieldbus';
 import {
   DC24_MINUS,
   DC24_PLUS,
@@ -45,8 +45,10 @@ export interface CbSeriesSpec {
   type: string;
   /** シリーズ名（'PCON'・'ACON'・'DCON'） */
   series: 'PCON' | 'ACON' | 'DCON';
-  /** タイプ（'CB' / 'CFB'） */
-  variant: 'CB' | 'CFB';
+  /** タイプ（'CB' / 'CFB'、前の世代の 'CA' / 'CFA'。CFB・CFA は上にファンユニットが付く） */
+  variant: 'CB' | 'CFB' | 'CA' | 'CFA';
+  /** 選べる I/O 種類（省略時は CB の全種類） */
+  ioTypes?: IoType[];
   name: string;
   description: string;
   /** 正面パネルの色（中央・端） */
@@ -69,7 +71,12 @@ const MAIN_H = 178.5 * MM;
 const POWER_IDS = ['BK', 'S1', 'S2', 'MPI', 'MPO', '24V', '0V', 'EMG-'];
 
 export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
-  const top = s.variant === 'CFB' ? 11.5 * MM : 0;
+  const fan = s.variant === 'CFB' || s.variant === 'CFA';
+  /** 安全カテゴリー対応タイプ（CGB / CGFB）があるのは CB 世代 */
+  const hasCg = s.variant === 'CB' || s.variant === 'CFB';
+  /** 簡易アブソのバッテリー関係（LED・コネクター）があるのはファンなしの PCON/ACON */
+  const hasAbs = !fan && s.series !== 'DCON';
+  const top = fan ? 11.5 * MM : 0;
   const H = n2(MAIN_H + top);
   /** 本体（上下のタブを除く）の上端・下端 */
   const bodyTop = top + 8 * MM;
@@ -95,13 +102,13 @@ export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
   const svg = (p: ParamValues) => {
     const io = ioOf(p);
     const pio = isPio(io);
-    const cg = String(p.model ?? 'CB').includes('G');
+    const cg = hasCg && String(p.model ?? 'CB').includes('G');
     const modelName = `${s.series}-${cg ? s.variant.replace('C', 'CG') : s.variant}`;
     const fb = pio ? undefined : fieldbusBlock(io, FB_AREA, 'left');
     return `
   ${iaiDefs(s.panel)}
   ${
-    s.variant === 'CFB'
+    fan
       ? `<!-- ファンユニット -->
   <rect x="3" y="2" width="${W - 6}" height="${n2(top + 9 * MM)}" rx="2" fill="#2a2c30" stroke="#0b0b0c" stroke-width="0.8"/>
   <circle cx="${W / 2}" cy="${n2(top / 2 + 6)}" r="${n2(top / 2 - 1)}" fill="url(#iaifan-{{uid}})" stroke="#000" stroke-width="0.5"/>
@@ -140,12 +147,12 @@ export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
   <!-- モーター・エンコーダー -->
   ${whiteConnectorV(MPG.x, MPG.y, MPG.w, MPG.h, 12)}
   ${text(25 * MM, y(108), 'MPG', 2.6, '#e9eef0', 'start')}
-  ${s.series !== 'DCON' && s.variant === 'CB' ? `${text(5.5 * MM, y(103.5), 'ABS', 2.2, '#e9eef0')}${[0, 1, 2].map((i) => led(5.5 * MM, y(106 + i * 2.6), 'off', 2.4, 1.6)).join('')}` : ''}
+  ${hasAbs ? `${text(5.5 * MM, y(103.5), 'ABS', 2.2, '#e9eef0')}${[0, 1, 2].map((i) => led(5.5 * MM, y(106 + i * 2.6), 'off', 2.4, 1.6)).join('')}` : ''}
   ${slideSwitch(17.5 * MM, y(124.5), 8, 4.6)}
   ${text(11.5 * MM, y(122.2), 'BK RLS', 2.3, '#e9eef0', 'end')}${text(23 * MM, y(125.4), 'NOM', 2.4, '#e9eef0', 'start')}
   <!-- 電源コネクター -->
   ${power.svg}
-  ${s.series !== 'DCON' && s.variant === 'CB' ? `${smallBlackConnector(6.5 * MM, y(156), 4.4 * MM, 5 * MM)}${text(5 * MM, y(154.6), 'BAT', 2.2, '#e9eef0')}` : ''}
+  ${hasAbs ? `${smallBlackConnector(6.5 * MM, y(156), 4.4 * MM, 5 * MM)}${text(5 * MM, y(154.6), 'BAT', 2.2, '#e9eef0')}` : ''}
   <!-- 型式（ロゴ） -->
   ${text(W / 2 - 2, y(167.2), `<tspan font-size="5.6" font-style="italic">${modelName[0]}</tspan>${modelName.slice(1).replace('-', '·')}`, 3.6, '#ffffff', 'middle', 'bold')}
   ${!pio ? text(W / 2, y(149.5), '', 2) : ''}
@@ -250,16 +257,20 @@ export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
     pins: pinsOf,
     links,
     params: [
-      {
-        key: 'model',
-        label: 'タイプ',
-        options: [
-          { value: 'CB', label: `${s.series}-${s.variant}（標準）` },
-          { value: 'CGB', label: `${s.series}-${s.variant.replace('C', 'CG')}（安全カテゴリー対応）` },
-        ],
-        default: 'CB',
-      },
-      ioTypeParam(POSITIONER_IO_TYPES),
+      ...(hasCg
+        ? [
+            {
+              key: 'model',
+              label: 'タイプ',
+              options: [
+                { value: 'CB', label: `${s.series}-${s.variant}（標準）` },
+                { value: 'CGB', label: `${s.series}-${s.variant.replace('C', 'CG')}（安全カテゴリー対応）` },
+              ],
+              default: 'CB',
+            },
+          ]
+        : []),
+      ioTypeParam(s.ioTypes ?? POSITIONER_IO_TYPES),
       PIO_PATTERN_PARAM,
       s.motorParam,
     ],
