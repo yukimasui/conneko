@@ -10,6 +10,7 @@ import { checkDiagram } from './checkDiagram';
 
 const SAFETY_TYPES = [
   'idec.xw1e-bv402mr',
+  'idec.xw1e-lv402q4mr',
   'idec.hs5d-02rn',
   'idec.hs5e-a4403-g',
   'idec.he1g-l21sm',
