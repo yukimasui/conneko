@@ -76,6 +76,10 @@ export interface DiagramWire {
 export interface DiagramSettings {
   /** 安全機能に要求するパフォーマンスレベル（ISO 13849-1）。指定すると、それを下回る安全機器を警告する */
   requiredPL?: 'a' | 'b' | 'c' | 'd' | 'e';
+  /** 図面名・作成者・版（印刷の図面枠に入れる） */
+  title?: string;
+  author?: string;
+  revision?: string;
 }
 
 export interface Diagram {
@@ -234,6 +238,12 @@ export function parseDiagram(input: string | unknown): Diagram {
   const settings: DiagramSettings = {};
   if (isObj(raw.settings) && typeof raw.settings.requiredPL === 'string' && /^[a-e]$/.test(raw.settings.requiredPL)) {
     settings.requiredPL = raw.settings.requiredPL as DiagramSettings['requiredPL'];
+  }
+  if (isObj(raw.settings)) {
+    for (const k of ['title', 'author', 'revision'] as const) {
+      const v = raw.settings[k];
+      if (typeof v === 'string' && v.trim()) settings[k] = v;
+    }
   }
   // シートは { "id", "name" } の配列。name だけ・文字列だけでも受け付ける
   const sheets: Sheet[] = [];

@@ -21,6 +21,8 @@ export interface CheckIssue {
   message: string;
   devices: string[];
   wires: string[];
+  /** 推定の値を含む機器定義が関わる指摘 */
+  estimated?: boolean;
 }
 
 export type IssueInput = Omit<CheckIssue, 'key'> & { key?: string };

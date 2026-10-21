@@ -6,6 +6,7 @@ import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/typ
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
+import { hasEstimates } from '../devices/estimates';
 import { terminalTitle } from './DeviceNode';
 import { wireWidth } from './WireEdge';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
@@ -269,6 +270,11 @@ export function Inspector(props: Props) {
                 {def.model}
               </div>
               {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
+              {hasEstimates(def) && (
+                <div className="estimate-badge" title={def.estimated ?? '説明・端子の情報で「推定」と書いた値は、メーカーの資料で確認できていません'}>
+                  推定の値を含む機器データ
+                </div>
+              )}
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
             {def.bus && !def.bus.host && <MountInfo node={node} def={def} props={props} />}

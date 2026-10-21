@@ -418,6 +418,11 @@ export interface DeviceDefinition {
   safety?: SafetyRating;
   /** 増設ユニットの連結・ベースユニットへの装着 */
   bus?: BusSpec;
+  /**
+   * メーカーの資料で確認できなかった推定の値の説明（例: '電源端子の並びは推定'）。
+   * 書いた機器（または説明・端子の説明に「推定」とある機器）は、画面・部品表・チェック結果に「推定を含む」と表示する
+   */
+  estimated?: string;
 }
 
 export type ParamValues = Record<string, number | string>;

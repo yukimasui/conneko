@@ -1,81 +1,15 @@
 import { useMemo, useState } from 'react';
-import { buildModel, key } from '../check/model';
-import { getWireColor } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
-import { CABLE_WIRE_TYPE, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
-import { LINK_TYPE } from '../model/ops';
-
-interface Row {
-  id: string;
-  sheet: string;
-  sheetIndex: number;
-  wireNo: string;
-  from: string;
-  to: string;
-  spec: string;
-  color?: string;
-  note: string;
-}
-
-const collator = new Intl.Collator('ja', { numeric: true });
+import { wireRows } from '../export/reports';
+import type { Diagram } from '../model/diagram';
 
 /** 図面全体の接続リスト（電線・ケーブルの一覧と、リンクの行き先） */
 export function ConnectionList({ diagram, onSelectWire, onJump }: { diagram: Diagram; onSelectWire: (id: string) => void; onJump: (deviceId: string) => void }) {
   const [filter, setFilter] = useState('');
-  const sheets = sheetsOf(diagram);
-
-  const { rows, links } = useMemo(() => {
-    const m = buildModel(diagram, getDeviceDefinition, () => {});
-    const devices = new Map(diagram.devices.map((d) => [d.id, d]));
-    const name = (r: TerminalRef) => {
-      const d = devices.get(r.device);
-      const def = d && getDeviceDefinition(d.type);
-      if (def?.netLabel) return `${def.name}「${String(d!.params?.name ?? '')}」`;
-      const t = m.terminals.get(key(r.device, r.terminal))?.terminal;
-      return `${r.device}.${r.terminal}${t?.label && t.label !== r.terminal ? `（${t.label}）` : ''}`;
-    };
-    // ネット（常時導通の範囲）にある I/O コメント
-    const commentOf = (r: TerminalRef) => {
-      const notes = new Set<string>();
-      for (const k of m.fixedMembers.get(m.fixed.find(key(r.device, r.terminal))) ?? []) {
-        const [dev, term] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)];
-        const c = devices.get(dev)?.comments?.[term];
-        if (c) notes.add(c);
-      }
-      return [...notes].join(' / ');
-    };
-    const rows: Row[] = diagram.wires.map((w) => {
-      const dev = devices.get(w.from.device);
-      const sheet = dev ? sheetOf(diagram, dev) : sheets[0].id;
-      const cable = w.wireType === CABLE_WIRE_TYPE;
-      return {
-        id: w.id,
-        sheet,
-        sheetIndex: sheets.findIndex((s) => s.id === sheet),
-        wireNo: w.wireNo ?? '',
-        from: name(w.from),
-        to: name(w.to),
-        spec: cable ? 'ケーブル' : `${w.wireType} ${w.sizeSq}sq ${getWireColor(w.color)?.name ?? w.color}`,
-        ...(cable ? {} : { color: getWireColor(w.color)?.hex }),
-        note: cable ? '' : commentOf(w.from),
-      };
-    });
-    rows.sort((a, b) => a.sheetIndex - b.sheetIndex || collator.compare(a.wireNo || '~', b.wireNo || '~') || collator.compare(a.id, b.id));
-    // リンクの名前ごとの置き場所（ネットワークリンクは名前の前に「LAN」を付けて区別する）
-    const byName = new Map<string, { id: string; sheet: string }[]>();
-    for (const d of diagram.devices) {
-      const def = getDeviceDefinition(d.type);
-      if (!def?.netLabel) continue;
-      const n = `${d.type === LINK_TYPE ? '' : 'LAN '}${String(d.params?.name ?? '').trim()}`;
-      byName.set(n, [...(byName.get(n) ?? []), { id: d.id, sheet: sheetOf(diagram, d) }]);
-    }
-    const links = [...byName].sort((a, b) => collator.compare(a[0], b[0]));
-    return { rows, links };
-  }, [diagram, sheets]);
+  const { rows, links } = useMemo(() => wireRows(diagram, getDeviceDefinition), [diagram]);
 
   const words = filter.trim().toLowerCase();
   const shown = words ? rows.filter((r) => `${r.wireNo} ${r.from} ${r.to} ${r.spec} ${r.note}`.toLowerCase().includes(words)) : rows;
-  const sheetName = (id: string) => sheets.find((s) => s.id === id)?.name ?? id;
 
   return (
     <div className="conn-list">
@@ -99,12 +33,12 @@ export function ConnectionList({ diagram, onSelectWire, onJump }: { diagram: Dia
         <tbody>
           {shown.map((r) => (
             <tr key={r.id} onClick={() => onSelectWire(r.id)}>
-              <td className="muted">{sheetName(r.sheet)}</td>
+              <td className="muted">{r.sheetName}</td>
               <td className="conn-table__no">{r.wireNo}</td>
               <td>{r.from}</td>
               <td>{r.to}</td>
               <td>
-                {r.color && <span className="conn-swatch" style={{ background: r.color }} />}
+                {r.colorHex && <span className="conn-swatch" style={{ background: r.colorHex }} />}
                 {r.spec}
               </td>
               <td className="muted">{r.note}</td>
@@ -115,12 +49,12 @@ export function ConnectionList({ diagram, onSelectWire, onJump }: { diagram: Dia
       {links.length > 0 && (
         <div className="conn-links">
           <span className="muted small">リンク:</span>
-          {links.map(([n, places]) => (
+          {links.map(({ name: n, places }) => (
             <span key={n} className={`conn-link${places.length < 2 ? ' is-alone' : ''}`}>
               <strong>{n || '（名前なし）'}</strong>
               {places.map((p) => (
                 <button key={p.id} type="button" onClick={() => onJump(p.id)} title={`${p.id} へ移動`}>
-                  {sheetName(p.sheet)}
+                  {p.sheetName}
                 </button>
               ))}
             </span>

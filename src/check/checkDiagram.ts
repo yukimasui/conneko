@@ -12,6 +12,7 @@
  */
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram } from '../model/diagram';
+import { hasEstimates } from '../devices/estimates';
 import { resolveNum, type Conductor, type PowerSystem } from '../devices/types';
 import {
   buildModel,
@@ -65,6 +66,17 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkSafety(m, push);
   checkWireColors(m, push);
   checkWireNumbers(m, push);
+
+  // 推定の値を含む機器定義が関わる指摘に印を付ける（電線だけの指摘は、両端の機器で判断する）
+  const wireEnds = new Map(diagram.wires.map((w) => [w.id, [w.from.device, w.to.device]]));
+  const estimated = (id: string) => {
+    const info = m.devices.get(id);
+    return !!info && hasEstimates(info.def);
+  };
+  for (const i of issues) {
+    const ids = [...i.devices, ...i.wires.flatMap((w) => wireEnds.get(w) ?? [])];
+    if (ids.some(estimated)) i.estimated = true;
+  }
 
   const order: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
   return issues.sort((a, b) => order[a.severity] - order[b.severity]);

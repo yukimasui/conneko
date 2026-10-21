@@ -1654,3 +1654,149 @@ textarea {
   max-height: 140px;
   overflow: auto;
 }
+
+/* --- 推定の値を含む印 --- */
+.issue__est,
+.estimate-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b21a8;
+  background: #f3e8ff;
+  border: 1px solid #d8b4fe;
+  border-radius: 4px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+.issue__est {
+  margin-left: auto;
+  align-self: center;
+}
+.estimate-badge {
+  display: inline-block;
+  margin: 4px 0 0 4px;
+}
+
+/* --- 印刷・PDF --- */
+.print-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+.print-dialog h3 {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+.print-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.print-dialog__row {
+  display: flex;
+  gap: 16px;
+}
+.print-dialog__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin: 2px 0;
+}
+.print-dialog__check input,
+.print-dialog__row input {
+  width: auto;
+}
+.print-root {
+  display: none;
+}
+@media print {
+  body > #root {
+    display: none !important;
+  }
+  :root,
+  html,
+  body {
+    background: #fff !important;
+  }
+  .print-root {
+    display: block;
+    color: #000;
+    font-family: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  }
+  .print-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    break-after: page;
+    page-break-after: always;
+    box-sizing: border-box;
+  }
+  .print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .print-drawing {
+    flex: 1;
+    min-height: 0;
+    border: 0.4mm solid #000;
+    padding: 2mm;
+  }
+  .print-drawing svg {
+    display: block;
+  }
+  .print-page h2 {
+    font-size: 14pt;
+    margin: 0 0 3mm;
+  }
+  .print-title {
+    align-self: flex-end;
+    margin-top: 2mm;
+    border-collapse: collapse;
+    font-size: 8pt;
+    min-width: 120mm;
+  }
+  .print-title th,
+  .print-title td {
+    border: 0.3mm solid #000;
+    padding: 0.8mm 2mm;
+    text-align: left;
+  }
+  .print-title th {
+    background: #eee;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .print-title__app {
+    background: #fff !important;
+    font-weight: 400 !important;
+    color: #555;
+    text-align: right !important;
+  }
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+  }
+  .print-table th,
+  .print-table td {
+    border: 0.2mm solid #888;
+    padding: 0.8mm 1.5mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-table th {
+    background: #eee;
+  }
+  .print-table thead {
+    display: table-header-group;
+  }
+  .print-table tr {
+    break-inside: avoid;
+  }
+  .print-table .num {
+    text-align: right;
+  }
+  .print-note {
+    font-size: 8pt;
+    margin: 2mm 0 0;
+  }
+}

@@ -60,6 +60,11 @@ export function IssuePanel({ issues, diagram, onSelect, onSelectWire, onJump }: 
               <button type="button" className={`issue sev-${i.severity}`} onClick={() => onSelect(i)}>
                 <span className="issue__sev">{SEVERITY_NAMES[i.severity]}</span>
                 <span>{i.message}</span>
+                {i.estimated && (
+                  <span className="issue__est" title="この指摘に関わる機器のデータに、メーカーの資料で確認できなかった推定の値が含まれます">
+                    推定を含む
+                  </span>
+                )}
               </button>
             </li>
           ))}

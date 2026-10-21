@@ -22,6 +22,10 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import { AboutDialog } from './editor/AboutDialog';
+import { PrintDialog } from './editor/PrintDialog';
+import { PrintView, type PrintOptions } from './editor/PrintView';
+import { bomCsv, ioCsv, wireCsv } from './export/reports';
+import { renderSheetSvg } from './export/sheetSvg';
 import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode } from './editor/DeviceNode';
@@ -128,6 +132,8 @@ function Editor() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
   const [about, setAbout] = useState(false);
+  const [printDialog, setPrintDialog] = useState(false);
+  const [printing, setPrinting] = useState<PrintOptions | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => loadToggle('conneko.markers'));
   const [showNotes, setShowNotes] = useState(() => loadToggle('conneko.notes'));
@@ -731,6 +737,40 @@ function Editor() {
     }
   };
 
+  /** ファイルとしてダウンロードさせる（名前は「図面名-種類-日付.拡張子」） */
+  const download = (text: string, kind: string, ext: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = document.createElement('a');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const base = (settings.title || 'conneko').replace(/[\\/:*?"<>|\s]+/g, '_');
+    a.href = url;
+    a.download = `${base}-${kind}-${stamp}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openExportMenu = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const sheetName = sheets.find((s) => s.id === sheet)?.name ?? '';
+    setMenu({
+      x: r.left,
+      y: r.bottom + 4,
+      items: [
+        { label: '印刷・PDF…', onClick: () => setPrintDialog(true) },
+        { label: '部品表（CSV）', separator: true, onClick: () => download(bomCsv(diagram, getDeviceDefinition), '部品表', 'csv', 'text/csv') },
+        { label: '線番表（CSV）', onClick: () => download(wireCsv(diagram, getDeviceDefinition), '線番表', 'csv', 'text/csv') },
+        { label: 'I/O 表（CSV）', onClick: () => download(ioCsv(diagram, getDeviceDefinition), 'IO表', 'csv', 'text/csv') },
+        {
+          label: `表示中のシートの画像（SVG）`,
+          hint: sheetName,
+          separator: true,
+          onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, sheetName || 'シート', 'svg', 'image/svg+xml'),
+        },
+      ],
+    });
+  };
+
   const copyAiPrompt = async () => {
     const text = buildAiPrompt(diagram, issues);
     try {
@@ -775,6 +815,9 @@ function Editor() {
             <button type="button" onClick={newDiagram}>新規</button>
             <button type="button" onClick={() => fileInput.current?.click()}>開く</button>
             <button type="button" onClick={saveFile}>保存</button>
+            <button type="button" onClick={openExportMenu} title="印刷・PDF、部品表・線番表・I/O 表（CSV）、シートの画像">
+              出力 ▾
+            </button>
             <button type="button" onClick={() => loadDiagram(sampleDiagram)}>サンプル</button>
           </div>
           <div className="toolbar__group">
@@ -902,6 +945,19 @@ function Editor() {
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
       {about && <AboutDialog onClose={() => setAbout(false)} />}
+      {printDialog && (
+        <PrintDialog
+          sheets={sheets}
+          settings={settings}
+          onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
+          onClose={() => setPrintDialog(false)}
+          onPrint={(o) => {
+            setPrintDialog(false);
+            setPrinting(o);
+          }}
+        />
+      )}
+      {printing && <PrintView diagram={diagram} issues={issues} options={printing} onDone={() => setPrinting(null)} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {picker && (
         <ConnectPicker
