@@ -126,6 +126,7 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 | `keyence.pz-g61` | PZ-G61N/P（回帰反射） | 茶/青/黒 | [io-circuit](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g61n/io-circuit/) |
 | `keyence.ez` | EZ-8M/12M/18M/30M（近接 DC3線） | 茶/黒（N.O.）/白（N.C.）/青。params size | [io-circuit](https://www.keyence.co.jp/products/sensor/proximity/ez/models/ez-8m/io-circuit/) |
 | `keyence.ev` | EV-108M/112M/118M/130M（近接 DC2線） | 茶/青（2線とも signal 扱い） | [io-circuit](https://www.keyence.co.jp/products/sensor/proximity/ev/models/ev-112m/io-circuit/) |
+| `keyence.em-030` | EM-030（近接 アンプ内蔵 ø3） | 茶/黒（出力 NPN 200mA）/青 | [io-circuit](https://www.keyence.co.jp/products/sensor/proximity/em/models/em-030/io-circuit/) |
 | `keyence.fs-n41` | FS-N41N/P（ファイバアンプ 1出力） | 茶/青/黒 | [外形図（3芯 茶/青/黒）](https://www.keyence.co.jp/products/sensor/fiber-optic/fs-n40/models/fs-n41n/dimensions/) |
 | `keyence.fs-n43` | FS-N43N/P（ファイバアンプ 2出力+外部入力） | 茶/青/黒/白/桃（黒・白・桃の機能は**推定**） | 同上（5芯 茶/青/黒/白/桃） |
 | `keyence.lv-n11` | LV-N11N/P（レーザアンプ 2出力+外部入力） | 茶/青/黒/白/桃（黒・白・桃の機能は**推定**） | [外形図](https://www.keyence.co.jp/products/sensor/laser/lv-n/models/lv-n11n/dimensions/) |
