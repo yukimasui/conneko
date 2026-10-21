@@ -100,6 +100,73 @@ export function kvBody(W: number, H: number, model: string, opts: { modelSize?: 
   <rect x="${W - 5}" y="${top + 20}" width="2" height="${H - top - 26}" fill="#000" opacity="0.25"/>`;
 }
 
+/**
+ * 新しい世代のユニット（KV-SAD04 / KV-XL202 / KV-XLE02 / KV-SH04PL など）の本体。
+ * 上部に一段高い表示部があり、左上に型式、右上に緑の状態表示ランプ、その下に LED が並ぶ。
+ * headerH は表示部の高さ。
+ */
+export function kvBody2(W: number, H: number, model: string, opts: { headerH?: number; leds?: { x: number; y: number; label: string; c?: 'g' | 'r' | 'o' | 'off' }[] } = {}) {
+  const hh = opts.headerH ?? 28;
+  return `
+  <rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="2" fill="url(#kvbody-{{uid}})" stroke="#0b0b0c" stroke-width="1"/>
+  <rect x="2" y="2" width="${W - 7}" height="${hh}" rx="1.5" fill="#1e2022" stroke="#0e0f10" stroke-width="0.5"/>
+  ${text(5, 9, model, Math.min(4.2, (W - 26) / (model.length * 0.6)), '#dfe1e3', 'start')}
+  <rect x="${W - 17}" y="5" width="9" height="4" rx="0.8" fill="url(#kvgreen-{{uid}})" stroke="#4f8a12" stroke-width="0.3"/>
+  ${(opts.leds ?? []).map((l) => `${led(l.x, l.y, l.c ?? 'g', 2.4, 1.8)}${text(l.x, l.y + 4.6, l.label, 2.5, '#b9bcc1', 'middle', 'normal')}`).join('')}
+  <rect x="${W - 5}" y="${hh + 4}" width="2" height="${H - hh - 10}" fill="#000" opacity="0.25"/>`;
+}
+
+/**
+ * プラグイン式の端子台（縦 1 列、プッシュイン/ネジ）。x, y は端子台の左上、n は極数、pitch はピッチ[px]。
+ * 各端子の電線差込口（四角）を pos に返す。電線は右（side='right'）に出す想定で、端子名は左側に印字する。
+ */
+export function plugBlockV(opts: {
+  x: number;
+  y: number;
+  ids: string[];
+  pitch: number;
+  labels?: Record<string, string>;
+  w?: number;
+  color?: 'black' | 'green';
+  /** 端子名を印字する側（'left' なら電線は右へ、'right' なら電線は左へ出す） */
+  labelSide?: 'left' | 'right';
+}) {
+  const { x, y, ids, pitch } = opts;
+  const w = opts.w ?? 10;
+  const h = ids.length * pitch + 4;
+  const right = opts.labelSide === 'right';
+  const fill = opts.color === 'green' ? '#2f9a4a' : '#141516';
+  const stroke = opts.color === 'green' ? '#1d6a2a' : '#3a3c40';
+  const pos: Record<string, { x: number; y: number; side: 'left' | 'right' }> = {};
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${+h.toFixed(2)}" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="0.6"/>`;
+  ids.forEach((id, i) => {
+    const cy = +(y + 2 + pitch / 2 + i * pitch).toFixed(2);
+    const hx = right ? x + w * 0.38 : x + w * 0.62;
+    pos[id] = right ? { x, y: cy, side: 'left' } : { x: +(x + w).toFixed(2), y: cy, side: 'right' };
+    const sq = Math.min(pitch * 0.62, 4.4);
+    s += `<rect x="${+(hx - sq / 2).toFixed(2)}" y="${+(cy - sq / 2).toFixed(2)}" width="${+sq.toFixed(2)}" height="${+sq.toFixed(2)}" rx="0.4" fill="#050505" stroke="#5c5f63" stroke-width="0.35"/>`;
+    const bx = right ? x + w - 3 : x + 1.2;
+    s += `<rect x="${+bx.toFixed(2)}" y="${+(cy - sq / 2 + 0.6).toFixed(2)}" width="1.8" height="${+(sq - 1.2).toFixed(2)}" rx="0.3" fill="${opts.color === 'green' ? '#f0a23a' : '#6c6f74'}"/>`;
+    s += right
+      ? text(x + w + 1.5, cy + 1.2, opts.labels?.[id] ?? id, 2.9, '#d0d3d6', 'start', 'normal')
+      : text(x - 1.5, cy + 1.2, opts.labels?.[id] ?? id, 2.9, '#d0d3d6', 'end', 'normal');
+  });
+  return { svg: s, pos, height: h };
+}
+
+/**
+ * RJ45 モジュラジャック（正面から見た差込口。ラッチ側が下）。cx, cy は差込口の中心。
+ * 左上・右上に LINK/ACT 表示 LED。
+ */
+export function rj45(cx: number, cy: number, w = 22, h = 19) {
+  return `
+  <rect x="${cx - w / 2 - 1.5}" y="${cy - h / 2 - 1.5}" width="${w + 3}" height="${h + 3}" rx="1" fill="url(#kvshield-{{uid}})" stroke="#5d6166" stroke-width="0.6"/>
+  <path d="M${cx - w / 2 + 1.5} ${cy - h / 2 + 1.5} H${cx + w / 2 - 1.5} V${cy + h / 2 - 5} H${cx + 4} V${cy + h / 2 - 1.5} H${cx - 4} V${cy + h / 2 - 5} H${cx - w / 2 + 1.5} Z" fill="#0b0c0d"/>
+  ${Array.from({ length: 8 }, (_, i) => `<rect x="${+(cx - 7 + i * 1.9).toFixed(2)}" y="${cy - h / 2 + 2}" width="1" height="4" fill="#c9a43a"/>`).join('')}
+  <rect x="${cx - w / 2}" y="${cy - h / 2}" width="3.6" height="2.2" fill="#4ad35a"/>
+  <rect x="${cx + w / 2 - 3.6}" y="${cy - h / 2}" width="3.6" height="2.2" fill="#ffb12e"/>`;
+}
+
 /** 十字穴のネジ頭 */
 export const screw = (x: number, y: number, r = 3.6) => `
   <circle cx="${+x.toFixed(2)}" cy="${+y.toFixed(2)}" r="${r}" fill="url(#kvscrew-{{uid}})" stroke="#5a5a5a" stroke-width="0.5"/>
