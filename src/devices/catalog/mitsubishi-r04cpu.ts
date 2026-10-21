@@ -45,18 +45,18 @@ const LEDS: { t: string; on?: string }[] = [
 const svg = (p: ParamValues) => `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#3a3c40"/>
-      <stop offset="0.12" stop-color="#55585d"/>
-      <stop offset="0.88" stop-color="#4e5156"/>
-      <stop offset="1" stop-color="#34363a"/>
+      <stop offset="0" stop-color="#262833"/>
+      <stop offset="0.12" stop-color="#3d4150"/>
+      <stop offset="0.88" stop-color="#383b49"/>
+      <stop offset="1" stop-color="#23252f"/>
     </linearGradient>
     <linearGradient id="cover-{{uid}}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2c2d31"/>
-      <stop offset="1" stop-color="#1a1b1d"/>
+      <stop offset="0" stop-color="#1c1d20"/>
+      <stop offset="1" stop-color="#0a0a0c"/>
     </linearGradient>
     <linearGradient id="lower-{{uid}}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5a5d62"/>
-      <stop offset="1" stop-color="#46494d"/>
+      <stop offset="0" stop-color="#454958"/>
+      <stop offset="1" stop-color="#363946"/>
     </linearGradient>
     <radialGradient id="green-{{uid}}" cx="0.4" cy="0.35" r="0.7">
       <stop offset="0" stop-color="#e2ffd8"/>
@@ -73,15 +73,17 @@ const svg = (p: ParamValues) => `
   ${text(3.5, 8.8, esc(p.cpuModel), String(p.cpuModel).length > 6 ? 4.6 : 5.2, '#ffffff', 'start')}
   ${LEDS.map(
     (l, i) => `
-  ${text(44.5, 17.2 + i * 5.6, l.t, 3, '#eeeff1', 'end')}
-  <rect x="46" y="${14.4 + i * 5.6}" width="6" height="2.8" rx="0.4" fill="${l.on ?? '#3b3d40'}" stroke="#0e0e0f" stroke-width="0.3"/>`,
+  ${text(47, 18 + i * 6.2, l.t, 3.9, '#f4f5f6', 'end')}
+  <rect x="48.5" y="${14.9 + i * 6.2}" width="4.4" height="2.6" rx="0.4" fill="${l.on ?? '#2a2b2e'}"/>`,
   ).join('')}
-  <line x1="4" y1="${17.2 + 2 * 5.6 - 4.4}" x2="44.5" y2="${17.2 + 2 * 5.6 - 4.4}" stroke="#6d7075" stroke-width="0.3"/>
+  ${[2, 5, 7]
+    .map((i) => `<line x1="3" y1="${19.6 + (i - 1) * 6.2}" x2="47" y2="${19.6 + (i - 1) * 6.2}" stroke="#d0d2d5" stroke-width="0.4"/>`)
+    .join('')}
   ${text(33, 100.5, '▼PULL', 3.2, '#e6e7e9')}
 
   <!-- 下部（USB カバー・Ethernet ポート） -->
   <rect x="1.5" y="107" width="${W - 3}" height="${H - 113}" rx="1" fill="url(#lower-{{uid}})"/>
-  <rect x="3" y="109" width="${W - 6}" height="34" rx="1" fill="#4c4f54" stroke="#2b2d30" stroke-width="0.5"/>
+  <rect x="3" y="109" width="${W - 6}" height="34" rx="1" fill="#3e4250" stroke="#24262f" stroke-width="0.5"/>
   ${text(33, 116, '▲PULL', 3.2, '#e6e7e9')}
   ${text(16, 129, 'USB', 4.6, '#f2f3f4', 'start')}
   <path d="M31 127.5 H40 M33 125.5 L31 127.5 L33 129.5 M36 127.5 L37.5 125 H39.5 M37.5 127.5 L38.5 130 H40" stroke="#f2f3f4" stroke-width="0.6" fill="none"/>

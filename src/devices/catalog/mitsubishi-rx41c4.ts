@@ -83,8 +83,8 @@ const fcnConnector = () => {
   ${fixScrew(top - 9)}
   ${fixScrew(bottom + 9)}
   <!-- シェル（台形の金属枠）と差込口 -->
-  <path d="M${CN.x - 6.6} ${top} H${CN.x + 6.6} V${bottom} H${CN.x - 6.6} Z" fill="url(#shell-{{uid}})" stroke="#5c6066" stroke-width="0.6"/>
-  <path d="M${CN.x - 5} ${top + 2.5} H${CN.x + 4.2} L${CN.x + 5} ${top + 4} V${bottom - 4} L${CN.x + 4.2} ${bottom - 2.5} H${CN.x - 5} Z" fill="#101113" stroke="#2e3034" stroke-width="0.5"/>
+  <path d="M${CN.x - 6.6} ${top} H${CN.x + 6.6} V${bottom} H${CN.x - 6.6} Z" fill="url(#shell-{{uid}})" stroke="#4a4d55" stroke-width="0.6"/>
+  <path d="M${CN.x - 5} ${top + 2.5} H${CN.x + 4.2} L${CN.x + 5} ${top + 4} V${bottom - 4} L${CN.x + 4.2} ${bottom - 2.5} H${CN.x - 5} Z" fill="#060607" stroke="#3a3c42" stroke-width="0.5"/>
   ${pins}
   <!-- 列記号と番号 -->
   ${text(COL_B, top - 1.2, 'B', 2.6, '#c9ccd0')}
@@ -100,9 +100,7 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
     .map((row) =>
       Array.from({ length: 8 }, (_, i) => {
         const x = 7 + i * 6;
-        const ledY = 15.5 + row * 8.6 + (row >= 2 ? 1.6 : 0);
-        return `<rect x="${x - 1.7}" y="${ledY}" width="3.4" height="2" rx="0.4" fill="#3b4a36"/>
-        ${text(x, ledY + 5.6, HEX[(row % 2) * 8 + i], 3.4, '#f2f3f4')}`;
+        return text(x, 21 + row * 8 + (row >= 2 ? 1.6 : 0), HEX[(row % 2) * 8 + i], 4.4, '#f2f3f4');
       }).join(''),
     )
     .join('');
@@ -110,24 +108,24 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
   const svg = `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#2f3135"/>
-      <stop offset="0.12" stop-color="#4a4d52"/>
-      <stop offset="0.88" stop-color="#43464b"/>
-      <stop offset="1" stop-color="#2b2d30"/>
+      <stop offset="0" stop-color="#262833"/>
+      <stop offset="0.12" stop-color="#3d4150"/>
+      <stop offset="0.88" stop-color="#383b49"/>
+      <stop offset="1" stop-color="#23252f"/>
     </linearGradient>
     <linearGradient id="panel-{{uid}}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2a2b2f"/>
-      <stop offset="1" stop-color="#18191b"/>
+      <stop offset="0" stop-color="#1a1b1e"/>
+      <stop offset="1" stop-color="#0c0c0e"/>
     </linearGradient>
     <linearGradient id="frame-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#3a3d41"/>
-      <stop offset="0.5" stop-color="#55585d"/>
-      <stop offset="1" stop-color="#36393d"/>
+      <stop offset="0" stop-color="#2d303a"/>
+      <stop offset="0.5" stop-color="#454958"/>
+      <stop offset="1" stop-color="#2a2c36"/>
     </linearGradient>
     <linearGradient id="shell-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8e9399"/>
-      <stop offset="0.45" stop-color="#d7dadd"/>
-      <stop offset="1" stop-color="#7c8187"/>
+      <stop offset="0" stop-color="#121214"/>
+      <stop offset="0.45" stop-color="#2e2f33"/>
+      <stop offset="1" stop-color="#0e0e10"/>
     </linearGradient>
     <radialGradient id="pin-{{uid}}" cx="0.4" cy="0.4" r="0.7">
       <stop offset="0" stop-color="#fff2b8"/>
@@ -138,11 +136,6 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
       <stop offset="0.6" stop-color="#c4c4c4"/>
       <stop offset="1" stop-color="#8a8a8a"/>
     </radialGradient>
-    <radialGradient id="run-{{uid}}" cx="0.4" cy="0.35" r="0.7">
-      <stop offset="0" stop-color="#e2ffd8"/>
-      <stop offset="0.5" stop-color="#4be04a"/>
-      <stop offset="1" stop-color="#1b8a22"/>
-    </radialGradient>
   </defs>
 
   <!-- 本体 -->
@@ -151,11 +144,9 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
   <!-- LED 表示部 -->
   <rect x="1.5" y="1.5" width="${W - 3}" height="56" rx="1" fill="url(#panel-{{uid}})"/>
   ${text(3.5, 8.6, o.model, o.model.length > 7 ? 5 : 5.6, '#ffffff', 'start')}
-  <rect x="${W - 13}" y="3.6" width="9.5" height="2.6" rx="0.5" fill="#e6e7e9"/>
-  ${text(6, 13.8, 'RUN', 3.2, '#f2f3f4', 'start')}
-  <rect x="14" y="11.2" width="4" height="2.2" rx="0.5" fill="url(#run-{{uid}})"/>
-  <line x1="3.5" y1="14.8" x2="${W - 3.5}" y2="14.8" stroke="#8d9095" stroke-width="0.4"/>
-  <line x1="3.5" y1="32.4" x2="${W - 3.5}" y2="32.4" stroke="#8d9095" stroke-width="0.4"/>
+  ${text(7, 13.4, 'RUN', 3.6, '#f2f3f4', 'start')}
+  <line x1="3.5" y1="15.6" x2="${W - 3.5}" y2="15.6" stroke="#a9acb1" stroke-width="0.5"/>
+  <line x1="3.5" y1="32.2" x2="${W - 3.5}" y2="32.2" stroke="#a9acb1" stroke-width="0.5"/>
   ${leds}
   ${text(3.5, 54.6, o.rating, 2.6, '#d5d7da', 'start')}
 

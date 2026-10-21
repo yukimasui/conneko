@@ -74,16 +74,15 @@ const HEX = '0123456789ABCDEF';
 
 /** iQ-R 18点ネジ端子台タイプの I/O ユニットの機器定義を生成する */
 export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
-  const accentFill = o.accent === 'red' ? 'url(#accent-red-{{uid}})' : 'url(#accent-gray-{{uid}})';
+  const accentFill = o.accent === 'red' ? 'url(#accent-red-{{uid}})' : 'url(#accent-white-{{uid}})';
+  const markFill = o.accent === 'red' ? '#ffffff' : '#2a2c30';
 
   /** 入出力表示 LED（0〜7 / 8〜F の 2 段） */
   const leds = [0, 1]
     .map((row) =>
       Array.from({ length: 8 }, (_, i) => {
         const x = 7 + i * 6 + (i >= 4 ? 1.2 : 0);
-        const ledY = 18 + row * 9;
-        return `<rect x="${x - 1.7}" y="${ledY}" width="3.4" height="2.2" rx="0.4" fill="#3b4a36"/>
-        ${text(x, ledY + 6.6, HEX[row * 8 + i], 3.8, '#f2f3f4')}`;
+        return text(x, 23.5 + row * 8.4, HEX[row * 8 + i], 4.6, '#f2f3f4');
       }).join(''),
     )
     .join('');
@@ -93,7 +92,7 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
     .map((p) => {
       const x = p.no % 2 === 1 ? 10.6 : 5.6;
       const size = p.mark.length >= 3 ? 2.5 : p.mark.length === 2 ? 3 : 3.8;
-      return text(x, termY(p.no) + size * 0.36, p.mark, size, '#ffffff');
+      return text(x, termY(p.no) + size * 0.36, p.mark, size, markFill);
     })
     .join('');
 
@@ -108,23 +107,28 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
   const svg = `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#2f3135"/>
-      <stop offset="0.12" stop-color="#4a4d52"/>
-      <stop offset="0.88" stop-color="#43464b"/>
-      <stop offset="1" stop-color="#2b2d30"/>
+      <stop offset="0" stop-color="#262833"/>
+      <stop offset="0.12" stop-color="#3d4150"/>
+      <stop offset="0.88" stop-color="#383b49"/>
+      <stop offset="1" stop-color="#23252f"/>
     </linearGradient>
     <linearGradient id="panel-{{uid}}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2a2b2f"/>
-      <stop offset="1" stop-color="#18191b"/>
+      <stop offset="0" stop-color="#1a1b1e"/>
+      <stop offset="1" stop-color="#0c0c0e"/>
     </linearGradient>
     <linearGradient id="tb-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#1a1b1d"/>
       <stop offset="0.5" stop-color="#232427"/>
       <stop offset="1" stop-color="#141516"/>
     </linearGradient>
-    <linearGradient id="accent-gray-{{uid}}" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#7d8186"/>
-      <stop offset="1" stop-color="#969a9f"/>
+    <linearGradient id="accent-white-{{uid}}" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d8dadc"/>
+      <stop offset="1" stop-color="#f4f5f6"/>
+    </linearGradient>
+    <linearGradient id="cover-{{uid}}" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9da1a7"/>
+      <stop offset="0.5" stop-color="#c3c6ca"/>
+      <stop offset="1" stop-color="#8f9399"/>
     </linearGradient>
     <linearGradient id="accent-red-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#a3202c"/>
@@ -139,11 +143,6 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
       <stop offset="0.6" stop-color="#c4c4c4"/>
       <stop offset="1" stop-color="#8a8a8a"/>
     </radialGradient>
-    <radialGradient id="run-{{uid}}" cx="0.4" cy="0.35" r="0.7">
-      <stop offset="0" stop-color="#e2ffd8"/>
-      <stop offset="0.5" stop-color="#4be04a"/>
-      <stop offset="1" stop-color="#1b8a22"/>
-    </radialGradient>
   </defs>
 
   <!-- 本体 -->
@@ -152,11 +151,9 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
   <!-- LED 表示部 -->
   <rect x="1.5" y="1.5" width="${W - 3}" height="43" rx="1" fill="url(#panel-{{uid}})"/>
   ${text(3.5, 8.6, o.model, o.model.length > 7 ? 5 : 5.6, '#ffffff', 'start')}
-  <rect x="${W - 13}" y="3.6" width="9.5" height="2.6" rx="0.5" fill="${o.accent === 'red' ? '#c8303c' : '#e6e7e9'}"/>
-  ${text(6, 14.2, 'RUN', 3.4, '#f2f3f4', 'start')}
-  <rect x="14" y="11.4" width="4" height="2.4" rx="0.5" fill="url(#run-{{uid}})"/>
-  <line x1="3.5" y1="16.6" x2="${W - 3.5}" y2="16.6" stroke="#8d9095" stroke-width="0.4"/>
-  <line x1="${7 + 3.5 * 6 + 0.6}" y1="17" x2="${7 + 3.5 * 6 + 0.6}" y2="34" stroke="#8d9095" stroke-width="0.4"/>
+  ${text(7, 13.6, 'RUN', 3.8, '#f2f3f4', 'start')}
+  <line x1="3.5" y1="16.4" x2="${W - 3.5}" y2="16.4" stroke="#a9acb1" stroke-width="0.5"/>
+  <line x1="${7 + 3.5 * 6 + 0.6}" y1="17.5" x2="${7 + 3.5 * 6 + 0.6}" y2="33" stroke="#a9acb1" stroke-width="0.5"/>
   ${leds}
   ${o.warning ? `<path d="M4 41.5 L6.6 36.8 L9.2 41.5 Z" fill="none" stroke="#f2f3f4" stroke-width="0.6"/>${text(6.6, 41, '!', 3, '#f2f3f4')}` : ''}
   ${text(o.warning ? 10.5 : 3.5, 40.8, o.rating, 2.7, '#d5d7da', 'start')}
@@ -165,15 +162,19 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
   <rect x="2" y="46.5" width="${W - 4}" height="${H - 52}" rx="1" fill="#1b1c1e" stroke="#0b0b0c" stroke-width="0.6"/>
   <!-- 信号名の表示板 -->
   <rect x="2.6" y="47.2" width="11" height="${H - 53.5}" rx="0.8" fill="${accentFill}"/>
-  ${text(10.6, 51.6, o.ioLetter, 3.4, '#ffffff')}
+  ${text(10.6, 51.6, o.ioLetter, 3.4, markFill)}
   ${marks}
   <!-- 端子台本体 -->
   <rect x="15.2" y="47.2" width="27.6" height="${H - 53.5}" rx="0.8" fill="url(#tb-{{uid}})"/>
   ${barriers}
   ${o.points.map((p) => screw(termX(p.no), termY(p.no))).join('')}
-  <!-- 端子番号の表示板 -->
-  <rect x="44" y="47.2" width="9.4" height="${H - 53.5}" rx="0.8" fill="#eceded" stroke="#b9bbbe" stroke-width="0.4"/>
-  ${o.points.map((p) => text(48.7, termY(p.no) + 1.2, String(p.no), 3.2, '#2a2c2f', 'middle', 'normal')).join('')}
+  <!-- 端子カバー（右側に開いた状態）の表示ラベル 0〜F -->
+  <rect x="43.6" y="47.2" width="10" height="${H - 53.5}" rx="0.8" fill="url(#cover-{{uid}})" stroke="#6f7379" stroke-width="0.4"/>
+  <rect x="45" y="49" width="7.4" height="10" rx="0.5" fill="#fafafa" stroke="#9a9ea3" stroke-width="0.3"/>
+  ${Array.from({ length: 16 }, (_, i) => {
+    const y = 62 + i * 8.4 + Math.floor(i / 4) * 2.4;
+    return `<rect x="45" y="${y.toFixed(2)}" width="7.4" height="7.8" fill="#fafafa" stroke="#9a9ea3" stroke-width="0.3"/>${text(48.7, y + 6.2, HEX[i], 5, '#2a2c30', 'middle', 'normal')}`;
+  }).join('')}
 
   <!-- 下端の固定フック -->
   <rect x="16" y="${H - 5}" width="24" height="4" rx="1" fill="#2a2c2f" stroke="#111" stroke-width="0.5"/>

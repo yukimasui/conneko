@@ -67,8 +67,8 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
   const svg = `
   <defs>
     <linearGradient id="top-{{uid}}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#45484d"/>
-      <stop offset="1" stop-color="#2c2e32"/>
+      <stop offset="0" stop-color="#232427"/>
+      <stop offset="1" stop-color="#0d0d0f"/>
     </linearGradient>
     <linearGradient id="red-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#b3142b"/>
