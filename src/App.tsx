@@ -808,6 +808,7 @@ function Editor() {
           <div className="brand">
             <img src={iconUrl} alt="" />
             <span>Conneko</span>
+            <span className="brand__version">v{__APP_VERSION__}</span>
           </div>
           <div className="toolbar__group">
             <button type="button" onClick={undo} disabled={!history.canUndo} title="元に戻す（Ctrl+Z）" aria-label="元に戻す">
