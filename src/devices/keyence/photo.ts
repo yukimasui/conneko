@@ -41,6 +41,8 @@ export interface PhotoOpts {
   title: (p: ParamValues) => string;
   /** ピグテールのケーブル長の表示（例: '0.3m'） */
   pigtailLength?: string;
+  /** 増設ユニットの連結 */
+  bus?: DeviceDefinition['bus'];
 }
 
 /** 芯線（ピン）の信号の種類から、出力の内部経路（NPN は → 0V、PNP は → +V）を作る */
@@ -82,12 +84,16 @@ export function buildPhoto(o: PhotoOpts): DeviceDefinition {
     terminals = cable.terminals;
     const plus = o.cableLeads.find((l) => l.role === 'plus');
     const minus = o.cableLeads.find((l) => l.role === 'minus');
-    links = outputLinksFromLeads(
-      o.cableLeads.map((l) => ({ id: l.id ?? l.color, lead: l })),
-      plus?.id ?? plus?.color ?? 'BN',
-      minus?.id ?? minus?.color ?? 'BU',
-      o.rated,
-    );
+    // 電源線のない機器（増設ユニットなど）は出力の基準側がないので内部経路を作らない
+    links =
+      plus && minus
+        ? outputLinksFromLeads(
+            o.cableLeads.map((l) => ({ id: l.id ?? l.color, lead: l })),
+            plus.id ?? plus.color,
+            minus.id ?? minus.color,
+            o.rated,
+          )
+        : () => [];
   } else {
     const leads = o.pinLeads;
     if (!leads) throw new Error(`${o.type}: コネクタタイプには pinLeads が必要`);
@@ -111,12 +117,15 @@ export function buildPhoto(o: PhotoOpts): DeviceDefinition {
     pins = leadPins('CN', leads, o.vmin, o.vmax);
     const plusIdx = leads.findIndex((l) => l.role === 'plus');
     const minusIdx = leads.findIndex((l) => l.role === 'minus');
-    links = outputLinksFromLeads(
-      leads.map((l, i) => ({ id: `CN#${i + 1}`, lead: l })),
-      `CN#${plusIdx + 1}`,
-      `CN#${minusIdx + 1}`,
-      o.rated,
-    );
+    links =
+      plusIdx >= 0 && minusIdx >= 0
+        ? outputLinksFromLeads(
+            leads.map((l, i) => ({ id: `CN#${i + 1}`, lead: l })),
+            `CN#${plusIdx + 1}`,
+            `CN#${minusIdx + 1}`,
+            o.rated,
+          )
+        : () => [];
   }
 
   return {
@@ -136,6 +145,7 @@ export function buildPhoto(o: PhotoOpts): DeviceDefinition {
     links,
     ...(o.params ? { params: o.params } : {}),
     ...(o.loadCurrent !== undefined ? { loadCurrent: o.loadCurrent } : {}),
+    ...(o.bus ? { bus: o.bus } : {}),
   };
 }
 

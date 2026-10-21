@@ -1,5 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
+import { LVN_HOST_BUS } from '../keyence/amp-series';
 import { OUTPUT_PARAM, outName, sensorCable, sensorInput, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
@@ -7,7 +8,7 @@ import { OUTPUT_PARAM, outName, sensorCable, sensorInput, sensorOutputLinks, swi
  * 外形 78.7 × 32.6 × 9.8 mm（DIN レール取付）。左端にセンサヘッド（LV-NH シリーズ、別売）のケーブルを差し込む。
  * ケーブル: ø3.9 5芯（茶・青 0.34mm²、黒・白・桃 0.18mm²）、2m（KEYENCE 外形寸法図より）。
  * 茶 = DC10〜30V、青 = 0V、黒 = 制御出力1、白 = 制御出力2、桃 = 外部入力（仕様: 制御出力 2、外部入力 1）。
- * ※黒・白・桃の機能の割り当ては KEYENCE アンプの慣例による（入出力回路図は Web 非公開）。
+ * 黒・白・桃の機能は LV-N10 シリーズ 取扱説明書 p.7〜8 の入出力回路図で確認（https://www.manualsdir.com/manuals/657909/keyence-lv-n10-series.html、第三者の転載）。
  * 出典: https://www.keyence.co.jp/products/sensor/laser/lv-n/models/lv-n11n/
  *       https://www.keyence.co.jp/products/sensor/laser/lv-n/models/lv-n11n/dimensions/
  */
@@ -51,7 +52,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'sensor',
   description:
-    'KEYENCE のデジタルレーザセンサ LV-N シリーズのアンプ LV-N11（ケーブルタイプ親機、2 出力 + 外部入力 1、DIN レール取付）。センサヘッド（LV-NH シリーズ）は別売。出力形式は params の output で NPN（LV-N11N）/PNP（LV-N11P）を選ぶ。ケーブルは 5 芯で、茶 = +24V、青 = 0V、黒 = 制御出力1、白 = 制御出力2（オープンコレクタ 30V、2 出力合計 100mA）、桃 = 外部入力。電源 DC24V（動作 DC10〜30V）、消費電流 24V 時 30mA 以下。',
+    'KEYENCE のデジタルレーザセンサ LV-N シリーズのアンプ LV-N11（ケーブルタイプ親機、2 出力 + 外部入力 1、DIN レール取付）。センサヘッド（LV-NH シリーズ）は別売。出力形式は params の output で NPN（LV-N11N）/PNP（LV-N11P）を選ぶ。ケーブルは 5 芯で、茶 = +24V、青 = 0V、黒 = 制御出力1、白 = 制御出力2（オープンコレクタ 30V、2 出力合計 100mA）、桃 = 外部入力（NPN は 0V、PNP は +V と短絡で ON）。子機（LV-N12）を mount で連結できる。電源 DC24V（動作 DC10〜30V）、消費電流 24V 時 30mA 以下。',
   labelPrefix: 'LS',
   width: W,
   height: H,
@@ -63,6 +64,8 @@ const def: DeviceDefinition = {
   links: sensorOutputLinks(['BK', 'WH'], 0.1),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.03,
+  // 子機（LV-N12）を最大 16 台連結できる
+  bus: LVN_HOST_BUS,
 };
 
 export default def;
