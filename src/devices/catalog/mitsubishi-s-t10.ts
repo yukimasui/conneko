@@ -133,8 +133,8 @@ const def: DeviceDefinition = {
     { id: '4/T2', x: COLS[1], y: BOT_Y, side: 'bottom', role: 'load' },
     { id: '6/T3', x: COLS[2], y: BOT_Y, side: 'bottom', role: 'load' },
     // 補助接点 1a（13-14）
-    { id: '13', label: '13NO', x: COLS[3], y: TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '14', label: '14NO', x: COLS[3], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '13', label: '13NO', note: '補助 a 接点', x: COLS[3], y: TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '14', label: '14NO', note: '補助 a 接点', x: COLS[3], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
     // 操作コイル（AC200V品の定格は 50/60Hz 200〜240V）
     {
       id: 'A1',
@@ -153,11 +153,13 @@ const def: DeviceDefinition = {
       accepts: { system: 'AC', minVoltage: 200, maxVoltage: 240 },
     },
   ],
+  // 主接点 3極と補助接点 13-14 は a 接点（コイル A1-A2 の通電で閉じる）。
+  // 主接点の ratedCurrent は AC-3（AC220V）の定格使用電流 11A
   links: [
-    { from: '1/L1', to: '2/T1', directed: true },
-    { from: '3/L2', to: '4/T2', directed: true },
-    { from: '5/L3', to: '6/T3', directed: true },
-    { from: '13', to: '14' },
+    { from: '1/L1', to: '2/T1', directed: true, switch: 'NO', ratedCurrent: 11 },
+    { from: '3/L2', to: '4/T2', directed: true, switch: 'NO', ratedCurrent: 11 },
+    { from: '5/L3', to: '6/T3', directed: true, switch: 'NO', ratedCurrent: 11 },
+    { from: '13', to: '14', switch: 'NO' },
   ],
   distinctGroups: [['A1', 'A2']],
 };

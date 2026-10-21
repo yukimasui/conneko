@@ -1,3 +1,4 @@
+import { IQR_BUS } from '../mitsubishi/melsec';
 import type { DeviceDefinition, ParamValues } from '../types';
 
 /**
@@ -114,7 +115,7 @@ const def: DeviceDefinition = {
   maker: '三菱電機',
   category: 'plc',
   description:
-    '三菱電機 MELSEC iQ-R シリーズのシーケンサ CPU ユニット（R04CPU。R08CPU・R16CPU・R32CPU・R120CPU は同形状でプログラム容量違い）。ベースユニットの CPU スロット（電源ユニットの右隣）に装着し、DC5V はベースユニット経由で電源ユニットから供給される（外部の電源端子はない。内部消費電流 DC5V 0.67A）。右側のスロットに入出力ユニットなどを装着する。Ethernet ポート（CC-Link IE フィールドネットワーク Basic・SLMP 対応）でタッチパネル（GOT）や PC と LAN ケーブルでつなぐ。USB（miniB）は LED カバー下、SD メモリカードスロット・RUN/STOP/RESET スイッチは上部カバー内。',
+    '三菱電機 MELSEC iQ-R シリーズのシーケンサ CPU ユニット（R04CPU。R08CPU・R16CPU・R32CPU・R120CPU は同形状でプログラム容量違い）。ベースユニットの CPU スロット（電源ユニットの右隣。図面の装着位置は 2）に装着し、DC5V はベースユニット経由で電源ユニットから供給される（外部の電源端子はない。内部消費電流 DC5V 0.67A）。右側のスロットに入出力ユニットなどを装着する。Ethernet ポート（CC-Link IE フィールドネットワーク Basic・SLMP 対応）でタッチパネル（GOT）や PC と LAN ケーブルでつなぐ。USB（miniB）は LED カバー下、SD メモリカードスロット・RUN/STOP/RESET スイッチは上部カバー内。',
   labelPrefix: 'PLC',
   width: W,
   height: H,
@@ -127,10 +128,12 @@ const def: DeviceDefinition = {
       y: ETH.y,
       side: 'bottom',
       role: 'connector',
-      connector: { kind: 'RJ45', pins: 0, width: ETH.w },
+      connector: { kind: 'RJ45', pins: 0, width: ETH.w, protocols: ['ethernet', 'slmp', 'cc-link-ie-field-basic'], facing: 'front', length: ETH.h },
       optional: true,
     },
   ],
+  // ベースユニットの CPU スロット（電源ユニットの右隣。図面では位置 2）に装着する。入出力番号は占有しない
+  bus: { kind: IQR_BUS, load: { '5V': 0.67 } },
   params: [
     {
       key: 'cpuModel',

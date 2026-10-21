@@ -1,3 +1,4 @@
+import { IQR_BUS } from '../mitsubishi/melsec';
 import type { DeviceDefinition, TerminalDef } from '../types';
 
 /**
@@ -8,7 +9,8 @@ import type { DeviceDefinition, TerminalDef } from '../types';
  * 「INPUT 100-240VAC」の表示がある。
  *
  * DC5V はベースユニット経由で CPU・I/O ユニットへ供給されるため外部端子はない。
- * ERR 接点はシステム正常時に閉じる（電源断・CPU 停止エラー・ヒューズ断で開く）。チェックでは閉とみなす。
+ * ERR 接点はシステム正常時に閉じる（電源断・CPU 停止エラー・ヒューズ断で開く）。動作中（正常時）に閉じる接点なので switch: 'NO' とする。
+ * ベースユニットの電源スロット（図面の装着位置 1）に装着し、bus.supply で DC5V の供給能力を表す。
  * R62P（DC24V サービス電源付き）は外形・端子台が共通なので、定義の生成は buildRPowerSupply にまとめている。
  */
 
@@ -22,6 +24,8 @@ export interface RPowerSupplyOptions {
   maxVA: number;
   /** DC24V サービス電源出力（+24V / 24G、R62P のみ）の定格電流[A] */
   serviceOutputA?: number;
+  /** DC5V 出力（ベースユニット経由で供給）の定格電流[A] */
+  output5V: number;
 }
 
 const W = 109;
@@ -164,8 +168,8 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
   const ac = { system: 'AC' as const, minVoltage: 85, maxVoltage: 264 };
   const side = 'right' as const;
   const terminals: TerminalDef[] = [
-    { id: 'ERR1', label: 'ERR', x: MAIN_X, y: MAIN_Y[0], side, role: 'signal', optional: true },
-    { id: 'ERR2', label: 'ERR', x: MAIN_X, y: MAIN_Y[1], side, role: 'signal', optional: true },
+    { id: 'ERR1', label: 'ERR', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[0], side, role: 'signal', optional: true },
+    { id: 'ERR2', label: 'ERR', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[1], side, role: 'signal', optional: true },
     { id: 'FG', label: 'FG', x: MAIN_X, y: MAIN_Y[2], side, role: 'ground' },
     { id: 'LG', label: 'LG', x: MAIN_X, y: MAIN_Y[3], side, role: 'ground' },
     { id: 'N', label: 'INPUT N', x: MAIN_X, y: MAIN_Y[4], side, role: 'input', accepts: ac },
@@ -206,7 +210,8 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
     height: H,
     svg,
     terminals,
-    links: [{ from: 'ERR1', to: 'ERR2' }],
+    // ERR 接点: DC24V 0.5A。システム正常時（動作中）に閉
+    links: [{ from: 'ERR1', to: 'ERR2', switch: 'NO', ratedCurrent: 0.5 }],
     params: [
       {
         // 最大入力皮相電力から求めた入力電流の目安（上流のブレーカー・電線の確認用）
@@ -222,6 +227,7 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
     ],
     loadCurrent: { param: 'inputCurrent' },
     distinctGroups: [['L', 'N']],
+    bus: { kind: IQR_BUS, supply: { '5V': o.output5V } },
   };
 }
 
@@ -230,8 +236,9 @@ const def: DeviceDefinition = buildRPowerSupply({
   model: 'R61P',
   ratingLines: ['INPUT 100-240VAC 50/60Hz 130VA', 'OUTPUT 5VDC 6.5A'],
   maxVA: 130,
+  output5V: 6.5,
   description:
-    '三菱電機 MELSEC iQ-R シリーズの電源ユニット（AC 入力）。入力 AC100〜240V（85〜264V）50/60Hz、最大入力皮相電力 130VA、突入電流 20A 8ms 以下。出力 DC5V 6.5A（ベースユニット経由で CPU・I/O ユニットへ供給するため外部端子はない）。端子台（M4、上から）: ERR・ERR（ERR 接点 DC24V 0.5A、システム正常時に閉）、FG（機能接地）、LG（電源入力フィルタの接地。AC 入力時は入力電圧の 1/2 の電位）、N・L（INPUT）。FG・LG はそれぞれ接地抵抗 100Ω 以下で接地する。ベースユニットの一番左（電源スロット）に装着する。',
+    '三菱電機 MELSEC iQ-R シリーズの電源ユニット（AC 入力）。入力 AC100〜240V（85〜264V）50/60Hz、最大入力皮相電力 130VA、突入電流 20A 8ms 以下。出力 DC5V 6.5A（ベースユニット経由で CPU・I/O ユニットへ供給するため外部端子はない）。端子台（M4、上から）: ERR・ERR（ERR 接点 DC24V 0.5A、システム正常時に閉）、FG（機能接地）、LG（電源入力フィルタの接地。AC 入力時は入力電圧の 1/2 の電位）、N・L（INPUT）。FG・LG はそれぞれ接地抵抗 100Ω 以下で接地する。ベースユニットの一番左（電源スロット、図面の装着位置 1）に装着する。',
 });
 
 export default def;

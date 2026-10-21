@@ -1,4 +1,5 @@
-import type { AcceptSpec, DeviceDefinition, InternalLink, PinDef, TerminalRole } from '../types';
+import { IQR_BUS, ioLabel } from '../mitsubishi/melsec';
+import type { AcceptSpec, CommonLimit, DeviceDefinition, InternalLink, ParamValues, PinDef, SignalSpec, TerminalRole } from '../types';
 
 /**
  * 三菱電機 MELSEC iQ-R シリーズ DC 入力ユニット RX41C4（32点、40ピンコネクタ）。
@@ -8,11 +9,13 @@ import type { AcceptSpec, DeviceDefinition, InternalLink, PinDef, TerminalRole }
  *
  * コネクタについて:
  * 三菱の 40ピンコネクタは MIL 規格（ボックスヘッダ）ではなく FCN 系コネクタ（相手側 A6CON1〜4）で、
- * MIL 変換端子台とは直接つながらない。そのため kind は 'FCN40' とする。
+ * MIL 変換端子台とは直接は嵌合しない。そのため kind は 'FCN40' とし、FCN40P−MIL40P 変換ケーブルで
+ * MIL 40極の変換端子台へつなげるよう mates: ['MIL40'] を付ける（ピンは同じ番号どうしが導通する）。
  * ピンID は、FCN 40P と MIL 40P をフラットケーブルで結ぶ一般的な変換ケーブル（三菱 B20 ↔ MIL 1）と同じ
  * 物理位置の千鳥番号にそろえる: 三菱の B_k → CN1#(41−2k)、A_k → CN1#(42−2k)
  * （上端の B20 = 1、A20 = 2、…、下端の B01 = 39、A01 = 40。B 列が奇数、A 列が偶数）。
- * 三菱のピン番号（B20 など）と信号名（X00 など）は label に残す。
+ * 三菱のピン番号（B20 など）は label に残し、ユニット内の信号名（X00 など）は note に書く。
+ * ベースユニットに装着すると、入出力ピンの label が実際の入出力番号（X20 など）になる。
  *
  * iQ-R の 40ピンコネクタ 32点ユニット（RY41NT2P など）は外形・コネクタが共通なので、
  * 定義の生成は buildR40PinModule にまとめている。
@@ -26,8 +29,11 @@ export interface R40Pin {
   n: number;
   /** 信号名（'X00', 'COM', '空き' など） */
   signal: string;
+  /** 入出力点の場合、ユニット内の番号（0〜31）。label は先頭番号 + この値の入出力番号になる */
+  io?: number;
   role?: Exclude<TerminalRole, 'connector'>;
-  accepts?: AcceptSpec;
+  accepts?: AcceptSpec | AcceptSpec[];
+  spec?: SignalSpec;
 }
 
 export interface R40ModuleOptions {
@@ -41,6 +47,10 @@ export interface R40ModuleOptions {
   pins: R40Pin[];
   /** 三菱のピン番号どうしの内部導通（例: ['B01', 'B02']） */
   links?: [string, string][];
+  /** 出力ユニットの場合、出力点（io を持つピン）とコモンの間の出力（switch: 'output'） */
+  outputs?: { common: string; ratedCurrent: number; commonLimit: number };
+  /** 内部消費電流 DC5V[A] */
+  load5V: number;
 }
 
 /** 三菱のピン番号（A01〜A20 / B01〜B20）→ MIL 標準の千鳥番号に合わせたピン番号 */
@@ -157,20 +167,35 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
   ${text(9, CN.y + 1.2, 'CN1', 2.6, '#9a9da2', 'middle', 'normal')}
 `;
 
-  const pins: PinDef[] = o.pins
-    .map((p) => {
-      const name = `${p.row}${pad2(p.n)}`;
-      return {
-        id: `CN1#${fcnPinNo(p.row, p.n)}`,
-        label: `${p.signal} (${name})`,
-        role: p.role ?? 'signal',
-        ...(p.accepts ? { accepts: p.accepts } : {}),
-        optional: true,
-      } satisfies PinDef;
-    })
-    .sort((a, b) => Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]));
+  const dir = o.ioLetter === 'X' ? 'in' : 'out';
+  const ioCount = o.pins.filter((p) => p.io !== undefined).length;
 
-  const links: InternalLink[] = (o.links ?? []).map(([a, b]) => ({ from: fcnPinId(a), to: fcnPinId(b) }));
+  const pins = (params: ParamValues): PinDef[] =>
+    o.pins
+      .map((p) => {
+        const name = `${p.row}${pad2(p.n)}`;
+        return {
+          id: `CN1#${fcnPinNo(p.row, p.n)}`,
+          label: `${p.io !== undefined ? ioLabel('hex', dir, params, p.io) : p.signal} (${name})`,
+          ...(p.io !== undefined ? { note: `ユニット内 ${p.signal}` } : {}),
+          role: p.role ?? 'signal',
+          ...(p.accepts ? { accepts: p.accepts } : {}),
+          ...(p.spec ? { signal: p.spec } : {}),
+          optional: true,
+        } satisfies PinDef;
+      })
+      .sort((a, b) => Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]));
+
+  const out = o.outputs;
+  const links: InternalLink[] = [
+    ...(o.links ?? []).map(([a, b]) => ({ from: fcnPinId(a), to: fcnPinId(b) })),
+    ...(out
+      ? o.pins
+          .filter((p) => p.io !== undefined)
+          .map((p) => ({ from: `CN1#${fcnPinNo(p.row, p.n)}`, to: fcnPinId(out.common), switch: 'output' as const, ratedCurrent: out.ratedCurrent }))
+      : []),
+  ];
+  const commonLimits: CommonLimit[] = out ? [{ common: fcnPinId(out.common), current: out.commonLimit }] : [];
 
   return {
     type: o.type,
@@ -191,12 +216,19 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
         y: CN.y,
         side: 'bottom',
         role: 'connector',
-        connector: { kind: 'FCN40', pins: 40, width: CN.w },
+        // 正面に差すコネクタ（A6CON）。プラグはシェルの高さ（約 54mm）で描き、ケーブルは下へ出す
+        connector: { kind: 'FCN40', pins: 40, width: CN.w, mates: ['MIL40'], facing: 'front', length: 108 },
         optional: true,
       },
     ],
     pins,
     ...(links.length ? { links } : {}),
+    ...(commonLimits.length ? { commonLimits } : {}),
+    bus: {
+      kind: IQR_BUS,
+      load: { '5V': o.load5V },
+      io: { [dir === 'in' ? 'inputs' : 'outputs']: ioCount, format: 'hex' },
+    },
   };
 }
 
@@ -204,11 +236,11 @@ export function buildR40PinModule(o: R40ModuleOptions): DeviceDefinition {
  * 32点ユニットのピン配置（入力・出力共通）。
  * B20〜B05 = 下位 16点（00〜0F）、A20〜A05 = 上位 16点（10〜1F）。
  */
-export function r32SignalPins(letter: 'X' | 'Y', role: Exclude<TerminalRole, 'connector'> = 'signal'): R40Pin[] {
+export function r32SignalPins(letter: 'X' | 'Y', spec?: SignalSpec): R40Pin[] {
   const out: R40Pin[] = [];
   for (let i = 0; i < 16; i++) {
-    out.push({ row: 'B', n: 20 - i, signal: `${letter}0${HEX[i]}`, role });
-    out.push({ row: 'A', n: 20 - i, signal: `${letter}1${HEX[i]}`, role });
+    out.push({ row: 'B', n: 20 - i, signal: `${letter}0${HEX[i]}`, io: i, role: 'signal', ...(spec ? { spec } : {}) });
+    out.push({ row: 'A', n: 20 - i, signal: `${letter}1${HEX[i]}`, io: 16 + i, role: 'signal', ...(spec ? { spec } : {}) });
   }
   return out;
 }
@@ -224,9 +256,10 @@ const def: DeviceDefinition = buildR40PinModule({
   ioLetter: 'X',
   rating: '24VDC 4.0mA',
   description:
-    '三菱電機 MELSEC iQ-R シリーズの DC 入力ユニット（32点、40ピンコネクタ）。定格入力 DC24V（20.4〜28.8V）4.0mA、ON 電圧 19V 以上 / OFF 電圧 6V 以下。32点1コモン（COM = B01・B02、内部で共通）、プラスコモン/マイナスコモン共用。ピン配置（三菱のピン番号）: B20〜B05 = X00〜X0F、A20〜A05 = X10〜X1F、B02・B01 = COM、A01〜A04・B03・B04 = 空き。外部配線用コネクタ A6CON1〜A6CON4（FCN 系 40ピン、別売）。MIL 変換端子台につなぐ場合は FCN40P−MIL40P 変換ケーブルを使う（現在のアプリでは種類が違うコネクタはつなげない）。ピンID は変換ケーブルで MIL 側と同じ番号になる千鳥番号（B_k → CN1#(41−2k)、A_k → CN1#(42−2k)）。信号名 X00〜X1F に先頭入出力番号を加えたものが実際の入力番号。内部消費電流 DC5V 150mA。Q シリーズ QX41 系とピン配置互換。',
+    '三菱電機 MELSEC iQ-R シリーズの DC 入力ユニット（32点、40ピンコネクタ）。定格入力 DC24V（20.4〜28.8V）4.0mA、ON 電圧 19V 以上 / OFF 電圧 6V 以下。32点1コモン（COM = B01・B02、内部で共通）、プラスコモン/マイナスコモン共用。ピン配置（三菱のピン番号）: B20〜B05 = X00〜X0F、A20〜A05 = X10〜X1F、B02・B01 = COM、A01〜A04・B03・B04 = 空き。外部配線用コネクタ A6CON1〜A6CON4（FCN 系 40ピン、別売）。MIL 40極の変換端子台へは FCN40P−MIL40P 変換ケーブルでつなぐ（CN1 を MIL40 のコネクタへケーブルでつなげる）。ピンID は変換ケーブルで MIL 側と同じ番号になる千鳥番号（B_k → CN1#(41−2k)、A_k → CN1#(42−2k)）。信号名 X00〜X1F に先頭入出力番号を加えたものが実際の入力番号（ベースユニットに装着するとピンのラベルに反映される）。内部消費電流 DC5V 150mA。Q シリーズ QX41 系とピン配置互換。',
+  load5V: 0.15,
   pins: [
-    ...r32SignalPins('X'),
+    ...r32SignalPins('X', { dir: 'in', kind: 'dc', common: fcnPinId('B01') }),
     { row: 'B', n: 2, signal: 'COM', role: 'input', accepts: COM_ACCEPTS },
     { row: 'B', n: 1, signal: 'COM', role: 'input', accepts: COM_ACCEPTS },
     { row: 'B', n: 4, signal: '空き' },

@@ -188,18 +188,18 @@ const def: DeviceDefinition = {
     { id: '4/T2', x: MAIN_X[1], y: BOT_Y, side: 'bottom', role: 'load' },
     { id: '6/T3', x: MAIN_X[2], y: BOT_Y, side: 'bottom', role: 'load' },
     // 補助接点 97-98(a) / 95-96(b)
-    { id: '97', x: AUX_X[0], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '95', x: AUX_X[1], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '98', x: AUX_X[0], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
-    { id: '96', x: AUX_X[1], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '97', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '95', note: 'b 接点（トリップで開）', x: AUX_X[1], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '98', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '96', note: 'b 接点（トリップで開）', x: AUX_X[1], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
   ],
   links: [
     { from: '1/L1', to: '2/T1', directed: true, protects: true },
     { from: '3/L2', to: '4/T2', directed: true, protects: true },
     { from: '5/L3', to: '6/T3', directed: true, protects: true },
-    // 補助接点（b接点 95-96 は通常閉。a接点 97-98 も「閉」とみなして導通扱い）
-    { from: '95', to: '96' },
-    { from: '97', to: '98' },
+    // 補助接点: 95-96 は b 接点（過負荷のトリップで開く）、97-98 は a 接点（トリップで閉じる）
+    { from: '95', to: '96', switch: 'NC' },
+    { from: '97', to: '98', switch: 'NO' },
   ],
   params: [
     {

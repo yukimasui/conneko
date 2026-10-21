@@ -1,4 +1,5 @@
-import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef, TerminalRole } from '../types';
+import { IQR_BUS, ioLabel } from '../mitsubishi/melsec';
+import type { AcceptSpec, CommonLimit, DeviceDefinition, InternalLink, ParamValues, SignalSpec, TerminalDef, TerminalRole } from '../types';
 
 /**
  * 三菱電機 MELSEC iQ-R シリーズ DC 入力ユニット RX40C7（16点、18点ネジ端子台）。
@@ -8,6 +9,9 @@ import type { AcceptSpec, DeviceDefinition, InternalLink, TerminalDef, TerminalR
  * 18点ネジ端子台の端子番号 1〜18 は、正面から見て右列（奥側の段）が奇数、左列（手前側の段）が偶数で、
  * 右列が半ピッチ上にずれた千鳥配置（マニュアルの「端子の接続」図と同じ並び）。
  * 端子台左の表示板に信号名（0〜F、COM、NC）、右の白い表示板に端子番号を描く。
+ *
+ * ベースユニット（R35B など）に装着すると、先頭入出力番号（ioIn / ioOut）が決まり、
+ * 端子のラベルが実際の入出力番号（X20 など）になる。端子ID はユニット内の相対番号（X00〜X0F）のまま変わらない。
  *
  * iQ-R の 18点ネジ端子台ユニット（RY10R2・RY40NT5P など）は端子台・外形が共通なので、
  * 定義の生成は buildR18PointModule にまとめている。
@@ -23,8 +27,13 @@ export interface R18Point {
   mark: string;
   /** 空き端子（何もつながらない。描画のみ） */
   vacant?: boolean;
+  /** 入出力点の場合、ユニット内の番号（0〜15）。ラベルは先頭番号 + この値の入出力番号になる */
+  io?: number;
+  /** 端子の意味（端子番号の後ろに付ける。例: '入力コモン'） */
+  note?: string;
   role?: TerminalRole;
-  accepts?: AcceptSpec;
+  accepts?: AcceptSpec | AcceptSpec[];
+  signal?: SignalSpec;
   optional?: boolean;
 }
 
@@ -44,6 +53,9 @@ export interface R18ModuleOptions {
   warning?: boolean;
   points: R18Point[];
   links?: InternalLink[];
+  commonLimits?: CommonLimit[];
+  /** 内部消費電流 DC5V[A]（ベースユニット経由で電源ユニットから供給） */
+  load5V: number;
 }
 
 /** 外形（W27.8 × H106 mm） */
@@ -180,18 +192,24 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
   <rect x="16" y="${H - 5}" width="24" height="4" rx="1" fill="#2a2c2f" stroke="#111" stroke-width="0.5"/>
 `;
 
-  const terminals: TerminalDef[] = o.points
-    .filter((p) => !p.vacant)
-    .map((p) => ({
-      id: p.id,
-      label: `${p.id} (TB${p.no})`,
-      x: termX(p.no),
-      y: termY(p.no),
-      side: p.no % 2 === 1 ? 'right' : 'left',
-      role: p.role ?? 'signal',
-      ...(p.accepts ? { accepts: p.accepts } : {}),
-      ...(p.optional ? { optional: true } : {}),
-    }));
+  const dir = o.ioLetter === 'X' ? 'in' : 'out';
+  const ioCount = o.points.filter((p) => p.io !== undefined).length;
+
+  const terminals = (params: ParamValues): TerminalDef[] =>
+    o.points
+      .filter((p) => !p.vacant)
+      .map((p) => ({
+        id: p.id,
+        label: p.io !== undefined ? ioLabel('hex', dir, params, p.io) : p.id,
+        note: [`端子台 ${p.no}番`, p.io !== undefined ? `ユニット内 ${p.id}` : undefined, p.note].filter(Boolean).join('・'),
+        x: termX(p.no),
+        y: termY(p.no),
+        side: p.no % 2 === 1 ? 'right' : 'left',
+        role: p.role ?? 'signal',
+        ...(p.accepts ? { accepts: p.accepts } : {}),
+        ...(p.signal ? { signal: p.signal } : {}),
+        ...(p.optional ? { optional: true } : {}),
+      }));
 
   return {
     type: o.type,
@@ -206,6 +224,12 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
     svg,
     terminals,
     ...(o.links ? { links: o.links } : {}),
+    ...(o.commonLimits ? { commonLimits: o.commonLimits } : {}),
+    bus: {
+      kind: IQR_BUS,
+      load: { '5V': o.load5V },
+      io: { [dir === 'in' ? 'inputs' : 'outputs']: ioCount, format: 'hex' },
+    },
   };
 }
 
@@ -220,11 +244,19 @@ const def: DeviceDefinition = buildR18PointModule({
   ioLetter: 'X',
   rating: '24VDC 7.0mA',
   accent: 'gray',
+  load5V: 0.12,
   description:
-    '三菱電機 MELSEC iQ-R シリーズの DC 入力ユニット（16点、18点ネジ端子台 M3）。定格入力 DC24V（20.4〜28.8V）7.0mA、ON 電圧 15V 以上 / OFF 電圧 8V 以下。16点1コモン（COM = 端子17）、プラスコモン/マイナスコモン共用（COM に DC24V の + でも − でもよい）。端子18 は空き。内部消費電流 DC5V 120mA（ベースユニット経由で電源ユニットから供給）。端子ID の X00〜X0F は信号名で、実際の入力番号はユニットの先頭入出力番号を加えたもの（例: 先頭 X10 なら X00→X10）。Q シリーズ QX40 系と端子台互換。',
+    '三菱電機 MELSEC iQ-R シリーズの DC 入力ユニット（16点、18点ネジ端子台 M3）。定格入力 DC24V（20.4〜28.8V）7.0mA、ON 電圧 15V 以上 / OFF 電圧 8V 以下。16点1コモン（COM = 端子17）、プラスコモン/マイナスコモン共用（COM に DC24V の + をつなぐと NPN・接点用、− をつなぐと PNP 用）。端子18 は空き。内部消費電流 DC5V 120mA（ベースユニット経由で電源ユニットから供給）。端子ID の X00〜X0F はユニット内の信号名で、ベースユニットに装着すると端子のラベルが実際の入力番号（先頭入出力番号 + 信号名。例: 先頭 X10 なら X00→X10）になる。Q シリーズ QX40 系と端子台互換。',
   points: [
-    ...Array.from({ length: 16 }, (_, i) => ({ no: i + 1, id: `X0${HEX[i]}`, mark: HEX[i], optional: true })),
-    { no: 17, id: 'COM', mark: 'COM', role: 'input' as const, accepts: COM_ACCEPTS },
+    ...Array.from({ length: 16 }, (_, i) => ({
+      no: i + 1,
+      id: `X0${HEX[i]}`,
+      mark: HEX[i],
+      io: i,
+      signal: { dir: 'in' as const, kind: 'dc' as const, common: 'COM' },
+      optional: true,
+    })),
+    { no: 17, id: 'COM', mark: 'COM', note: '入力コモン（+/− 共用）', role: 'input' as const, accepts: COM_ACCEPTS },
     { no: 18, id: 'NC', mark: 'NC', vacant: true },
   ],
 });
