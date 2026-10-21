@@ -25,6 +25,7 @@ const SAFETY_TYPES = [
   'keyence.gs-11p5',
   'mitsubishi.sd-t12.dc24v',
   'mitsubishi.sd-t21.dc24v',
+  'mitsubishi.s-t12.ac200v',
   'mitsubishi.ws0-cpu0-xtio',
   'omron.g9sp-n10s',
   'omron.g9se-201',
@@ -81,7 +82,8 @@ describe('安全機器の定義', () => {
   });
 
   it('安全コントローラー・セーフティリレーの電源端子は DC24V の +/- を受ける', () => {
-    for (const type of SAFETY_TYPES) {
+    // 交流操作コイルの電磁接触器は対象外
+    for (const type of SAFETY_TYPES.filter((t) => !t.endsWith('.ac200v'))) {
       const def = getDeviceDefinition(type)!;
       for (const t of def.terminals.filter((x) => x.role === 'input')) {
         expect(t.accepts!.system).toBe('DC');
