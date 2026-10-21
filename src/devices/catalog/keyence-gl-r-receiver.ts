@@ -65,7 +65,7 @@ const fan = () =>
   ${w.stripe ? `<path d="${d}" fill="none" stroke="${COLORS[w.stripe]}" stroke-width="1" stroke-dasharray="3 3"/>` : ''}
   <rect x="${TIP_X - 11}" y="${ty - 2}" width="4" height="4" rx="0.8" fill="${COLORS[w.base]}" stroke="${outline}" stroke-width="0.5"/>
   <rect x="${TIP_X - 7}" y="${ty - 1.2}" width="7" height="2.4" fill="url(#ferrule-{{uid}})" stroke="#777" stroke-width="0.3"/>
-  ${text(TIP_X - 13, ty - 2.8, w.text, 3.8, '#222', 'end')}`;
+  <g stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" stroke-opacity="0.85">${text(TIP_X - 13, ty - 2.8, w.text, 3.8, '#222', 'end')}</g>`;
   }).join('');
 
 /** 7 セグメント風の数字表示（"--" を表示） */

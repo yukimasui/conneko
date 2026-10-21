@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, TerminalDef } from '../types';
 
 /**
  * KEYENCE セーフティライトカーテン GL-R シリーズ 送光器（GL-R□F/H/L）＋ 5 芯ケーブル GL-RP□P。
@@ -57,7 +57,7 @@ const fan = () =>
   <path d="${d}" fill="none" stroke="${outline}" stroke-width="2.9" stroke-linecap="round"/>
   <path d="${d}" fill="none" stroke="${COLORS[w.base]}" stroke-width="2" stroke-linecap="round"/>
   ${tip}
-  ${text(TIP_X - 15, ty - 2.8, w.text, 3.8, w.unused ? '#888' : '#222', 'end')}`;
+  <g stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" stroke-opacity="0.85">${text(TIP_X - 15, ty - 2.8, w.text, 3.8, w.unused ? '#888' : '#222', 'end')}</g>`;
   }).join('');
 
 const svg = `
@@ -113,7 +113,7 @@ const def: DeviceDefinition = {
   width: W,
   height: H,
   svg,
-  terminals: WIRES.flatMap((w, i) => {
+  terminals: WIRES.flatMap((w, i): TerminalDef[] => {
     if (w.unused) return [];
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
     if (w.id === '+24V') return [{ ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } }];

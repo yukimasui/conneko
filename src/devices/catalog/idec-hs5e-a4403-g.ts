@@ -67,7 +67,7 @@ const fan = () =>
   ${w.stripe ? `<path d="${d}" fill="none" stroke="${COLORS[w.stripe]}" stroke-width="1.1" stroke-dasharray="3 3"/>` : ''}
   <rect x="${TIP_X - 11}" y="${ty - 2.2}" width="4" height="4.4" rx="0.8" fill="${COLORS[w.base]}" stroke="${outline}" stroke-width="0.5"/>
   <rect x="${TIP_X - 7}" y="${ty - 1.3}" width="7" height="2.6" fill="url(#ferrule-{{uid}})" stroke="#777" stroke-width="0.3"/>
-  ${text(TIP_X - 13, ty - 3, w.text, 4, '#222', 'end', 'bold')}`;
+  <g stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke" stroke-opacity="0.85">${text(TIP_X - 13, ty - 3, w.text, 4, '#222', 'end', 'bold')}</g>`;
   }).join('');
 
 const svg = `
