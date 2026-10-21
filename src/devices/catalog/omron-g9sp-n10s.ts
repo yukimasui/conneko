@@ -179,7 +179,7 @@ const terminal = (id: string, x: number, y: number, side: 'top' | 'bottom'): Ter
 
 /**
  * 安全入力の組と戻すテスト出力（データシートの配線例: 非常停止 T0→Si0・T1→Si1。
- * 以降の組は T2/T3 と T0/T1 を交互に割り当てた既定の配線。入力の種類は設定ツールで組ごとに選ぶ）
+ * 以降の組は T2/T3 と T0/T1 を交互に割り当てた既定の配線。入力の使い方・種類は設定ツールで決めるため configurable）
  */
 const INPUT_GROUPS: SafetyChannelGroup[] = [0, 2, 4, 6, 8].map((a, k) => {
   const [ta, tb] = k % 2 === 0 ? ['T0', 'T1'] : ['T2', 'T3'];
@@ -187,7 +187,8 @@ const INPUT_GROUPS: SafetyChannelGroup[] = [0, 2, 4, 6, 8].map((a, k) => {
     id: `Si${a}-Si${a + 1}`,
     label: `安全入力 Si${a}/Si${a + 1}（${ta}→Si${a}、${tb}→Si${a + 1}）`,
     kind: 'input',
-    mode: 'nc-nc',
+    configurable: true,
+    mode: ['nc-nc', 'ossd'],
     channels: [{ source: ta, input: `Si${a}` }, { source: tb, input: `Si${a + 1}` }],
   };
 });

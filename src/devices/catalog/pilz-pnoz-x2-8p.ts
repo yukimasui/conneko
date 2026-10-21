@@ -122,8 +122,8 @@ const SPEC: Record<string, Partial<TerminalDef>> = {
   S21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
   S22: { function: 'safety-input', channel: 2 },
   // スタート回路 S12-S34 にリセットボタンと接触器の b 接点（フィードバックループ）を直列に入れる。
-  // リセットとフィードバックを兼ねる端子だが、EDM の配線チェックを優先して edm にする
-  S34: { function: 'edm' },
+  // リセットとフィードバックを兼ねる端子
+  S34: { function: ['reset', 'edm'] },
 };
 
 const row = (ids: string[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>

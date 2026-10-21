@@ -195,13 +195,13 @@ const ioTerminal = (id: string, x: number, y: number, col: 'L' | 'R'): TerminalD
 
 /**
  * 安全入力の組（偶数・奇数の Si）と、戻すテスト出力（組ごとに To0/To1・To2/To3 を交互に割り当てた既定の配線）。
- * 入力の種類（b 接点 2 回路・OSSD・非等価など）は設定ソフトで組ごとに選ぶが、ここでは b 接点 2 回路として書く。
+ * 入力の種類（b 接点 2 回路・OSSD・非等価など）と組み合わせは設定ソフトで決めるため configurable にする。
  */
 const inputGroups = (pairs: number, tests: [string, string][]): SafetyChannelGroup[] =>
   Array.from({ length: pairs }, (_, k) => {
     const [a, b] = [`Si${k * 2}`, `Si${k * 2 + 1}`];
     const [ta, tb] = tests[k % tests.length];
-    return { id: `${a}-${b}`, label: `安全入力 ${a}/${b}（${ta}→${a}、${tb}→${b}）`, kind: 'input', mode: 'nc-nc', channels: [{ source: ta, input: a }, { source: tb, input: b }] };
+    return { id: `${a}-${b}`, label: `安全入力 ${a}/${b}（${ta}→${a}、${tb}→${b}）`, kind: 'input', configurable: true, mode: ['nc-nc', 'ossd'], channels: [{ source: ta, input: a }, { source: tb, input: b }] };
   });
 /** 安全出力の組（So0/So1 など） */
 const outputGroups = (pairs: number): SafetyChannelGroup[] =>

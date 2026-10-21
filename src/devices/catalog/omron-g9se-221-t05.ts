@@ -35,8 +35,8 @@ const ROWS: [string, string][] = [
   ['47', '48'],
 ];
 
-/** オフディレー時間の目盛（T05: 0〜5 秒） */
-const DELAYS = [0, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5];
+/** オフディレー時間の目盛（T05: 0〜5 秒の 16 段階。インストラクションシートの設定値。工場出荷時は 0） */
+const DELAYS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1, 1.5, 2, 2.5, 3, 4, 5];
 
 const text = (x: number, y: number, t: string, size: number, fill = '#f2f2f2', anchor = 'middle', weight = 'bold') =>
   `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${t}</text>`;
@@ -55,7 +55,7 @@ const dial = (delay: number) => {
   const cx = 27;
   const cy = 80;
   const found = DELAYS.indexOf(delay);
-  const idx = found < 0 ? 5 : found;
+  const idx = found < 0 ? DELAYS.indexOf(1) : found;
   const angle = (i: number) => -150 + (i * 300) / (DELAYS.length - 1);
   const pt = (deg: number, r: number) => {
     const a = (deg * Math.PI) / 180;
@@ -63,9 +63,10 @@ const dial = (delay: number) => {
   };
   const [px, py] = pt(angle(idx), 4.2);
   const [qx, qy] = pt(angle(idx) + 180, 4.2);
+  // 16 段階の目盛を円周に並べる（文字が重ならないよう小さめ）
   const scale = DELAYS.map((d, i) => {
-    const [tx, ty] = pt(angle(i), 9.8);
-    return text(tx, ty + 1, String(d), 2.5, i === idx ? '#ffd23a' : '#e8e8e8', 'middle', i === idx ? 'bold' : 'normal');
+    const [tx, ty] = pt(angle(i), 10.4);
+    return text(tx, ty + 0.75, String(d), 2.05, i === idx ? '#ffd23a' : '#e8e8e8', 'middle', i === idx ? 'bold' : 'normal');
   }).join('');
   return `
   ${scale}
@@ -149,7 +150,9 @@ const SPEC: Record<string, Partial<TerminalDef>> = {
   T12: { function: 'safety-input', channel: 1 },
   T21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
   T22: { function: 'safety-input', channel: 2 },
-  // T31 から リセットスイッチ・接触器の b 接点（フィードバックループ）を通って T32（手動）/ T33（自動）へ戻す
+  // 手動リセット: T31 → リセットスイッチ → 接触器の b 接点 → T32、T33 は +24V。
+  // 自動リセット: T31 → 接触器の b 接点 → T33、T32 は +24V。どちらになるかは配線で決まるので、T32・T33 とも reset にする
+  // （リセット入力に押しボタンの a 接点が入っていなければ自動リセットと判定される）
   T31: { function: 'edm' },
   T32: { function: 'reset' },
   T33: { function: 'reset' },
@@ -188,7 +191,8 @@ const def: DeviceDefinition = {
     { from: '47', to: '48', switch: 'NO' },
   ],
   safetyChannels: [
-    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
+    // 非常停止などの b 接点 2 回路、またはライトカーテンの OSSD1/OSSD2 を T12/T22 へ直接つなぐ
+    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22、または OSSD）', kind: 'input', mode: ['nc-nc', 'ossd'], channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
     { id: 'OUT', label: '瞬時安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
     { id: 'OUT-DELAY', label: 'オフディレー安全出力 37-38・47-48', kind: 'output', channels: [{ output: '37' }, { output: '47' }] },
   ],

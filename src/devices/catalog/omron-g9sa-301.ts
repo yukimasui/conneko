@@ -141,6 +141,9 @@ const SPEC: Record<string, Partial<TerminalDef>> = {
   // T31-T32 間にリセットボタンと接触器の b 接点（フィードバックループ）を直列に入れる
   T31: { function: 'edm' },
   T32: { function: 'reset' },
+  // A-B を短絡すると自動リセットになる
+  A: { function: 'reset-auto' },
+  B: { function: 'reset-auto' },
 };
 
 const row = (cells: Cell[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>

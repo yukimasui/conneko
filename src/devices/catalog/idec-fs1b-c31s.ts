@@ -209,7 +209,7 @@ const def: DeviceDefinition = {
       ...(r ? [terminal(r, OUT_R, rowY(OUT_Y0, i), 'right')] : []),
     ]),
   ],
-  // 入力の組（X0/X1、X2/X3 …）と出力の組（Y0/Y1、Y2/Y3）。入力の使い方は選んだロジックで決まる
+  // 入力の組（X0/X1、X2/X3 …）と出力の組（Y0/Y1、Y2/Y3）。入力の使い方は選んだロジックで決まるため configurable
   safetyChannels: [
     ...Array.from({ length: IN_NOS.length / 2 }, (_, k): SafetyChannelGroup => {
       const [a, b] = [IN_NOS[k * 2], IN_NOS[k * 2 + 1]];
@@ -217,7 +217,8 @@ const def: DeviceDefinition = {
         id: `X${a}-X${b}`,
         label: `安全入力 X${a}/X${b}（T${a}→X${a}、T${b}→X${b}）`,
         kind: 'input',
-        mode: 'nc-nc',
+        configurable: true,
+        mode: ['nc-nc', 'ossd'],
         channels: [{ source: `T${a}`, input: `X${a}` }, { source: `T${b}`, input: `X${b}` }],
       };
     }),

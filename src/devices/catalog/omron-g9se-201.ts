@@ -116,7 +116,9 @@ const SPEC: Record<string, Partial<TerminalDef>> = {
   T12: { function: 'safety-input', channel: 1 },
   T21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
   T22: { function: 'safety-input', channel: 2 },
-  // T31 から リセットスイッチ・接触器の b 接点（フィードバックループ）を通って T32（手動）/ T33（自動）へ戻す
+  // 手動リセット: T31 → リセットスイッチ → 接触器の b 接点 → T32、T33 は +24V。
+  // 自動リセット: T31 → 接触器の b 接点 → T33、T32 は +24V。どちらになるかは配線で決まるので、T32・T33 とも reset にする
+  // （リセット入力に押しボタンの a 接点が入っていなければ自動リセットと判定される）
   T31: { function: 'edm' },
   T32: { function: 'reset' },
   T33: { function: 'reset' },
@@ -156,7 +158,8 @@ const def: DeviceDefinition = {
     { from: '23', to: '24', switch: 'NO' },
   ],
   safetyChannels: [
-    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
+    // 非常停止などの b 接点 2 回路、またはライトカーテンの OSSD1/OSSD2 を T12/T22 へ直接つなぐ
+    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22、または OSSD）', kind: 'input', mode: ['nc-nc', 'ossd'], channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
     { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },

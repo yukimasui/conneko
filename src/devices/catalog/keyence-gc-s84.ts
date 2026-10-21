@@ -120,13 +120,14 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals,
-  // 安全入力の組（既定の配線として偶数の Si に To0、奇数の Si に To1 を戻す）と安全出力の組
+  // 安全入力の組（既定の配線として偶数の Si に To0、奇数の Si に To1 を戻す。使い方は設定ソフトで決める）と安全出力の組
   safetyChannels: [
     ...[0, 2, 4, 6].map((n): SafetyChannelGroup => ({
       id: `Si${n}-Si${n + 1}`,
       label: `安全入力 Si${n}/Si${n + 1}（To0→Si${n}、To1→Si${n + 1}）`,
       kind: 'input',
-      mode: 'nc-nc',
+      configurable: true,
+      mode: ['nc-nc', 'ossd'],
       channels: [{ source: 'To0', input: `Si${n}` }, { source: 'To1', input: `Si${n + 1}` }],
     })),
     { id: 'So0-So1', label: '安全出力 So0/So1', kind: 'output', channels: [{ output: 'So0' }, { output: 'So1' }] },
