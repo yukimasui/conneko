@@ -1,4 +1,5 @@
-import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
+import { buildBlockUnit, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
+import type { SignalSpec } from '../types';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ アナログ入出力ユニット KV-AM40V（A/D 2ch + D/A 2ch）。
@@ -15,26 +16,27 @@ import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
 const LEFT = ['NC1', '0-', 'C0', '1-', 'C1', 'V2-', 'I2-', 'V3-', 'I3-'];
 const RIGHT = ['NC2', 'V0+', 'I0+', 'V1+', 'I1+', 'V2+', 'I2+', 'V3+', 'I3+'];
 
-const P = (label: string, kind: IoKind = 'in', print?: string) => ({ label, kind, print });
-const points = {
-  NC1: P('NC（未使用）', 'nc', 'NC'),
-  NC2: P('NC（未使用）', 'nc', 'NC'),
-  'V0+': P('ch0 電圧入力 +'),
-  'I0+': P('ch0 電流入力 +'),
-  '0-': P('ch0 アナログ入力 GND'),
-  'V1+': P('ch1 電圧入力 +'),
-  'I1+': P('ch1 電流入力 +'),
-  '1-': P('ch1 アナログ入力 GND'),
-  C0: P('GND コモン'),
-  C1: P('GND コモン'),
-  'V2+': P('ch2 電圧出力 +', 'out'),
-  'V2-': P('ch2 電圧出力 GND', 'out'),
-  'I2+': P('ch2 電流出力 +', 'out'),
-  'I2-': P('ch2 電流出力 GND', 'out'),
-  'V3+': P('ch3 電圧出力 +', 'out'),
-  'V3-': P('ch3 電圧出力 GND', 'out'),
-  'I3+': P('ch3 電流出力 +', 'out'),
-  'I3-': P('ch3 電流出力 GND', 'out'),
+/** アナログの信号端子（signal はアナログ入出力の +側だけに付ける。GND 側は信号の種類なし） */
+const S = (label: string, signal?: SignalSpec) => ({ kind: 'sig' as const, label, ...(signal ? { signal } : {}) });
+const points: BlockUnitSpec['points'] = {
+  NC1: { kind: 'nc', label: 'NC（未使用）', print: 'NC' },
+  NC2: { kind: 'nc', label: 'NC（未使用）', print: 'NC' },
+  'V0+': S('ch0 電圧入力 +', { dir: 'in', kind: 'analog-v' }),
+  'I0+': S('ch0 電流入力 +', { dir: 'in', kind: 'analog-i' }),
+  '0-': S('ch0 アナログ入力 GND'),
+  'V1+': S('ch1 電圧入力 +', { dir: 'in', kind: 'analog-v' }),
+  'I1+': S('ch1 電流入力 +', { dir: 'in', kind: 'analog-i' }),
+  '1-': S('ch1 アナログ入力 GND'),
+  C0: S('GND コモン'),
+  C1: S('GND コモン'),
+  'V2+': S('ch2 電圧出力 +', { dir: 'out', kind: 'analog-v' }),
+  'V2-': S('ch2 電圧出力 GND'),
+  'I2+': S('ch2 電流出力 +', { dir: 'out', kind: 'analog-i' }),
+  'I2-': S('ch2 電流出力 GND'),
+  'V3+': S('ch3 電圧出力 +', { dir: 'out', kind: 'analog-v' }),
+  'V3-': S('ch3 電圧出力 GND'),
+  'I3+': S('ch3 電流出力 +', { dir: 'out', kind: 'analog-i' }),
+  'I3-': S('ch3 電流出力 GND'),
 };
 
 const COMMON = ['C0', 'C1', 'V2-', 'V3-', 'I2-', 'I3-'];
@@ -50,6 +52,7 @@ export default buildBlockUnit({
   right: RIGHT,
   points,
   links: COMMON.slice(1).map((t) => ({ from: COMMON[0], to: t })),
+  bus: kvUnitBus(140),
   window: 'none',
   tag: 'A/D',
 });

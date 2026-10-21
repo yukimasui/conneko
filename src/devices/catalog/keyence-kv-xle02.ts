@@ -14,6 +14,9 @@ export default buildKvEthUnit({
   name: 'PLC Ethernet ユニット',
   labelPrefix: 'ETH',
   width: 72,
+  // EtherCAT は 100Mbps 固定、CC-Link IE Field は 1000Mbps 固定（ポートの設定で選ぶ）
+  protocols: ['ethernet', 'ethernet-ip', 'profinet', 'ethercat', 'cc-link-ie-field', 'modbus-tcp'],
+  mA: 200,
   description:
     'KEYENCE KV-X/KV-8000/KV-7000 シリーズの Ethernet ユニット（RJ-45 × 2 ポート、10/100/1000 Mbps）。EtherNet/IP、PROFINET、EtherCAT（100 Mbps 固定）、CC-Link IE Field（1000 Mbps 固定）、PLC リンク、Modbus サーバ、MC プロトコル/SLMP、KV ソケット通信などに対応し、タッチパネル・ロボット・他社 PLC・リモート I/O などと LAN ケーブルでつなぐ。内部消費電流 200mA（CPU から供給）。',
 });

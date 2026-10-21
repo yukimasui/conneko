@@ -1,5 +1,5 @@
 import type { DeviceDefinition, TerminalDef } from '../types';
-import { kvBody2, kvDefs, plugBlockV, text } from '../keyence/kv-parts';
+import { kvBody2, kvDefs, kvUnitBus, plugBlockV, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ シリアルコミュニケーションユニット KV-XL202（RS-232C × 2 ポート）。
@@ -73,6 +73,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals,
+  bus: kvUnitBus(140),
 };
 
 export default def;

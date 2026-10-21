@@ -1,5 +1,5 @@
-import type { DeviceDefinition, PinDef } from '../types';
-import { kvBody2, kvDefs, milHeaderV, text } from '../keyence/kv-parts';
+import type { DeviceDefinition, InternalLink, PinDef, SignalSpec } from '../types';
+import { kvBody2, kvDefs, kvUnitBus, milConnector, milHeaderV, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ 高速位置決めユニット KV-SH04PL（4軸、パルス出力）。
@@ -42,23 +42,42 @@ const SIG: [string, string, 'in' | 'out'][] = [
 const PLUS_COM = { system: 'DC' as const, minVoltage: 20.4, maxVoltage: 28.8, conductors: ['+' as const] };
 const MINUS_COM = { system: 'DC' as const, minVoltage: 20.4, maxVoltage: 28.8, conductors: ['-' as const] };
 
+/**
+ * 信号の種類（入出力回路図より）:
+ * - LSF/LSR/ORG/STOP/SP0ST/SVEND/SVRDY/ALM/FSTOP: 内部で +COM から給電される DC 入力で、接点・NPN 出力で −COM（0V）へ落とすと ON（プラスコモン）
+ * - Z+/Z−: ラインドライバ入力（オープンコレクタも接続可）
+ * - ALMRES/SVON/CLR: NPN オープンコレクタ出力（負荷は +COM 側へ。ON で −COM と導通）
+ * - FP±/RP±: ラインドライバ出力（オープンコレクタも可）
+ */
+const signalOf = (cn: string, s: string, dir: 'in' | 'out'): SignalSpec | undefined => {
+  if (s === 'Z+' || s === 'Z-' || s.startsWith('FP') || s.startsWith('RP')) return { dir, kind: 'line-driver' };
+  if (dir === 'in') return { dir: 'in', kind: 'dc', common: `${cn}#39` };
+  return { dir: 'out', kind: 'npn' };
+};
+
 const pins: PinDef[] = [];
-const links: { from: string; to: string }[] = [];
+const links: InternalLink[] = [];
 for (const [cn, axOdd, axEven] of [
   ['CN1', 1, 2],
   ['CN2', 3, 4],
 ] as const) {
-  SIG.forEach(([s, name], i) => {
-    pins.push({ id: `${cn}#${2 * i + 1}`, label: `${axOdd}${s} 軸${axOdd} ${name}`, role: 'signal', optional: true });
-    pins.push({ id: `${cn}#${2 * i + 2}`, label: `${axEven}${s} 軸${axEven} ${name}`, role: 'signal', optional: true });
+  SIG.forEach(([s, name, dir], i) => {
+    const signal = signalOf(cn, s, dir);
+    pins.push({ id: `${cn}#${2 * i + 1}`, label: `${axOdd}${s} 軸${axOdd} ${name}`, role: 'signal', ...(signal ? { signal } : {}), optional: true });
+    pins.push({ id: `${cn}#${2 * i + 2}`, label: `${axEven}${s} 軸${axEven} ${name}`, role: 'signal', ...(signal ? { signal } : {}), optional: true });
   });
-  // オープンコレクタ出力（ALMRES/SVON/CLR）は ON で −COM と導通するとみなす
+  // オープンコレクタ出力（ALMRES/SVON/CLR）は ON で −COM と導通する
   for (const i of [10, 11, 12]) {
-    links.push({ from: `${cn}#${2 * i + 1}`, to: `${cn}#38` }, { from: `${cn}#${2 * i + 2}`, to: `${cn}#38` });
+    links.push(
+      { from: `${cn}#${2 * i + 1}`, to: `${cn}#38`, switch: 'output', ratedCurrent: 0.1 },
+      { from: `${cn}#${2 * i + 2}`, to: `${cn}#38`, switch: 'output', ratedCurrent: 0.1 },
+    );
   }
   pins.push(
     { id: `${cn}#35`, label: '空き', role: 'signal', optional: true },
-    { id: `${cn}#36`, label: cn === 'CN1' ? 'FSTOP 強制停止入力（全軸共通）' : '空き', role: 'signal', optional: true },
+    cn === 'CN1'
+      ? { id: `${cn}#36`, label: 'FSTOP 強制停止入力（全軸共通）', role: 'signal', signal: { dir: 'in', kind: 'dc', common: `${cn}#39` }, optional: true }
+      : { id: `${cn}#36`, label: '空き', role: 'signal', optional: true },
     { id: `${cn}#37`, label: '+5V_OUT（DC5V 出力 200mA）', role: 'supply', supply: { system: 'DC', voltage: 5, conductor: '+', limitCurrent: 0.2 }, optional: true },
     { id: `${cn}#39`, label: '+COM（DC24V 入力）', role: 'input', accepts: PLUS_COM, optional: true },
     { id: `${cn}#38`, label: '−COM（0V 入力）', role: 'input', accepts: MINUS_COM, optional: true },
@@ -94,17 +113,18 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-X/KV-8000/KV-7000 シリーズ専用の 4 軸 高速位置決めユニット（パルス列出力 1Hz〜8MHz、差動ラインドライバ/オープンコレクタを軸ごとに切換）。サーボアンプ・ステッピングモータドライバのパルス入力へ FP±/RP± を配線し、リミット・原点・停止センサ（DC24V）、Z相・サーボエンド・サーボレディ・アラーム（DC5V 可）を入力する。外部接続は MIL 規格 40極コネクタ × 2（CN1 = 軸1/軸2、CN2 = 軸3/軸4、ピン番号は MIL 標準の千鳥番号）。外部 I/O 用電源として +COM（39）に DC24V、−COM（38・40）に 0V を供給する（両コネクタで内部共通、外部 I/O 消費 260mA）。+5V_OUT（37）は DC5V 200mA の出力。ラインレシーバ入力のドライバを使う場合はドライバの SG を −COM につなぐ。ALMRES/SVON/CLR 出力は図面上 ON（−COM と導通）とみなしてチェックする。',
+    'KEYENCE KV-X/KV-8000/KV-7000 シリーズ専用の 4 軸 高速位置決めユニット（パルス列出力 1Hz〜8MHz、差動ラインドライバ/オープンコレクタを軸ごとに切換）。サーボアンプ・ステッピングモータドライバのパルス入力へ FP±/RP± を配線し、リミット・原点・停止センサ（DC24V）、Z相・サーボエンド・サーボレディ・アラーム（DC5V 可）を入力する。外部接続は MIL 規格 40極コネクタ × 2（CN1 = 軸1/軸2、CN2 = 軸3/軸4、ピン番号は MIL 標準の千鳥番号）。外部 I/O 用電源として +COM（39）に DC24V、−COM（38・40）に 0V を供給する（両コネクタで内部共通、外部 I/O 消費 260mA）。+5V_OUT（37）は DC5V 200mA の出力。ラインレシーバ入力のドライバを使う場合はドライバの SG を −COM につなぐ。ALMRES/SVON/CLR は NPN オープンコレクタ出力（ON で −COM と導通、定格電流は 100mA と仮定）。内部消費電流 200mA。',
   labelPrefix: 'POS',
   width: W,
   height: H,
   svg,
   terminals: [
-    { id: 'CN1', label: 'CN1 軸1/軸2 (MIL 40P)', x: CN1.x, y: CN1.y, side: 'bottom', role: 'connector', connector: { kind: 'MIL40', pins: 40, width: 23 }, optional: true },
-    { id: 'CN2', label: 'CN2 軸3/軸4 (MIL 40P)', x: CN2.x, y: CN2.y, side: 'bottom', role: 'connector', connector: { kind: 'MIL40', pins: 40, width: 23 }, optional: true },
+    { id: 'CN1', label: 'CN1 軸1/軸2 (MIL 40P)', x: CN1.x, y: CN1.y, side: 'bottom', role: 'connector', connector: milConnector(40), optional: true },
+    { id: 'CN2', label: 'CN2 軸3/軸4 (MIL 40P)', x: CN2.x, y: CN2.y, side: 'bottom', role: 'connector', connector: milConnector(40), optional: true },
   ],
   pins: pins.sort((a, b) => (a.id.slice(0, 3) === b.id.slice(0, 3) ? Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]) : a.id < b.id ? -1 : 1)),
   links,
+  bus: kvUnitBus(200),
 };
 
 export default def;

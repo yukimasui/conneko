@@ -1,5 +1,5 @@
 import type { DeviceDefinition, TerminalDef } from '../types';
-import { kvBody2, kvDefs, plugBlockV, text } from '../keyence/kv-parts';
+import { kvBody2, kvDefs, kvUnitBus, plugBlockV, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-X/KV-8000/KV-7000 シリーズ 高速アナログ入力ユニット KV-SAD04（4ch、差動入力）。
@@ -44,6 +44,8 @@ const terminals: TerminalDef[] = IDS.map((id) => ({
   y: block.pos[id].y,
   side: 'right',
   role: 'signal',
+  // 電圧・電流の + 側の端子にアナログ信号の種類を付ける（GND・COM 側は付けない）
+  ...(/^[VI]\d\+$/.test(id) ? { signal: { dir: 'in', kind: id.startsWith('V') ? 'analog-v' : 'analog-i' } as const } : {}),
   optional: true,
 }));
 
@@ -60,6 +62,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals,
+  bus: kvUnitBus(80),
   // GND コモンは内部で共通（ch 間非絶縁）
   links: [1, 2, 3].map((c) => ({ from: 'COM0', to: `COM${c}` })),
 };

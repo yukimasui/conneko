@@ -13,6 +13,8 @@ export default buildKvEthUnit({
   name: 'PLC データ活用ユニット',
   labelPrefix: 'DU',
   width: 96,
+  protocols: ['ethernet'],
+  mA: 500,
   extra: `
   <rect x="5" y="40" width="26" height="128" rx="1.2" fill="#2a2c30" stroke="#0a0a0b" stroke-width="0.7"/>
   <rect x="8" y="46" width="20" height="3" rx="1.2" fill="#121315" stroke="#3a3c40" stroke-width="0.4"/>

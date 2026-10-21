@@ -3,9 +3,10 @@
  *
  * センサーのケーブルは、本体から出た黒いシースが途中で各色の芯線に分かれ、先端（棒端子）が端子になる。
  * 端子ID は IEC 60757 の色略号（BN=茶, BU=青, BK=黒, WH=白, GY=灰, PK=桃, VT=紫, GN=緑, OG=橙, YE=黄, RD=赤 など）。
- * 電源線は role 'input' + accepts（茶 = '+'、青 = '-'）、出力線・入力線は role 'signal'。
+ * 電源線は role 'input' + accepts（茶 = '+'、青 = '-'）、出力線・入力線は role 'signal'（signal で NPN/PNP などの種類を書く）。
+ * 出力は内部経路 switch: 'output'（NPN は出力 → 0V、PNP は出力 → +V）で表す（sensorOutputLinks）。
  */
-import type { AcceptSpec, TerminalDef } from '../types';
+import type { AcceptSpec, ConnectorSpec, InternalLink, ParamValues, PinDef, SignalSpec, TerminalDef } from '../types';
 
 export type WireColor = 'BN' | 'BU' | 'BK' | 'WH' | 'GY' | 'PK' | 'VT' | 'GN' | 'OG' | 'YE' | 'RD' | 'LB' | 'PKVT' | 'SH';
 
@@ -26,7 +27,8 @@ export const WIRE_HEX: Record<WireColor, { fill: string; edge: string; name: str
   SH: { fill: '#c9c9c9', edge: '#7a7a7a', name: 'シールド' },
 };
 
-export type LeadRole = 'plus' | 'minus' | 'out' | 'in' | 'analog' | 'shield';
+/** 芯線の役割（plus / minus は電源、pass はケーブルの中継線、それ以外は信号線） */
+export type LeadRole = 'plus' | 'minus' | 'out' | 'in' | 'analog' | 'shield' | 'pass';
 
 export interface Lead {
   /** 端子ID（省略時は色略号） */
@@ -35,6 +37,21 @@ export interface Lead {
   /** 機能（例: '+V（DC10〜30V）'、'出力（NPN）'） */
   label: string;
   role: LeadRole;
+  /** 信号の種類（NPN/PNP の切換などパラメータで変わる場合は関数） */
+  signal?: SignalSpec | ((p: ParamValues) => SignalSpec | undefined);
+  /** 意味の説明 */
+  note?: string;
+}
+
+/** 芯線（またはコネクタのピン）の電気的な項目 */
+export function leadProps(l: Lead, p: ParamValues, vmin: number, vmax: number): Omit<PinDef, 'id'> {
+  const acc = (cond: '+' | '-'): AcceptSpec => ({ system: 'DC', minVoltage: vmin, maxVoltage: vmax, conductors: [cond] });
+  const note = l.note ? { note: l.note } : {};
+  if (l.role === 'plus') return { ...note, role: 'input', accepts: acc('+') };
+  if (l.role === 'minus') return { ...note, role: 'input', accepts: acc('-') };
+  if (l.role === 'pass') return { ...note, role: 'pass', optional: true };
+  const signal = typeof l.signal === 'function' ? l.signal(p) : l.signal;
+  return { ...note, role: 'signal', ...(signal ? { signal } : {}), optional: true };
 }
 
 export interface CableOpts {
@@ -56,7 +73,7 @@ export interface CableOpts {
 }
 
 /** ケーブル（黒いシース）と、先端で広がる色付きの芯線を描き、端子定義を返す */
-export function sensorCable(o: CableOpts): { svg: string; terminals: TerminalDef[] } {
+export function sensorCable(o: CableOpts): { svg: string; terminals: (p: ParamValues) => TerminalDef[] } {
   const n = o.leads.length;
   const cx = o.centerX ?? o.cx;
   const xs = o.leads.map((_, i) => +(cx + (i - (n - 1) / 2) * o.pitch).toFixed(2));
@@ -81,16 +98,88 @@ export function sensorCable(o: CableOpts): { svg: string; terminals: TerminalDef
   // シースの切り口
   s += `<rect x="${cx - sheathW / 2 - 0.6}" y="${o.yFan - 3}" width="${sheathW + 1.2}" height="3" rx="0.8" fill="#1a1b1c"/>`;
 
-  const acc = (cond: '+' | '-'): AcceptSpec => ({ system: 'DC', minVoltage: o.vmin, maxVoltage: o.vmax, conductors: [cond] });
-  const terminals: TerminalDef[] = o.leads.map((l, i) => {
-    const id = l.id ?? l.color;
-    const label = `${WIRE_HEX[l.color].name} ${l.label}`;
-    const base = { id, label, x: xs[i], y: o.yEnd, side: 'bottom' as const };
-    if (l.role === 'plus') return { ...base, role: 'input', accepts: acc('+') };
-    if (l.role === 'minus') return { ...base, role: 'input', accepts: acc('-') };
-    return { ...base, role: 'signal', optional: true };
-  });
+  const terminals = (p: ParamValues): TerminalDef[] =>
+    o.leads.map((l, i) => ({
+      id: l.id ?? l.color,
+      label: `${WIRE_HEX[l.color].name} ${l.label}`,
+      x: xs[i],
+      y: o.yEnd,
+      side: 'bottom' as const,
+      ...leadProps(l, p, o.vmin, o.vmax),
+    }));
   return { svg: s, terminals };
+}
+
+/* ------------------------------------------------------------------ */
+/* 出力形式（NPN / PNP）と出力の内部経路                                */
+/* ------------------------------------------------------------------ */
+
+/** 出力形式のパラメータ値から信号の種類（'P' は PNP、それ以外は NPN） */
+export const outKind = (p: ParamValues): 'npn' | 'pnp' => (p.output === 'P' ? 'pnp' : 'npn');
+
+/** NPN / PNP 切換の制御出力 */
+export const switchedOut = (p: ParamValues): SignalSpec => ({ dir: 'out', kind: outKind(p) });
+
+/**
+ * センサーの外部入力（チューニング・リセットなど）。NPN タイプは 0V と短絡して ON（内部で +V に引き上げ = プラスコモン相当）、
+ * PNP タイプは +V と短絡して ON（マイナスコモン相当）。
+ */
+export const sensorInput = (p: ParamValues): SignalSpec => ({ dir: 'in', kind: 'dc', commonPolarity: p.output === 'P' ? '-' : '+' });
+
+/**
+ * 出力の内部経路（出力 ON で導通）。NPN は出力 → 0V、PNP は出力 → +V。
+ * outs は出力線（ピン）の ID、rated は 1 点の定格電流[A]（不明なら undefined）。
+ */
+export const sensorOutputLinks =
+  (outs: string[], rated: number | undefined, power: { plus: string; minus: string } = { plus: 'BN', minus: 'BU' }, kind: (p: ParamValues) => 'npn' | 'pnp' = outKind) =>
+  (p: ParamValues): InternalLink[] =>
+    outs.map((o) => ({ from: o, to: kind(p) === 'pnp' ? power.plus : power.minus, switch: 'output', ...(rated !== undefined ? { ratedCurrent: rated } : {}) }));
+
+/* ------------------------------------------------------------------ */
+/* M8 / M12 コネクタ                                                    */
+/* ------------------------------------------------------------------ */
+
+/** M12 / M8 4 ピン（A コード）のセンサー用コネクタ。ピン 1 茶・2 白・3 青・4 黒（IEC 60947-5-2 の標準線色） */
+export const roundConnector = (size: 'M12' | 'M8', extra: Partial<ConnectorSpec> = {}): ConnectorSpec => ({
+  kind: `${size}-4`,
+  pins: 4,
+  width: size === 'M12' ? 20 : 14,
+  style: 'round',
+  pinColors: { 1: 'brown', 2: 'white', 3: 'blue', 4: 'black' },
+  ...extra,
+});
+
+/** 4 ピンコネクタのピン番号順の芯線色 */
+export const ROUND_PIN_COLORS: WireColor[] = ['BN', 'WH', 'BU', 'BK'];
+
+/** コネクタのピン定義（leads はピン 1 から順に並べる） */
+export const leadPins =
+  (cn: string, leads: Lead[], vmin: number, vmax: number) =>
+  (p: ParamValues): PinDef[] =>
+    leads.map((l, i) => ({ id: `${cn}#${i + 1}`, label: `${i + 1} ${l.label}`, ...leadProps(l, p, vmin, vmax) }));
+
+/**
+ * センサー側の丸形コネクタ（オス）を正面から見た姿。cx, cy は中心、r は外周の半径。ピン 4 本（1 左上・2 右上・3 右下・4 左下）と中央のキー。
+ */
+export function roundReceptacle(cx: number, cy: number, r = 9.5) {
+  const pins = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]
+    .map(([dx, dy]) => `<circle cx="${+(cx + dx * r * 0.33).toFixed(2)}" cy="${+(cy + dy * r * 0.33).toFixed(2)}" r="${+(r * 0.11).toFixed(2)}" fill="#e2bf55" stroke="#8a6d1c" stroke-width="0.3"/>`)
+    .join('');
+  return `
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="#c9cdd1" stroke="#6d7277" stroke-width="0.6"/>
+  ${Array.from({ length: 24 }, (_, i) => {
+    const a = (i * Math.PI) / 12;
+    return `<line x1="${+(cx + r * 0.84 * Math.cos(a)).toFixed(2)}" y1="${+(cy + r * 0.84 * Math.sin(a)).toFixed(2)}" x2="${+(cx + r * 0.98 * Math.cos(a)).toFixed(2)}" y2="${+(cy + r * 0.98 * Math.sin(a)).toFixed(2)}" stroke="#8d9297" stroke-width="0.4"/>`;
+  }).join('')}
+  <circle cx="${cx}" cy="${cy}" r="${+(r * 0.72).toFixed(2)}" fill="#2a2b2e" stroke="#0a0a0b" stroke-width="0.5"/>
+  <circle cx="${cx}" cy="${cy}" r="${+(r * 0.6).toFixed(2)}" fill="#3a3c40"/>
+  ${pins}
+  <rect x="${+(cx - r * 0.08).toFixed(2)}" y="${+(cy - r * 0.68).toFixed(2)}" width="${+(r * 0.16).toFixed(2)}" height="${+(r * 0.16).toFixed(2)}" fill="#2a2b2e"/>`;
 }
 
 /**

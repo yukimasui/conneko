@@ -24,7 +24,7 @@ const cable = sensorCable({
   vmax: 30,
   leads: [
     { color: 'BN', label: '+V（DC10.8〜30V）', role: 'plus' },
-    { color: 'BK', label: '制御出力（NPN）', role: 'out' },
+    { color: 'BK', label: '制御出力（NPN）', role: 'out', signal: { dir: 'out', kind: 'npn' } },
     { color: 'BU', label: '0V', role: 'minus' },
   ],
 });
@@ -66,6 +66,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: cable.terminals,
+  links: [{ from: 'BK', to: 'BU', switch: 'output', ratedCurrent: 0.2 }],
   loadCurrent: 0.012,
 };
 

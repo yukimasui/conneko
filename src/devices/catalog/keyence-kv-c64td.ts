@@ -1,4 +1,4 @@
-import { buildMilUnit, mil34IoPins, outputLinks } from '../keyence/kv-parts';
+import { buildMilUnit, ioOutputLinks, kvUnitBus, mil34IoPins } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 出力ユニット KV-C64TD（64点 コネクタタイプ、MOSFET シンク出力・過電流保護付き）。
@@ -12,8 +12,8 @@ import { buildMilUnit, mil34IoPins, outputLinks } from '../keyence/kv-parts';
  */
 
 const pins = [
-  ...mil34IoPins('CN1', { ch: 0, kind: 'out', com: 'com-sink', comName: 'COM0 (0V)' }, { ch: 1, kind: 'out', com: 'com-sink', comName: 'COM1 (0V)' }),
-  ...mil34IoPins('CN2', { ch: 2, kind: 'out', com: 'com-sink', comName: 'COM2 (0V)' }, { ch: 3, kind: 'out', com: 'com-sink', comName: 'COM3 (0V)' }),
+  ...mil34IoPins('CN1', { offset: 0, kind: 'out', com: 'com-sink', comName: 'COM0 (0V)' }, { offset: 16, kind: 'out', com: 'com-sink', comName: 'COM1 (0V)' }),
+  ...mil34IoPins('CN2', { offset: 32, kind: 'out', com: 'com-sink', comName: 'COM2 (0V)' }, { offset: 48, kind: 'out', com: 'com-sink', comName: 'COM3 (0V)' }),
 ];
 
 export default buildMilUnit({
@@ -22,7 +22,7 @@ export default buildMilUnit({
   name: 'PLC 出力ユニット',
   labelPrefix: 'OUT',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの 64点 トランジスタ出力ユニット（MOSFET シンク出力・過電流保護付き、コネクタタイプ）。定格負荷 DC30V 0.2A/点、64点 1コモン（COM0〜COM3 は内部ですべて共通）。COM に負荷電源の 0V をつなぎ、負荷のもう一端は +24V へ。外部接続は MIL 規格 34極コネクタ × 2（CN1 = L 側: OUT 000〜015・100〜115、CN2 = H 側: OUT 200〜215・300〜315）。ピン名の (No.n) は KEYENCE のピン番号、ピンID は MIL 標準の千鳥番号。信号名はユニットの先頭リレー番号からの相対番号。図面上は出力 ON（出力ピンと COM が導通）とみなしてチェックする。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの 64点 トランジスタ出力ユニット（MOSFET シンク出力・過電流保護付き、コネクタタイプ）。定格負荷 DC30V 0.2A/点、64点 1コモン（COM0〜COM3 は内部ですべて共通）。COM に負荷電源の 0V をつなぎ、負荷のもう一端は +24V へ。外部接続は MIL 規格 34極コネクタ × 2（CN1 = L 側: OUT 000〜015・100〜115、CN2 = H 側: OUT 200〜215・300〜315）。ピン名の (No.n) は KEYENCE のピン番号、ピンID は MIL 標準の千鳥番号。ピンのラベルはリレー番号（装着位置から決まる先頭番号 + 点数）。内部消費電流 120mA。',
   width: 58,
   connectors: [
     { id: 'CN1', cx: 15.5, cy: 110, poles: 34, label: 'CN1 L側 (MIL 34P)', tag: 'L' },
@@ -33,6 +33,8 @@ export default buildMilUnit({
     { from: 'CN1#33', to: 'CN1#34' },
     { from: 'CN1#33', to: 'CN2#33' },
     { from: 'CN2#33', to: 'CN2#34' },
-    ...outputLinks(pins, 'CN1#33'),
+    ...ioOutputLinks(pins, 0.2),
   ],
+  io: { outSignal: 'npn' },
+  bus: kvUnitBus(120, { outputs: 64 }),
 });

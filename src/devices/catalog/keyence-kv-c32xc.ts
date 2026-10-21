@@ -1,5 +1,5 @@
-import { INPUT_COM_ACCEPTS } from '../keyence/kv-parts';
-import type { DeviceDefinition, PinDef } from '../types';
+import { INPUT_MODE_PARAM, inputComAccepts, ioPins, kvUnitBus, mil34IoPins, milConnector } from '../keyence/kv-parts';
+import type { DeviceDefinition } from '../types';
 
 /**
  * KEYENCE KV-8000 シリーズ 入力ユニット KV-C32XC（32点 コネクタタイプ、DC24V/DC5V 入力）。
@@ -24,26 +24,18 @@ const COL_R = CN.x + 2.54;
 const ROW0 = CN.y - 8 * 5.08;
 const PITCH = 5.08;
 
-/** 割付の先頭チャンネル（CPU の右隣 1 台目に装着、KV STUDIO の自動割付で R000 から） */
-const CH_L = 0;
-const CH_H = 1;
-
-const relay = (ch: number, bit: number) => `R${ch}${String(bit).padStart(2, '0')}`;
-
 /** KEYENCE のピン番号（1〜34）→ MIL 標準の千鳥番号 */
 const stdNo = (k: number) => (k <= 17 ? 2 * k - 1 : 2 * (k - 17));
 
-const pins: PinDef[] = [];
-for (let k = 1; k <= 34; k++) {
-  const id = `CN1#${stdNo(k)}`;
-  if (k === 17 || k === 34) {
-    pins.push({ id, label: `COM${k === 17 ? 0 : 1} (No.${k}) ±共用`, role: 'input', accepts: INPUT_COM_ACCEPTS, optional: true });
-  } else {
-    const r = k < 17 ? relay(CH_L, k - 1) : relay(CH_H, k - 18);
-    pins.push({ id, label: `${r} (No.${k})`, role: 'signal', optional: true });
-  }
-}
-pins.sort((a, b) => Number(a.id.split('#')[1]) - Number(b.id.split('#')[1]));
+/**
+ * ピン（ラベルはリレー番号。装着位置から決まる先頭番号 + 点数。KV STUDIO の自動割付で CPU の右隣 1 台目なら R000〜R115）。
+ * COM は双方向（プラスコモン / マイナスコモンどちらでも可）。
+ */
+const points = mil34IoPins(
+  'CN1',
+  { offset: 0, kind: 'in', com: 'com-in', comName: 'COM0 ±共用' },
+  { offset: 16, kind: 'in', com: 'com-in', comName: 'COM1 ±共用' },
+);
 
 const text = (x: number, y: number, t: string, size = 4, fill = '#d8dadd', anchor = 'middle', weight = 'bold') =>
   `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="sans-serif" font-size="${size}" font-weight="${weight}" fill="${fill}">${t}</text>`;
@@ -129,7 +121,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-8000 シリーズの 32点 DC 入力ユニット（コネクタタイプ）。DC24V/DC5V 入力（モード切替、24V モード 5.3mA）、32点 1コモン。双方向フォトカプラ入力のため COM はプラスコモン/マイナスコモンどちらでも使える（COM0・COM1 は内部で共通）。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = R000〜R015、17 = COM0、右列 18〜33 = R100〜R115、34 = COM1）。デバイス番号は CPU の右隣 1 台目に装着し KV STUDIO で自動割付した場合（先頭 R000）の想定で、装着位置・割付設定により変わる。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
+    'KEYENCE KV-8000 シリーズの 32点 DC 入力ユニット（コネクタタイプ）。DC24V/DC5V 入力（モード切替、24V モード 5.3mA）、32点 1コモン。双方向フォトカプラ入力のため COM はプラスコモン/マイナスコモンどちらでも使える（COM0・COM1 は内部で共通）。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = R000〜R015、17 = COM0、右列 18〜33 = R100〜R115、34 = COM1）。ピンのラベルはリレー番号で、CPU に装着すると装着位置から自動で決まる（KV STUDIO の自動割付と同じく右隣 1 台目なら R000 から）。入力モードは params の inputMode。内部消費電流 25mA。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
   labelPrefix: 'IN',
   width: W,
   height: H,
@@ -142,15 +134,17 @@ const def: DeviceDefinition = {
       y: CN.y,
       side: 'bottom',
       role: 'connector',
-      connector: { kind: 'MIL34', pins: 34, width: CN.w },
+      connector: milConnector(34),
       optional: true,
     },
   ],
-  pins,
+  pins: ioPins(points, { inputs: 32, inputAccepts: inputComAccepts }),
   links: [
     // COM0（No.17）と COM1（No.34）は内部で共通
     { from: `CN1#${stdNo(17)}`, to: `CN1#${stdNo(34)}` },
   ],
+  params: [INPUT_MODE_PARAM],
+  bus: kvUnitBus(25, { inputs: 32 }),
 };
 
 export default def;

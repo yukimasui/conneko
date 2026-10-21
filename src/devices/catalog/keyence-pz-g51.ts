@@ -1,6 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { pzgDefs, pzgHead } from '../keyence/pz-g';
-import { OUTPUT_PARAM, outName, sensorCable } from '../keyence/sensor-parts';
+import { OUTPUT_PARAM, outName, sensorCable, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
  * KEYENCE アンプ内蔵型光電センサ PZ-G51N / PZ-G51P（透過型、角型、ケーブル 2m）。投光器と受光器の 1 組。
@@ -41,7 +41,7 @@ const rx = sensorCable({
   leads: [
     { id: 'R-BN', color: 'BN', label: '受光器 +V（DC10〜30V）', role: 'plus' },
     { id: 'R-BU', color: 'BU', label: '受光器 0V', role: 'minus' },
-    { id: 'R-BK', color: 'BK', label: '受光器 制御出力（NPN/PNP は出力形式による）', role: 'out' },
+    { id: 'R-BK', color: 'BK', label: '受光器 制御出力（NPN/PNP は出力形式による）', role: 'out', signal: switchedOut },
   ],
 });
 
@@ -59,7 +59,8 @@ const def: DeviceDefinition = {
   svg: (p) => `${pzgDefs}${tx.svg}${rx.svg}
   ${pzgHead(10, 12, `PZ-G51${p.output === 'P' ? 'P' : 'N'}`, 'emitter')}
   ${pzgHead(75, 12, `PZ-G51${p.output === 'P' ? 'P' : 'N'}`, 'receiver')}  <text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">透過型 20m・${outName(p)}</text>`,
-  terminals: [...tx.terminals, ...rx.terminals],
+  terminals: (p) => [...tx.terminals(p), ...rx.terminals(p)],
+  links: sensorOutputLinks(['R-BK'], 0.1, { plus: 'R-BN', minus: 'R-BU' }),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.048,
 };

@@ -1,5 +1,5 @@
 import type { DeviceDefinition } from '../types';
-import { kvDefs, led, rj45, screw, text } from '../keyence/kv-parts';
+import { KV_NANO_BUS, KV_RAIL, PROTO, kvDefs, led, rj45, rj45Connector, screw, text } from '../keyence/kv-parts';
 
 /**
  * KEYENCE EtherCAT 通信ユニット（EtherCAT カプラ）KV-EC01。
@@ -58,7 +58,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE の EtherCAT 通信ユニット（EtherCAT スレーブのカプラ）。KV-X シリーズ CPU の EtherCAT ポート（PORT3）や KV-XH16EC から IN ポートへ LAN ケーブル（STP）でつなぎ、OUT ポートから次の EtherCAT 機器へデイジーチェーンする。右側に KV-NC16EXE などの拡張ユニットを連結してリモート I/O にする。電源は DC24V（−15%/+10%）を底面の電源端子に入れる（並びは +・−・FG と推定）。内部消費電流 120mA（連結した拡張ユニット込みで最大 1.8A）。',
+    'KEYENCE の EtherCAT 通信ユニット（EtherCAT スレーブのカプラ）。KV-X シリーズ CPU の EtherCAT ポート（PORT3）や KV-XH16EC から IN ポートへ LAN ケーブル（STP）でつなぎ、OUT ポートから次の EtherCAT 機器へデイジーチェーンする。右側に KV-NC16EXE などの拡張ユニットを連結してリモート I/O にする。電源は DC24V（−15%/+10%）を底面の電源端子に入れる（並びは +・−・FG と推定）。内部消費電流 120mA（連結した拡張ユニット込みで最大 1.8A。装着したユニットの内部消費電流の合計をチェックする）。連結したユニット（mount に KV-EC01 を指定）の端子ラベルは連結順の相対的なリレー番号（R000 から）で、CPU 側の実際のデバイスは EtherCAT の割付で決まる。',
   labelPrefix: 'EC',
   width: W,
   height: H,
@@ -67,24 +67,22 @@ const def: DeviceDefinition = {
     { id: '24V+', label: '+ (DC24V)', x: PWR[0].x, y: PWR_Y, side: 'bottom', role: 'input', accepts: accepts('+') },
     { id: '24V-', label: '− (0V)', x: PWR[1].x, y: PWR_Y, side: 'bottom', role: 'input', accepts: accepts('-') },
     { id: 'FG', label: 'FG', x: PWR[2].x, y: PWR_Y, side: 'bottom', role: 'ground' },
-    { id: 'IN', label: 'EtherCAT IN (RJ45)', x: IN.x, y: IN.y, side: 'left', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 22 }, optional: true },
-    { id: 'OUT', label: 'EtherCAT OUT (RJ45)', x: OUT.x, y: OUT.y, side: 'left', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 22 }, optional: true },
+    { id: 'IN', label: 'EtherCAT IN (RJ45)', x: IN.x, y: IN.y, side: 'left', role: 'connector', connector: rj45Connector(PROTO.ethercat, 'left'), optional: true },
+    { id: 'OUT', label: 'EtherCAT OUT (RJ45)', x: OUT.x, y: OUT.y, side: 'left', role: 'connector', connector: rj45Connector(PROTO.ethercat, 'left'), optional: true },
   ],
-  params: [
-    {
-      key: 'consumption',
-      label: '消費電流（連結ユニット込み）',
-      unit: 'A',
-      options: [
-        { value: 0.12, label: '0.12A（単体）' },
-        { value: 0.3, label: '0.3A' },
-        { value: 0.6, label: '0.6A' },
-        { value: 1.8, label: '1.8A（最大）' },
-      ],
-      default: 0.3,
+  // 単体の消費電流（連結したユニットの分は bus の load として合計する）
+  loadCurrent: 0.12,
+  bus: {
+    kind: 'kv-ec01',
+    host: {
+      accepts: [KV_NANO_BUS],
+      // 連結台数の上限は公開資料で確認できないため指定しない（電流の上限 1.8A でチェックする）
+      // リレー番号は EtherCAT の PDO 割付で決まる。ここでは連結順の相対番号（先頭 R000）として並べる
+      numbering: { mode: 'shared', unit: 16, start: { input: 0, output: 0 } },
     },
-  ],
-  loadCurrent: { param: 'consumption' },
+    supply: { [KV_RAIL]: 1.8 },
+    load: { [KV_RAIL]: 0.12 },
+  },
 };
 
 export default def;

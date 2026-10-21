@@ -1,4 +1,4 @@
-import { buildBlockUnit } from '../keyence/kv-parts';
+import { buildBlockUnit, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 温度・アナログ マルチ入力ユニット KV-TP40（4ch）。
@@ -17,15 +17,16 @@ const CH = [0, 1, 2, 3];
 const LEFT = ['0A', '0b', '1A', '1b', 'NC1', '2A', '2b', '3A', '3b'];
 const RIGHT = ['0B', '0I', '1B', '1I', 'NC2', '2B', '2I', '3B', '3I'];
 
-const points: Record<string, { label: string; kind: 'in' | 'nc'; print?: string }> = {
+const points: BlockUnitSpec['points'] = {
   NC1: { label: 'NC（未使用）', kind: 'nc', print: 'NC' },
   NC2: { label: 'NC（未使用）', kind: 'nc', print: 'NC' },
 };
+// 電圧入力の + と電流入力の + にアナログ入力の信号の種類を付ける（熱電対・測温抵抗体の端子と兼用）
 for (const c of CH) {
-  points[`${c}A`] = { label: `ch${c} A/−/−（熱電対 −・測温抵抗体 A・電圧/電流 −）`, kind: 'in', print: `${c} A/-` };
-  points[`${c}b`] = { label: `ch${c} b（測温抵抗体 b）`, kind: 'in', print: `${c} b` };
-  points[`${c}B`] = { label: `ch${c} B/+/V+（熱電対 +・測温抵抗体 B・電圧 +）`, kind: 'in', print: `${c} B/+` };
-  points[`${c}I`] = { label: `ch${c} I+（電流 +）`, kind: 'in', print: `${c} I+` };
+  points[`${c}A`] = { label: `ch${c} A/−/−（熱電対 −・測温抵抗体 A・電圧/電流 −）`, kind: 'sig', print: `${c} A/-` };
+  points[`${c}b`] = { label: `ch${c} b（測温抵抗体 b）`, kind: 'sig', print: `${c} b` };
+  points[`${c}B`] = { label: `ch${c} B/+/V+（熱電対 +・測温抵抗体 B・電圧 +）`, kind: 'sig', print: `${c} B/+`, signal: { dir: 'in', kind: 'analog-v' } };
+  points[`${c}I`] = { label: `ch${c} I+（電流 +）`, kind: 'sig', print: `${c} I+`, signal: { dir: 'in', kind: 'analog-i' } };
 }
 
 /** 左側の帯（設定つまみ） */
@@ -46,6 +47,7 @@ export default buildBlockUnit({
   width: 70,
   blocks: [{ x: 24, w: 44, left: LEFT, right: RIGHT }],
   points,
+  bus: kvUnitBus(90),
   window: 'off',
   extra,
   tag: '',

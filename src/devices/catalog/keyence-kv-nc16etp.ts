@@ -1,4 +1,5 @@
 import { buildNcMil } from '../keyence/kv-nc';
+import { KV_NANO_BUS, kvUnitBus } from '../keyence/kv-parts';
 import { ncMilLinks, ncMilPins } from '../keyence/kv-nc-mil-pins';
 
 /**
@@ -16,8 +17,10 @@ export default buildNcMil({
   name: 'PLC 拡張出力ユニット',
   labelPrefix: 'OUT',
   description:
-    'KEYENCE の 16点 トランジスタ出力ユニット（MOSFET ソース出力・過電流保護付き、DC30V 0.2A/点、MIL 規格 20極コネクタ）。KV Nano シリーズの増設や、EtherCAT カプラ KV-EC01 に連結するリモート I/O として使う。ピンは MIL 標準の千鳥番号で、1・2 = N.C.、奇数 3〜17 = OUT 000〜007、偶数 4〜18 = OUT 008〜015、19 = COM0、20 = COM1（内部短絡、負荷電源の +24V をつなぐ）。図面上は出力 ON（COM と出力ピンが導通）とみなしてチェックする。',
+    'KEYENCE の 16点 トランジスタ出力ユニット（MOSFET ソース出力・過電流保護付き、DC30V 0.2A/点、MIL 規格 20極コネクタ）。KV Nano シリーズの増設や、EtherCAT カプラ KV-EC01 に連結するリモート I/O として使う。ピンは MIL 標準の千鳥番号で、1・2 = N.C.、奇数 3〜17 = OUT 000〜007、偶数 4〜18 = OUT 008〜015、19 = COM0、20 = COM1（内部短絡、負荷電源の +24V をつなぐ）。ピンのラベルはリレー番号（装着位置から決まる先頭番号 + 点数）。内部消費電流 30mA。',
   poles: 20,
   pins,
   links: ncMilLinks(16, pins),
+  io: { outSignal: 'pnp' },
+  bus: kvUnitBus(30, { outputs: 16 }, KV_NANO_BUS),
 });

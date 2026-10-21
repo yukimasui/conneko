@@ -12,6 +12,8 @@ export default buildKvEthUnit({
   name: 'PLC データベース連携ユニット',
   labelPrefix: 'DB',
   width: 72,
+  protocols: ['ethernet'],
+  mA: 200,
   description:
     'KEYENCE KV-X/KV-8000/KV-7000 シリーズのデータベース連携ユニット（Ethernet RJ-45 × 2 ポート）。PLC のデバイス値を SQL Server・MySQL・Oracle などのデータベースへ直接書き込み/読み出しする。上位 LAN（サーバ側）へ LAN ケーブルでつなぐ。内部消費電流 200mA（CPU から供給）。',
 });

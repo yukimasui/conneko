@@ -1,6 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
-import { OUTPUT_PARAM, outName, sensorCable } from '../keyence/sensor-parts';
+import { OUTPUT_PARAM, outName, sensorCable, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
  * KEYENCE デジタルファイバセンサ FS-N40 シリーズ アンプ FS-N41N / FS-N41P（ケーブルタイプ・親機、1 出力）。
@@ -30,7 +30,7 @@ const cable = sensorCable({
   leads: [
     { color: 'BN', label: '+V（DC10〜30V）', role: 'plus' },
     { color: 'BU', label: '0V', role: 'minus' },
-    { color: 'BK', label: '制御出力（NPN/PNP は出力形式による）', role: 'out' },
+    { color: 'BK', label: '制御出力（NPN/PNP は出力形式による）', role: 'out', signal: switchedOut },
   ],
 });
 
@@ -55,6 +55,7 @@ const def: DeviceDefinition = {
   ${ampBody({ x: BX, y: BY, w: BW, h: BH, model: `FS-N41${p.output === 'P' ? 'P' : 'N'}`, top: '9999', bottom: '9999', left: 'fiber', accent: '#d8262a', series: 'FS-N40' })}
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">ファイバアンプ 1出力・${outName(p)}</text>`,
   terminals: cable.terminals,
+  links: sensorOutputLinks(['BK'], 0.1),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.034,
 };

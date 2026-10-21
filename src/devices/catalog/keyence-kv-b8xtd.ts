@@ -1,4 +1,4 @@
-import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
+import { INPUT_MODE_PARAM, buildBlockUnit, inputComAccepts, ioOutputLinks, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 入出力ユニット KV-B8XTD（入力 8点 + MOSFET シンク出力 8点、ネジ端子台）。
@@ -10,11 +10,11 @@ import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
 const LEFT = ['1', '3', '5', '7', 'C0', '9', '11', '13', '15'];
 const RIGHT = ['0', '2', '4', '6', '8', '10', '12', '14', 'C1'];
 
-const points: Record<string, { label: string; kind: IoKind }> = {};
-for (let i = 0; i < 8; i++) points[String(i)] = { label: `IN ${String(i).padStart(3, '0')}`, kind: 'in' };
-for (let i = 8; i < 16; i++) points[String(i)] = { label: `OUT ${100 + i - 8}`, kind: 'out' };
-points.C0 = { label: 'COM0（入力）', kind: 'com-in' };
-points.C1 = { label: 'COM1（出力 0V）', kind: 'com-sink' };
+const points: BlockUnitSpec['points'] = {};
+for (let i = 0; i < 8; i++) points[String(i)] = { kind: 'in', index: i, common: 'C0' };
+for (let i = 8; i < 16; i++) points[String(i)] = { kind: 'out', index: i - 8, common: 'C1' };
+points.C0 = { kind: 'com-in', label: 'COM0（入力）', note: '端子 0〜7（入力）のコモン（双方向）' };
+points.C1 = { kind: 'com-sink', label: 'COM1（出力 0V）', note: '端子 8〜15（出力）のコモン。負荷電源の 0V をつなぐ' };
 
 export default buildBlockUnit({
   type: 'keyence.kv-b8xtd',
@@ -22,11 +22,14 @@ export default buildBlockUnit({
   name: 'PLC 入出力ユニット',
   labelPrefix: 'IO',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの入出力ユニット（脱着式ネジ端子台）。入力 8点（端子 0〜7 = 000〜007、DC24V/DC5V モード切替、COM は C0、双方向）、出力 8点（端子 8〜15 = 100〜107、MOSFET シンク出力・過電流保護付き、DC30V 0.3A/点、COM は C1 で負荷電源の 0V をつなぐ）。C0 と C1 は独立。信号名はユニットの先頭リレー番号からの相対番号。図面上は出力 ON（出力端子と C1 が導通）とみなしてチェックする。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの入出力ユニット（脱着式ネジ端子台）。入力 8点（端子 0〜7 = 000〜007、DC24V/DC5V モード切替、COM は C0、双方向）、出力 8点（端子 8〜15 = 100〜107、MOSFET シンク出力・過電流保護付き、DC30V 0.3A/点、COM は C1 で負荷電源の 0V をつなぐ）。C0 と C1 は独立。端子のラベルはリレー番号（入力は先頭チャネル、出力は次のチャネル。例: 先頭 R000 なら入力 R000〜R007、出力 R100〜R107）。内部消費電流 30mA。',
   left: LEFT,
   right: RIGHT,
   points,
-  links: Array.from({ length: 8 }, (_, i) => ({ from: String(i + 8), to: 'C1' })),
+  links: ioOutputLinks(Object.entries(points).map(([id, p]) => ({ id, ...p })), 0.3),
+  io: { inputs: 8, inputAccepts: inputComAccepts, outSignal: 'npn' },
+  params: [INPUT_MODE_PARAM],
+  bus: kvUnitBus(30, { inputs: 8, outputs: 8 }),
   window: 'switch',
   tag: 'I/O',
 });

@@ -1,5 +1,5 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
-import { kvDefs, plugBlockV } from '../keyence/kv-parts';
+import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
+import { KV_NANO_BUS, ioOutputLinks, ioProps, kvDefs, kvUnitBus, plugBlockV, type IoPoint } from '../keyence/kv-parts';
 import { NC_H, NC_W, ncBody } from '../keyence/kv-nc';
 
 /**
@@ -15,15 +15,24 @@ import { NC_H, NC_W, ncBody } from '../keyence/kv-nc';
 
 const IDS: string[] = [];
 const PRINT: Record<string, string> = {};
-const LABEL: Record<string, string> = {};
+/** 出力 n の接点は端子 n と、その組の COM（C0〜C3 は COM0、C4〜C7 は COM1。代表は C0 / C4） */
+const POINTS: IoPoint[] = [];
 for (let i = 0; i < 8; i++) {
   const blk = i < 4 ? '上' : '下';
   const pin = (i % 4) * 2 + 1;
   IDS.push(String(i), `C${i}`);
   PRINT[String(i)] = String(i);
   PRINT[`C${i}`] = i < 4 ? 'C0' : 'C1';
-  LABEL[String(i)] = `OUT ${String(i).padStart(3, '0')}（${blk}端子台 No.${pin}）`;
-  LABEL[`C${i}`] = `${i < 4 ? 'COM0' : 'COM1'}（${blk}端子台 No.${pin + 1}）`;
+  POINTS.push(
+    { id: String(i), kind: 'out', index: i, common: i < 4 ? 'C0' : 'C4', suffix: `（${blk}端子台 No.${pin}）` },
+    {
+      id: `C${i}`,
+      kind: 'com-relay',
+      label: i < 4 ? 'COM0' : 'COM1',
+      suffix: `（${blk}端子台 No.${pin + 1}）`,
+      note: i < 4 ? '出力 0〜3 のリレー接点のコモン（COM0 の 4 端子は内部で短絡）' : '出力 4〜7 のリレー接点のコモン（COM1 の 4 端子は内部で短絡）',
+    },
+  );
 }
 
 const top = plugBlockV({ x: 20, y: 40, ids: IDS.slice(0, 8), pitch: 7.4, labels: PRINT, w: 12 });
@@ -37,15 +46,8 @@ const svg = `
   ${bottom.svg}
 `;
 
-const terminals: TerminalDef[] = IDS.map((id) => ({
-  id,
-  label: LABEL[id],
-  x: pos[id].x,
-  y: pos[id].y,
-  side: pos[id].side,
-  role: id.startsWith('C') ? 'pass' : 'signal',
-  optional: true,
-}));
+const terminals = (p: ParamValues): TerminalDef[] =>
+  POINTS.map((pt) => ({ id: pt.id, x: pos[pt.id].x, y: pos[pt.id].y, side: pos[pt.id].side, ...ioProps(pt, p, { outSignal: 'contact' }) }));
 
 const def: DeviceDefinition = {
   type: 'keyence.kv-nc8er',
@@ -54,7 +56,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE の 8点 リレー出力ユニット（AC250V/DC30V 2A/点、4点 1コモン × 2、ヨーロピアン端子台）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。上の端子台が OUT 000〜003 と COM0、下の端子台が OUT 004〜007 と COM1（COM0 と COM1 は独立、各 COM の 4 端子は内部で短絡）。端子ID は出力が 0〜7、隣の COM が C0〜C7。図面上はリレー接点を「閉」とみなしてチェックする。内部消費電流 70mA。',
+    'KEYENCE の 8点 リレー出力ユニット（AC250V/DC30V 2A/点、4点 1コモン × 2、ヨーロピアン端子台）。KV-X シリーズの EtherCAT カプラ KV-EC01 に連結するリモート I/O、または KV Nano シリーズの増設として使う。上の端子台が OUT 000〜003 と COM0、下の端子台が OUT 004〜007 と COM1（COM0 と COM1 は独立、各 COM の 4 端子は内部で短絡）。端子ID は出力が 0〜7、隣の COM が C0〜C7。端子のラベルはリレー番号（装着位置から決まる先頭番号 + 信号番号）。内部消費電流 70mA。',
   labelPrefix: 'OUT',
   width: NC_W,
   height: NC_H,
@@ -63,9 +65,9 @@ const def: DeviceDefinition = {
   links: [
     ...[1, 2, 3].map((i) => ({ from: 'C0', to: `C${i}` })),
     ...[5, 6, 7].map((i) => ({ from: 'C4', to: `C${i}` })),
-    ...[0, 1, 2, 3].map((i) => ({ from: 'C0', to: String(i) })),
-    ...[4, 5, 6, 7].map((i) => ({ from: 'C4', to: String(i) })),
+    ...ioOutputLinks(POINTS, 2),
   ],
+  bus: kvUnitBus(70, { outputs: 8 }, KV_NANO_BUS),
 };
 
 export default def;

@@ -1,4 +1,4 @@
-import { buildBlockUnit, type IoKind } from '../keyence/kv-parts';
+import { buildBlockUnit, ioOutputLinks, kvUnitBus, type BlockUnitSpec } from '../keyence/kv-parts';
 
 /**
  * KEYENCE KV-8000/7000/KV-X シリーズ 出力ユニット KV-B8RC（8点 ネジ端子台、リレー出力・独立コモン）。
@@ -13,13 +13,13 @@ const COMS = OUTS.map((o) => `C${o}`);
 const LEFT = [...COMS, 'NC1'];
 const RIGHT = [...OUTS, 'NC2'];
 
-const points: Record<string, { label: string; kind: IoKind; print?: string }> = {};
+const points: BlockUnitSpec['points'] = {};
 for (const o of OUTS) {
-  points[o] = { label: `OUT ${o.padStart(3, '0')}`, kind: 'out' };
-  points[`C${o}`] = { label: `COM${o}`, kind: 'pass' };
+  points[o] = { kind: 'out', index: Number(o), common: `C${o}` };
+  points[`C${o}`] = { kind: 'com-relay', label: `COM${o}`, note: `端子 ${o} のリレー接点の相手側（独立コモン）。負荷電源（AC / DC）の片側をつなぐ` };
 }
-points.NC1 = { label: 'NC（未使用）', kind: 'nc', print: 'NC' };
-points.NC2 = { label: 'NC（未使用）', kind: 'nc', print: 'NC' };
+points.NC1 = { kind: 'nc', label: 'NC（未使用）', print: 'NC' };
+points.NC2 = { kind: 'nc', label: 'NC（未使用）', print: 'NC' };
 
 export default buildBlockUnit({
   type: 'keyence.kv-b8rc',
@@ -27,11 +27,13 @@ export default buildBlockUnit({
   name: 'PLC リレー出力ユニット',
   labelPrefix: 'OUT',
   description:
-    'KEYENCE KV-8000/7000/KV-X シリーズの 8点 リレー出力ユニット（独立コモン、脱着式ネジ端子台）。定格負荷 AC250V/DC30V 2A/点。出力 n の接点は端子 Cn（COMn）と n の間にあり、点ごとに別の電源（AC100V と DC24V など）を使い分けられる。端子 0〜7 の信号名 000〜007 はユニットの先頭リレー番号からの相対番号。NC 端子は未使用。図面上はリレー接点を「閉」とみなしてチェックする。内部消費電流 65mA。',
+    'KEYENCE KV-8000/7000/KV-X シリーズの 8点 リレー出力ユニット（独立コモン、脱着式ネジ端子台）。定格負荷 AC250V/DC30V 2A/点。出力 n の接点は端子 Cn（COMn）と n の間にあり、点ごとに別の電源（AC100V と DC24V など）を使い分けられる。端子のラベルはリレー番号（装着位置から決まる先頭番号 + 端子番号）。NC 端子は未使用。内部消費電流 65mA。',
   left: LEFT,
   right: RIGHT,
   points,
-  links: OUTS.map((o) => ({ from: `C${o}`, to: o })),
+  links: ioOutputLinks(Object.entries(points).map(([id, p]) => ({ id, ...p })), 2),
+  io: { outSignal: 'contact' },
+  bus: kvUnitBus(65, { outputs: 8 }),
   window: 'none',
   tag: 'OUT',
 });

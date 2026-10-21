@@ -6,7 +6,7 @@
  * 図は「検出面を左に向けた側面」と「検出面」を少し立体的に描く（1mm ≒ 2px）。
  */
 import type { DeviceDefinition, ParamValues } from '../types';
-import { OUTPUT_PARAM, outName, sensorCable, type Lead } from './sensor-parts';
+import { OUTPUT_PARAM, outName, sensorCable, sensorOutputLinks, switchedOut, type Lead } from './sensor-parts';
 
 /** ヘッド（左上 x,y）。kind で表示灯・トリマの描き分け */
 export function pzgHead(x: number, y: number, model: string, kind: 'emitter' | 'receiver') {
@@ -61,7 +61,7 @@ export function buildPzgReflective(s: { series: 'PZ-G41' | 'PZ-G61'; kindName: s
   const leads: Lead[] = [
     { color: 'BN', label: '+V（DC10〜30V）', role: 'plus' },
     { color: 'BU', label: '0V', role: 'minus' },
-    { color: 'BK', label: '制御出力（NPN/PNP は出力形式による）', role: 'out' },
+    { color: 'BK', label: '制御出力（NPN/PNP は出力形式による）', role: 'out', signal: switchedOut },
   ];
   const cable = sensorCable({ cx: 46, y0: 78, yFan: 132, yEnd: 164, pitch: 11, centerX: 35, leads, vmin: 10, vmax: 30 });
   return {
@@ -77,6 +77,8 @@ export function buildPzgReflective(s: { series: 'PZ-G41' | 'PZ-G61'; kindName: s
     svg: (p: ParamValues) => `${pzgDefs}${cable.svg}${pzgHead(15, 12, `${s.series}${p.output === 'P' ? 'P' : 'N'}`, 'receiver')}
   <text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">${s.kindName} ${s.range}・${outName(p)}</text>`,
     terminals: cable.terminals,
+    // 制御出力（オープンコレクタ 30V 100mA）は ON で NPN なら 0V、PNP なら +V と導通する
+    links: sensorOutputLinks(['BK'], 0.1),
     params: [OUTPUT_PARAM],
     loadCurrent: 0.03,
   };

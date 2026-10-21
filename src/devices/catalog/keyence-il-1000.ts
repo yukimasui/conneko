@@ -1,6 +1,9 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, ParamValues, SignalSpec } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
-import { sensorCable } from '../keyence/sensor-parts';
+import { OUTPUT_PARAM, sensorCable, sensorInput, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
+
+/** アナログ出力（設定で電圧 ±5V / 1〜5V / 0〜5V または電流 4〜20mA） */
+const analogOut = (p: ParamValues): SignalSpec => ({ dir: 'out', kind: p.analog === 'I' ? 'analog-i' : 'analog-v' });
 
 /**
  * KEYENCE CMOS レーザアプリセンサ IL シリーズ アンプ IL-1000（DIN レール取付・親機）。
@@ -32,16 +35,16 @@ const cable = sensorCable({
   leads: [
     { color: 'BN', label: '+V（DC10〜30V）', role: 'plus' },
     { color: 'BU', label: '0V', role: 'minus' },
-    { color: 'BK', label: 'HIGH 判定出力', role: 'out' },
-    { color: 'WH', label: 'LOW 判定出力', role: 'out' },
-    { color: 'GY', label: 'GO 判定出力', role: 'out' },
-    { color: 'GN', label: 'アラーム出力', role: 'out' },
-    { color: 'OG', label: 'アナログ出力 +（水色ケーブル内）', role: 'analog' },
+    { color: 'BK', label: 'HIGH 判定出力', role: 'out', signal: switchedOut },
+    { color: 'WH', label: 'LOW 判定出力', role: 'out', signal: switchedOut },
+    { color: 'GY', label: 'GO 判定出力', role: 'out', signal: switchedOut },
+    { color: 'GN', label: 'アラーム出力', role: 'out', signal: switchedOut },
+    { color: 'OG', label: 'アナログ出力 +（水色ケーブル内）', role: 'analog', signal: analogOut },
     { id: 'SH', color: 'SH', label: 'アナログ出力 GND（水色ケーブル内）', role: 'analog' },
-    { color: 'PK', label: '外部入力1（ゼロシフト）', role: 'in' },
-    { color: 'YE', label: '外部入力2（リセット）', role: 'in' },
-    { id: 'PKVT', color: 'PKVT', label: '外部入力3（タイミング）', role: 'in' },
-    { color: 'VT', label: '外部入力4（未使用）', role: 'in' },
+    { color: 'PK', label: '外部入力1（ゼロシフト）', role: 'in', signal: sensorInput },
+    { color: 'YE', label: '外部入力2（リセット）', role: 'in', signal: sensorInput },
+    { id: 'PKVT', color: 'PKVT', label: '外部入力3（タイミング）', role: 'in', signal: sensorInput },
+    { color: 'VT', label: '外部入力4（未使用）', role: 'in', signal: sensorInput },
   ],
 });
 
@@ -59,7 +62,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'sensor',
   description:
-    'KEYENCE の CMOS レーザアプリセンサ IL シリーズのアンプ IL-1000（DIN レール取付・親機）。センサヘッド（IL-030 / IL-065 / IL-100 / IL-300 など）は別売。判定出力 HIGH（黒）・LOW（白）・GO（灰）とアラーム出力（緑）は NPN/PNP 切換式のオープンコレクタで PLC の入力へ、アナログ出力（±5V / 1〜5V / 0〜5V / 4〜20mA を選択）は水色の同軸ケーブル（橙 = +、シールド = GND）から PLC のアナログ入力ユニットへつなぐ。外部入力は桃（ゼロシフト）・黄（リセット）・桃/紫（タイミング）・紫（未使用）で、0V と短絡して入力する（無電圧入力）。電源 DC10〜30V、消費電力 2.3W 以下（30V 時 77mA）。',
+    'KEYENCE の CMOS レーザアプリセンサ IL シリーズのアンプ IL-1000（DIN レール取付・親機）。センサヘッド（IL-030 / IL-065 / IL-100 / IL-300 など）は別売。判定出力 HIGH（黒）・LOW（白）・GO（灰）とアラーム出力（緑）は NPN/PNP 切換式のオープンコレクタ（params の output）で PLC の入力へ、アナログ出力（±5V / 1〜5V / 0〜5V / 4〜20mA を選択。params の analog）は水色の同軸ケーブル（橙 = +、シールド = GND）から PLC のアナログ入力ユニットへつなぐ。外部入力は桃（ゼロシフト）・黄（リセット）・桃/紫（タイミング）・紫（未使用）で、NPN 設定では 0V と、PNP 設定では +V と短絡して入力する（無電圧入力）。電源 DC10〜30V、消費電力 2.3W 以下（30V 時 77mA）。',
   labelPrefix: 'DS',
   width: W,
   height: H,
@@ -67,6 +70,20 @@ const def: DeviceDefinition = {
   ${ampBody({ x: BX, y: BY, w: BW, h: BH, model: 'IL-1000', top: '-12.345', bottom: '12.345', left: 'head', series: 'IL' })}
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">変位センサアンプ（判定3出力・アラーム・アナログ）</text>`,
   terminals: cable.terminals,
+  // 判定出力・アラーム出力は ON で NPN なら 0V、PNP なら +V と導通する（1 点の定格電流は公開資料で未確認のため書かない）
+  links: sensorOutputLinks(['BK', 'WH', 'GY', 'GN'], undefined),
+  params: [
+    { ...OUTPUT_PARAM, label: '出力形式（アンプの設定）' },
+    {
+      key: 'analog',
+      label: 'アナログ出力（アンプの設定）',
+      options: [
+        { value: 'V', label: '電圧（±5V / 1〜5V / 0〜5V）' },
+        { value: 'I', label: '電流（4〜20mA）' },
+      ],
+      default: 'V',
+    },
+  ],
   loadCurrent: 0.077,
 };
 

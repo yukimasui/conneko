@@ -1,6 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
-import { OUTPUT_PARAM, outName, sensorCable } from '../keyence/sensor-parts';
+import { OUTPUT_PARAM, outName, sensorCable, sensorInput, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
  * KEYENCE デジタルファイバセンサ FS-N40 シリーズ アンプ FS-N43N / FS-N43P（ケーブルタイプ・親機、2 出力 + 外部入力 1）。
@@ -30,9 +30,9 @@ const cable = sensorCable({
   leads: [
     { color: 'BN', label: '+V（DC10〜30V）', role: 'plus' },
     { color: 'BU', label: '0V', role: 'minus' },
-    { color: 'BK', label: '制御出力1', role: 'out' },
-    { color: 'WH', label: '制御出力2', role: 'out' },
-    { color: 'PK', label: '外部入力', role: 'in' },
+    { color: 'BK', label: '制御出力1', role: 'out', signal: switchedOut },
+    { color: 'WH', label: '制御出力2', role: 'out', signal: switchedOut },
+    { color: 'PK', label: '外部入力', role: 'in', signal: sensorInput },
   ],
 });
 
@@ -56,6 +56,8 @@ const def: DeviceDefinition = {
   ${ampBody({ x: BX, y: BY, w: BW, h: BH, model: `FS-N43${p.output === 'P' ? 'P' : 'N'}`, top: '9999', bottom: '9999', left: 'fiber', accent: '#d8262a', series: 'FS-N40' })}
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">ファイバアンプ 2出力+外部入力・${outName(p)}</text>`,
   terminals: cable.terminals,
+  // 2 出力の合計で 100mA（1 点あたりの上限として 0.1A を書く）
+  links: sensorOutputLinks(['BK', 'WH'], 0.1),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.034,
 };

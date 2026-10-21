@@ -1,4 +1,5 @@
 import { buildNcMil } from '../keyence/kv-nc';
+import { INPUT_MODE_PARAM, KV_NANO_BUS, inputComAccepts, kvUnitBus } from '../keyence/kv-parts';
 import { ncMilLinks, ncMilPins } from '../keyence/kv-nc-mil-pins';
 
 /**
@@ -15,9 +16,12 @@ export default buildNcMil({
   name: 'PLC 拡張入力ユニット',
   labelPrefix: 'IN',
   description:
-    'KEYENCE の 16点 DC 入力ユニット（DC24V/DC5V モード切替、MIL 規格 20極コネクタ）。KV Nano シリーズの増設や、EtherCAT カプラ KV-EC01 に連結するリモート I/O として使う。ピンは MIL 標準の千鳥番号で、1・2 = N.C.、奇数 3〜17 = IN 000〜007、偶数 4〜18 = IN 008〜015、19 = COM0、20 = COM1（COM は内部で短絡、双方向）。信号名はユニットの先頭リレー番号からの相対番号。内部消費電流 20mA。',
+    'KEYENCE の 16点 DC 入力ユニット（DC24V/DC5V モード切替、MIL 規格 20極コネクタ）。KV Nano シリーズの増設や、EtherCAT カプラ KV-EC01 に連結するリモート I/O として使う。ピンは MIL 標準の千鳥番号で、1・2 = N.C.、奇数 3〜17 = IN 000〜007、偶数 4〜18 = IN 008〜015、19 = COM0、20 = COM1（COM は内部で短絡、双方向）。ピンのラベルはリレー番号（装着位置から決まる先頭番号 + 点数）。入力モードは params の inputMode。内部消費電流 20mA。',
   poles: 20,
   pins,
   links: ncMilLinks(16, pins),
+  io: { inputs: 16, inputAccepts: inputComAccepts },
+  bus: kvUnitBus(20, { inputs: 16 }, KV_NANO_BUS),
+  params: [INPUT_MODE_PARAM],
   modeSwitch: true,
 });

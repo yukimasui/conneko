@@ -9,7 +9,21 @@
  * - 正面上端に型式の印字と、黄緑の識別ラベル（ユニットの種類を示す帯）がある。
  * - 端子台タイプは脱着式のネジ端子台（2列の千鳥配置、上側にカバー）。コネクタタイプは MIL 規格のボックスヘッダが縦向きに付く。
  */
-import type { AcceptSpec, DeviceDefinition, PinDef, TerminalDef, TerminalRole } from '../types';
+import { ioName } from '../resolve';
+import type {
+  AcceptSpec,
+  BusSpec,
+  CommonLimit,
+  ConnectorSpec,
+  DeviceDefinition,
+  InternalLink,
+  ParamDef,
+  ParamValues,
+  PinDef,
+  SignalKind,
+  SignalSpec,
+  TerminalDef,
+} from '../types';
 
 /** 1mm あたりの px */
 export const MM = 2;
@@ -227,88 +241,224 @@ export function milHeaderV(cx: number, cy: number, poles: number, opts: { levers
 export const milHeaderVHeight = (poles: number, levers = true) => (poles / 2 - 1) * 2.54 * MM + 10 + (levers ? 2 * (12 + 3) : 6);
 
 /* ------------------------------------------------------------------ */
-/* ピン定義                                                            */
+/* バス（ユニットの連結）と内部電源                                     */
 /* ------------------------------------------------------------------ */
 
-/** 入力ユニットの COM（双方向フォトカプラ: プラスコモン/マイナスコモンどちらでも可） */
-export const INPUT_COM_ACCEPTS: AcceptSpec = { system: 'DC', minVoltage: 4.5, maxVoltage: 26.4, conductors: ['+', '-'] };
+/**
+ * KV-8000 / KV-7000 シリーズ用の拡張ユニットのバスの種類。KV-8000 と KV-X の CPU の右側に連結する。
+ * KV-X の CPU は bus.kind 'kv-x' で、host.accepts で 'kv-8000' のユニットも受け入れる。
+ */
+export const KV_BUS = 'kv-8000';
+/** KV Nano 系の拡張ユニット（KV-NC□□）のバスの種類。EtherCAT カプラ KV-EC01 の右側に連結する */
+export const KV_NANO_BUS = 'kv-nano';
+/**
+ * 内部電源のレール名。KV の CPU・KV-EC01 は電源端子の DC24V から拡張ユニットへ電源を供給し、
+ * カタログの「内部消費電流」はこの電源から流れる電流（CPU は拡張ユニット込みの上限が決まっている）。
+ */
+export const KV_RAIL = 'DC24V';
+
+/** 拡張ユニットの bus（mA は内部消費電流[mA]、io は占有する入出力点数） */
+export const kvUnitBus = (mA: number, io?: { inputs?: number; outputs?: number }, kind = KV_BUS): BusSpec => ({
+  kind,
+  load: { [KV_RAIL]: +(mA / 1000).toFixed(4) },
+  ...(io ? { io: { ...io, format: 'kv' as const } } : {}),
+});
+
+/* ------------------------------------------------------------------ */
+/* ピン・端子の電気的な定義                                             */
+/* ------------------------------------------------------------------ */
+
+/** 入力ユニットの COM（双方向フォトカプラ）。DC24V モード: 最小 ON 電圧 19V 〜 入力最大電圧 26.4V */
+export const INPUT_COM_24V: AcceptSpec = { system: 'DC', minVoltage: 19, maxVoltage: 26.4, conductors: ['+', '-'] };
+/** 入力ユニットの COM の DC5V モード（DC5V ±10% と仮定） */
+export const INPUT_COM_5V: AcceptSpec = { system: 'DC', minVoltage: 4.5, maxVoltage: 5.5, conductors: ['+', '-'] };
 /** シンク（NPN / N-ch MOSFET）出力の COM: 負荷電源の 0V 側をつなぐ */
 export const SINK_COM_ACCEPTS: AcceptSpec = { system: 'DC', minVoltage: 5, maxVoltage: 30, conductors: ['-'] };
 /** ソース（PNP / P-ch）出力の COM: 負荷電源の +V 側をつなぐ */
 export const SOURCE_COM_ACCEPTS: AcceptSpec = { system: 'DC', minVoltage: 5, maxVoltage: 30, conductors: ['+'] };
+/** リレー出力の COM（無電圧接点。AC250V / DC30V のどちらの負荷電源もつなげる） */
+export const RELAY_COM_ACCEPTS: AcceptSpec[] = [
+  { system: 'AC', minVoltage: 24, maxVoltage: 250 },
+  { system: 'DC', minVoltage: 5, maxVoltage: 30 },
+];
+
+/** 入力モード切替スイッチ（DC24V / DC5V）のパラメータ */
+export const INPUT_MODE_PARAM: ParamDef = {
+  key: 'inputMode',
+  label: '入力モード（切替スイッチ）',
+  unit: 'V',
+  options: [
+    { value: 24, label: 'DC24V モード' },
+    { value: 5, label: 'DC5V モード' },
+  ],
+  default: 24,
+};
+
+/** 入力モードに応じた入力 COM の受電条件 */
+export const inputComAccepts = (p: ParamValues): AcceptSpec => (Number(p.inputMode) === 5 ? INPUT_COM_5V : INPUT_COM_24V);
 
 /**
- * ピンの種類
+ * ピン・端子の種類
  * - in / out: 入出力点（signal）
  * - com-in: 入力の COM（双方向）
- * - com-sink / com-source: 出力の COM（負荷電源の 0V / +V）
- * - pass: 向きのない中継（リレー接点の COM など）
+ * - com-sink / com-source: トランジスタ出力の COM（負荷電源の 0V / +V）
+ * - com-relay: リレー出力の COM（AC / DC どちらの電源でもよい）
+ * - pass: 向きのない中継
+ * - sig: その他の信号端子（アナログ・通信など。label に名前を書く）
  * - nc: 未使用ピン
  */
-export type IoKind = 'in' | 'out' | 'com-in' | 'com-sink' | 'com-source' | 'pass' | 'nc';
+export type IoKind = 'in' | 'out' | 'com-in' | 'com-sink' | 'com-source' | 'com-relay' | 'pass' | 'sig' | 'nc';
 
 export interface IoPoint {
   /** ピン / 端子の ID（コネクタなら '<CN>#<標準番号>'） */
   id: string;
-  /** 表示名（例: 'R000 (No.1)'） */
-  label: string;
   kind: IoKind;
+  /** 入出力点の、ユニットの先頭番号からのオフセット（点数）。in は ioIn、out は ioOut に足してリレー番号にする */
+  index?: number;
+  /** COM・未使用ピンなどの表示名（入出力点は番号から作るので不要） */
+  label?: string;
+  /** ラベルの後ろに付ける補足（'(No.1)' など） */
+  suffix?: string;
+  /** 意味の説明（省略時は入出力点なら先頭からの位置） */
+  note?: string;
+  /** 入力点ならそのコモン、出力点なら出力の基準側（シンクは 0V の COM、ソースは +V の COM、リレーは接点の相手側） */
+  common?: string;
+  /** 端子台の印字（ネジ端子台のユニット） */
+  print?: string;
 }
 
-export function ioRole(kind: IoKind): { role: Exclude<TerminalRole, 'connector'>; accepts?: AcceptSpec } {
-  switch (kind) {
-    case 'com-in':
-      return { role: 'input', accepts: INPUT_COM_ACCEPTS };
+/** ユニットの入出力の定義（ピン・端子を作るときの文脈） */
+export interface IoContext {
+  /** 入力点数（先頭出力番号の既定値を求めるのに使う） */
+  inputs?: number;
+  /** 入力 COM の受電条件（入力モードで変わる場合は関数） */
+  inputAccepts?: AcceptSpec | ((p: ParamValues) => AcceptSpec);
+  /** 出力点の信号の種類（シンク = 'npn'、ソース = 'pnp'、リレー = 'contact'） */
+  outSignal?: SignalKind;
+}
+
+/**
+ * ユニットの入力・出力の先頭番号（点数）。装着していればバスから ioIn / ioOut が渡る。
+ * 装着していない場合は入力 0、出力は入力の占有チャネルの次（KV STUDIO の自動割付で 1 台目に装着した場合と同じ）。
+ */
+export function ioHeads(p: ParamValues, inputs = 0) {
+  const inHead = Number(p.ioIn ?? 0) || 0;
+  const outHead = p.ioOut !== undefined && p.ioOut !== '' ? Number(p.ioOut) || 0 : inHead + Math.ceil(inputs / 16) * 16;
+  return { inHead, outHead };
+}
+
+/** ピン・端子の電気的な項目（label / note / role / accepts / signal） */
+export function ioProps(pt: IoPoint, p: ParamValues, ctx: IoContext = {}): Omit<PinDef, 'id'> {
+  const { inHead, outHead } = ioHeads(p, ctx.inputs);
+  // 補足は半角の括弧なら空白を挟み、全角の括弧ならそのまま続ける
+  const named = (n: string) => (!pt.suffix ? n : pt.suffix.startsWith('（') ? `${n}${pt.suffix}` : `${n} ${pt.suffix}`);
+  const base = { optional: true, ...(pt.note ? { note: pt.note } : {}) };
+  switch (pt.kind) {
+    case 'in': {
+      const i = pt.index ?? 0;
+      return {
+        ...base,
+        label: named(ioName('kv', 'in', inHead + i)),
+        note: pt.note ?? `入力（ユニットの先頭番号 + ${i}）`,
+        role: 'signal',
+        signal: { dir: 'in', kind: 'dc', ...(pt.common ? { common: pt.common } : {}) },
+      };
+    }
+    case 'out': {
+      const i = pt.index ?? 0;
+      return {
+        ...base,
+        label: named(ioName('kv', 'out', outHead + i)),
+        note: pt.note ?? `出力（ユニットの先頭番号 + ${i}）`,
+        role: 'signal',
+        ...(ctx.outSignal ? { signal: { dir: 'out' as const, kind: ctx.outSignal } } : {}),
+      };
+    }
+    case 'com-in': {
+      const a = ctx.inputAccepts ?? INPUT_COM_24V;
+      return { ...base, label: named(pt.label ?? 'COM'), role: 'input', accepts: typeof a === 'function' ? a(p) : a };
+    }
     case 'com-sink':
-      return { role: 'input', accepts: SINK_COM_ACCEPTS };
+      return { ...base, label: named(pt.label ?? 'COM'), role: 'input', accepts: SINK_COM_ACCEPTS };
     case 'com-source':
-      return { role: 'input', accepts: SOURCE_COM_ACCEPTS };
+      return { ...base, label: named(pt.label ?? 'COM'), role: 'input', accepts: SOURCE_COM_ACCEPTS };
+    case 'com-relay':
+      return { ...base, label: named(pt.label ?? 'COM'), role: 'input', accepts: RELAY_COM_ACCEPTS };
     case 'pass':
-      return { role: 'pass' };
+      return { ...base, label: named(pt.label ?? pt.id), role: 'pass' };
+    case 'sig':
+      return { ...base, label: named(pt.label ?? pt.id), role: 'signal' };
     default:
-      return { role: 'signal' };
+      return { ...base, label: named(pt.label ?? 'N.C.'), role: 'signal' };
   }
 }
 
-export const toPins = (pts: IoPoint[]): PinDef[] =>
-  pts
-    .map((p) => ({ id: p.id, label: p.label, ...ioRole(p.kind), optional: true }))
-    .sort((a, b) => {
-      const [ca, na] = a.id.split('#');
-      const [cb, nb] = b.id.split('#');
-      return ca === cb ? Number(na) - Number(nb) : ca < cb ? -1 : 1;
-    });
+/** ピンの ID 順（コネクタごと、ピン番号順） */
+const byPinId = (a: { id: string }, b: { id: string }) => {
+  const [ca, na] = a.id.split('#');
+  const [cb, nb] = b.id.split('#');
+  return ca === cb ? Number(na) - Number(nb) : ca < cb ? -1 : 1;
+};
+
+/** IoPoint からピン定義を作る関数（パラメータ = 先頭番号・入力モードで変わる） */
+export const ioPins =
+  (pts: IoPoint[], ctx: IoContext = {}) =>
+  (p: ParamValues): PinDef[] =>
+    pts.map((pt) => ({ id: pt.id, ...ioProps(pt, p, ctx) })).sort(byPinId);
 
 /**
- * 信号名（ユニットの先頭リレー番号からの相対番号。チャンネル ch、ビット bit → 'IN 000' / 'OUT 115' など）。
- * 実際のリレー番号は KV STUDIO の割付（装着位置）で決まる（例: 先頭 R1000 なら IN 000 → R1000）。
+ * 出力点の内部経路（出力 ON で出力点と common が導通する）。from に出力点、to に COM。
+ * rated は 1 点の定格電流[A]。
  */
-export const signalName = (kind: 'in' | 'out', ch: number, bit: number) =>
-  `${kind === 'in' ? 'IN' : 'OUT'} ${ch}${String(bit).padStart(2, '0')}`;
+export const ioOutputLinks = (pts: IoPoint[], rated: number): InternalLink[] =>
+  pts
+    .filter((pt) => pt.kind === 'out' && pt.common)
+    .map((pt) => ({ from: pt.id, to: pt.common!, switch: 'output' as const, ratedCurrent: rated }));
+
 
 /**
  * KEYENCE 34極 I/O コネクタ（左列 No.1〜16 = 16点 + No.17 = COM、右列 No.18〜33 = 16点 + No.34 = COM）のピン。
- * left / right: 左列・右列のチャンネル（信号名の百の位）、入出力の種類、COM の種類と名前。
+ * left / right: 左列・右列の入出力の種類、先頭からのオフセット（点数）、COM の種類と名前。
+ * 入出力点の common には同じ列の COM（No.17 / No.34）を入れる。
  */
 export function mil34IoPins(
   cn: string,
-  left: { ch: number; kind: 'in' | 'out'; com: IoKind; comName: string },
-  right: { ch: number; kind: 'in' | 'out'; com: IoKind; comName: string },
+  left: { offset: number; kind: 'in' | 'out'; com: IoKind; comName: string },
+  right: { offset: number; kind: 'in' | 'out'; com: IoKind; comName: string },
 ): IoPoint[] {
   const pts: IoPoint[] = [];
+  const comL = `${cn}#${keyenceToStd(17, 34)}`;
+  const comR = `${cn}#${keyenceToStd(34, 34)}`;
   for (let k = 1; k <= 34; k++) {
     const id = `${cn}#${keyenceToStd(k, 34)}`;
     const side = k <= 17 ? left : right;
     const bit = k <= 17 ? k - 1 : k - 18;
-    if (k === 17 || k === 34) pts.push({ id, label: `${side.comName} (No.${k})`, kind: side.com });
-    else pts.push({ id, label: `${signalName(side.kind, side.ch, bit)} (No.${k})`, kind: side.kind });
+    if (k === 17 || k === 34) pts.push({ id, kind: side.com, label: side.comName, suffix: `(No.${k})` });
+    else pts.push({ id, kind: side.kind, index: side.offset + bit, suffix: `(No.${k})`, common: k <= 17 ? comL : comR });
   }
   return pts;
 }
 
-/** 出力ピンと COM の導通（出力 ON / 接点「閉」とみなす）。sink は出力→COM、source は COM→出力 */
-export const outputLinks = (pts: IoPoint[], com: string) =>
-  pts.filter((p) => p.kind === 'out').map((p) => ({ from: p.id, to: com }));
+/** MIL コネクタを正面から見たプラグの外形（幅・長さ[px]）。2.54mm ピッチの段数 + 両端の枠 */
+export const milPlug = (poles: number) => ({ width: 20, length: +((poles / 2) * 2.54 * MM + 15).toFixed(2) });
+
+/** 正面に差す MIL コネクタの ConnectorSpec */
+export const milConnector = (poles: number): ConnectorSpec => ({ kind: `MIL${poles}`, pins: poles, ...milPlug(poles), facing: 'front' });
+
+/** RJ-45 ポートの ConnectorSpec（正面に差す。side が左右なら縦 19 × 横 22、上下なら縦 22 × 横 19 の差込口） */
+export const rj45Connector = (protocols: string[], side: 'left' | 'right' | 'top' | 'bottom' = 'bottom'): ConnectorSpec =>
+  side === 'left' || side === 'right'
+    ? { kind: 'RJ45', pins: 0, width: 19, length: 22, facing: 'front', protocols }
+    : { kind: 'RJ45', pins: 0, width: 22, length: 19, facing: 'front', protocols };
+
+/** 通信プロトコルの組み合わせ */
+export const PROTO: Record<'ethernet' | 'ethernetIp' | 'ethercat', string[]> = {
+  /** 汎用 Ethernet（TCP/IP。KV の上位リンク・MC プロトコルなど） */
+  ethernet: ['ethernet'],
+  /** EtherNet/IP 対応の Ethernet ポート */
+  ethernetIp: ['ethernet', 'ethernet-ip'],
+  ethercat: ['ethercat'],
+};
 
 /* ------------------------------------------------------------------ */
 /* 脱着式ネジ端子台（KV-B16XC など 18 端子・2列千鳥）                    */
@@ -364,7 +514,18 @@ export function staggeredBlock(opts: {
 /* MIL コネクタタイプのユニット（KV-C64XC / C32TD / SIR32XT など）       */
 /* ------------------------------------------------------------------ */
 
-export interface MilUnitSpec {
+/** ユニットの電気的な定義（MIL・ネジ端子台タイプ共通） */
+interface UnitElectrical {
+  /** 入出力の文脈（入力 COM の受電条件・出力の信号の種類） */
+  io?: IoContext;
+  /** 内部経路（COM どうしの短絡、出力 ON の経路など） */
+  links?: InternalLink[];
+  params?: ParamDef[];
+  bus?: BusSpec;
+  commonLimits?: CommonLimit[];
+}
+
+export interface MilUnitSpec extends UnitElectrical {
   type: string;
   model: string;
   name: string;
@@ -373,8 +534,8 @@ export interface MilUnitSpec {
   width: number;
   height?: number;
   connectors: { id: string; cx: number; cy: number; poles: number; label: string; tag?: string }[];
-  pins: IoPoint[];
-  links?: { from: string; to: string }[];
+  /** ピン（IoPoint から作る。ピンごとに手を加える場合はピン定義を返す関数） */
+  pins: IoPoint[] | ((p: ParamValues) => PinDef[]);
   /** 本体の上に重ねて描く要素（スイッチ・LED など） */
   extra?: string;
   /** 型式の文字サイズ */
@@ -413,12 +574,15 @@ export function buildMilUnit(s: MilUnitSpec): DeviceDefinition {
         y: c.cy,
         side: 'bottom',
         role: 'connector',
-        connector: { kind: `MIL${c.poles}`, pins: c.poles, width: 23 },
+        connector: milConnector(c.poles),
         optional: true,
       }),
     ),
-    pins: toPins(s.pins),
+    pins: typeof s.pins === 'function' ? s.pins : ioPins(s.pins, s.io),
     links: s.links,
+    ...(s.params ? { params: s.params } : {}),
+    ...(s.bus ? { bus: s.bus } : {}),
+    ...(s.commonLimits ? { commonLimits: s.commonLimits } : {}),
   };
 }
 
@@ -426,7 +590,7 @@ export function buildMilUnit(s: MilUnitSpec): DeviceDefinition {
 /* 18端子 ネジ端子台タイプのユニット（KV-B16XC / B16TD / B16RC など）    */
 /* ------------------------------------------------------------------ */
 
-export interface BlockUnitSpec {
+export interface BlockUnitSpec extends UnitElectrical {
   type: string;
   model: string;
   name: string;
@@ -437,9 +601,12 @@ export interface BlockUnitSpec {
   right?: string[];
   /** 端子台が複数ある場合（KV-TF40 など）。x は端子台の左端、w は幅 */
   blocks?: { x: number; w: number; left: string[]; right: string[] }[];
-  /** 端子ごとの表示名と種類（print は端子台の印字。省略時は ID） */
-  points: Record<string, { label: string; kind: IoKind; print?: string }>;
-  links?: { from: string; to: string }[];
+  /**
+   * 端子ごとの種類と表示（print は端子台の印字。省略時は ID）。
+   * 入出力点は index（先頭からの点数）からリレー番号のラベルを作る。
+   * signal を書いた端子はそれを優先する（アナログ入出力など）。
+   */
+  points: Record<string, Omit<IoPoint, 'id'> & { signal?: SignalSpec }>;
   /** 左上の小窓（'switch' は 24V/5V 切替スイッチ、'none' は小窓のみ、'off' は描かない） */
   window?: 'switch' | 'none' | 'off';
   /** 左下の表示（IN / OUT / I/O） */
@@ -491,13 +658,16 @@ export function buildBlockUnit(s: BlockUnitSpec): DeviceDefinition {
   ${blocks.map(({ b, block }) => `<rect x="${b.x - 2.5}" y="21" width="2.5" height="${+(block.height + 2).toFixed(2)}" rx="1" fill="#1a1b1d"/>${block.svg}`).join('')}
   ${s.extra ?? ''}
   ${text(8.5, 172, s.tag, 3.6, '#b9bcc1')}`;
-  const terminals: TerminalDef[] = blocks.flatMap(({ b, block }) =>
-    [...b.left, ...b.right].map((id) => {
-      const p = block.pos[id];
+  const layout = blocks.flatMap(({ b, block }) => [...b.left, ...b.right].map((id) => ({ id, pos: block.pos[id] })));
+  const terminals = (p: ParamValues): TerminalDef[] =>
+    layout.map(({ id, pos }) => {
       const pt = s.points[id];
-      return { id, label: pt.label, x: p.x, y: p.y, side: p.side, ...ioRole(pt.kind), optional: true };
-    }),
-  );
+      const e = ioProps({ id, ...pt }, p, s.io);
+      // 印字と意味が違う端子は、印字を note に添える
+      const print = pt.print ?? id;
+      const note = e.label === print ? e.note : [e.note, `端子台の印字 ${print}`].filter(Boolean).join('。');
+      return { id, x: pos.x, y: pos.y, side: pos.side, ...e, ...(note ? { note } : {}), ...(pt.signal ? { signal: pt.signal } : {}) };
+    });
   return {
     type: s.type,
     name: s.name,
@@ -511,5 +681,8 @@ export function buildBlockUnit(s: BlockUnitSpec): DeviceDefinition {
     svg,
     terminals,
     links: s.links,
+    ...(s.params ? { params: s.params } : {}),
+    ...(s.bus ? { bus: s.bus } : {}),
+    ...(s.commonLimits ? { commonLimits: s.commonLimits } : {}),
   };
 }

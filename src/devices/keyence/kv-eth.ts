@@ -3,7 +3,7 @@
  * 上部の表示部に PORT1/PORT2 の LINK/ACT・STATUS LED、正面に RJ-45 ポートが縦に 2 個（上が PORT1、下が PORT2）。
  */
 import type { DeviceDefinition } from '../types';
-import { kvBody2, kvDefs, rj45, text } from './kv-parts';
+import { kvBody2, kvDefs, kvUnitBus, rj45, rj45Connector, text } from './kv-parts';
 
 export function buildKvEthUnit(s: {
   type: string;
@@ -15,6 +15,10 @@ export function buildKvEthUnit(s: {
   width: number;
   /** 追加の描画（CARD スロットなど） */
   extra?: string;
+  /** ポートの通信プロトコル（両ポート共通） */
+  protocols: string[];
+  /** 内部消費電流[mA] */
+  mA: number;
 }): DeviceDefinition {
   const W = s.width;
   const H = 185;
@@ -52,8 +56,9 @@ export function buildKvEthUnit(s: {
     height: H,
     svg,
     terminals: [
-      { id: 'PORT1', label: 'PORT1 (RJ45)', x: P1.x, y: P1.y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 22 }, optional: true },
-      { id: 'PORT2', label: 'PORT2 (RJ45)', x: P2.x, y: P2.y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 22 }, optional: true },
+      { id: 'PORT1', label: 'PORT1 (RJ45)', x: P1.x, y: P1.y, side: 'bottom', role: 'connector', connector: rj45Connector(s.protocols), optional: true },
+      { id: 'PORT2', label: 'PORT2 (RJ45)', x: P2.x, y: P2.y, side: 'bottom', role: 'connector', connector: rj45Connector(s.protocols), optional: true },
     ],
+    bus: kvUnitBus(s.mA),
   };
 }

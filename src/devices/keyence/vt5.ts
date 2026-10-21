@@ -7,6 +7,7 @@
  * 背面の端子の並びは VT5-W07 の図にそろえた概念図で、実機の配置とは異なる場合がある。
  */
 import type { DeviceDefinition } from '../types';
+import { PROTO, rj45Connector } from './kv-parts';
 
 export interface Vt5Spec {
   model: string;
@@ -208,7 +209,7 @@ export function buildVt5(s: Vt5Spec): DeviceDefinition {
       { id: 'FG', label: 'FG', x: POWER[0].x, y: PY, side: 'bottom', role: 'ground' },
       { id: '24V+', label: '+', x: POWER[1].x, y: PY, side: 'bottom', role: 'input', accepts: acc('+') },
       { id: '24V-', label: '−', x: POWER[2].x, y: PY, side: 'bottom', role: 'input', accepts: acc('-') },
-      { id: 'LAN', x: LAN.x, y: LAN.y, side: 'bottom', role: 'connector', connector: { kind: 'RJ45', pins: 0, width: 20 }, optional: true },
+      { id: 'LAN', x: LAN.x, y: LAN.y, side: 'bottom', role: 'connector', connector: rj45Connector(PROTO.ethernet), optional: true },
     ],
     loadCurrent: s.current,
   };
