@@ -94,6 +94,25 @@ export function checkSignals(m: Model, push: Push) {
     }
   }
 
+  // 別の入力点どうしが同じネットにある（片方の信号がもう片方にも入ってしまう）
+  const inputsByNet = new Map<string, TerminalInfo[]>();
+  for (const inp of inputs) {
+    if (inp.terminal.signal!.kind !== 'dc' && inp.terminal.signal!.kind !== 'dry') continue;
+    const r = m.fixed.find(inp.key);
+    inputsByNet.set(r, [...(inputsByNet.get(r) ?? []), inp]);
+  }
+  for (const [, list] of inputsByNet) {
+    if (list.length < 2) continue;
+    push({
+      severity: 'warning',
+      rule: 'inputs-shorted',
+      message: `入力 ${list.map((i) => terminalName(m, i.key)).join(' と ')} が同じ電線でつながっています（別々の信号をつなぎます）`,
+      devices: [...new Set(list.map((i) => i.device.id))],
+      wires: wiresOfNet(m, list[0].key),
+      key: `inputs-shorted:${list.map((i) => i.key).join(',')}`,
+    });
+  }
+
   // 2線式センサー: 一方が入力点、もう一方がコモンの反対の極へ
   const twoWire = new Map<string, TerminalInfo[]>();
   for (const info of m.terminals.values()) {

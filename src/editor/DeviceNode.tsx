@@ -45,9 +45,38 @@ export function terminalTitle(t: TerminalDef): string {
   return `${t.label ?? t.id}${t.note ? ` ${t.note}` : ''}（${kind}）`;
 }
 
+/** リンクの相手（同じ名前のリンク）があるシート。クリックでそのシートのリンクへ移動する */
+function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: string; sheet: string; sheetName: string }[]; sheet: string; onJump: (id: string) => void }) {
+  const others = peers.filter((p) => p.id !== self);
+  // シートごとに 1 つにまとめる（このシートの相手は最後に）
+  const bySheet = new Map<string, { id: string; name: string }>();
+  for (const p of others) if (!bySheet.has(p.sheet)) bySheet.set(p.sheet, { id: p.id, name: p.sheet === sheet ? 'このシート' : p.sheetName });
+  const list = [...bySheet].sort((a, b) => Number(a[0] === sheet) - Number(b[0] === sheet));
+  return (
+    <div className={`link-peers${others.length ? '' : ' is-alone'}`}>
+      {list.length
+        ? list.map(([s, p]) => (
+            <button
+              key={s}
+              type="button"
+              className="link-peers__item nodrag"
+              title={`${p.name} の ${p.id} へ移動`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onJump(p.id);
+              }}
+            >
+              ⇢{p.name}
+            </button>
+          ))
+        : '相手なし'}
+    </div>
+  );
+}
+
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
-  const { deviceSeverity, params: effective, hosts } = useEditorContext();
+  const { deviceSeverity, params: effective, hosts, linkPeers, onJump } = useEditorContext();
   const severity = deviceSeverity.get(id);
   const params = effective.get(id) ?? data.params;
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
@@ -71,7 +100,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
 
   return (
     <div
-      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}`}
+      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}${def.netLabel ? ' is-link' : ''}`}
       style={{ width: def.width, height: def.height }}
     >
       <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
@@ -85,6 +114,14 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
         viewBox={`0 0 ${def.width} ${def.height}`}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
+      {def.netLabel && (
+        <LinkPeers
+          self={id}
+          peers={linkPeers.get(String(params?.[def.netLabel.param] ?? '').trim()) ?? []}
+          sheet={data.sheet}
+          onJump={onJump}
+        />
+      )}
       {terminals.map((t) => (
         <Handle
           key={t.id}

@@ -1,4 +1,6 @@
+import { getDeviceDefinition } from '../devices/registry';
 import type { Diagram, DiagramWire } from './diagram';
+import { splitCrossSheetWires } from './ops';
 
 /**
  * 起動時に表示するサンプル図面。
@@ -6,6 +8,9 @@ import type { Diagram, DiagramWire } from './diagram';
  * サーキットプロテクタから取る操作回路・DC24V 回路。
  * PLC（KEYENCE KV-8000）と入出力ユニットは MIL ケーブルで変換端子台へ、タッチパネル VT5 とは LAN でつなぐ。
  * 盤用ファン（FAN1）は「配置済み・未配線」の例として配線していない（AI 連携の練習用）。
+ *
+ * 回路の意味ごとに 4 枚のシートに分け、シートをまたぐ電線はリンク（同じ名前どうしがつながる記号）に置き換える。
+ * 入出力機器のシートには、入力 R000 の光電センサー（PH1）と、出力 R200 の表示灯（PL2）を置く。
  */
 
 let n = 0;
@@ -23,7 +28,13 @@ function w(from: string, to: string, wireNo: string, color: string, sizeSq: numb
   };
 }
 
-export const sampleDiagram: Diagram = {
+const base: Diagram = {
+  sheets: [
+    { id: 'S1', name: '主回路' },
+    { id: 'S2', name: 'DC24V電源' },
+    { id: 'S3', name: 'PLC' },
+    { id: 'S4', name: '入出力機器' },
+  ],
   devices: [
     { id: 'PS1', type: 'generic.power-source.3p200v', x: 100, y: 0 },
     { id: 'ELB1', type: 'mitsubishi.nv32-sv.3p', x: 40, y: 180, params: { ratedCurrent: 20 } },
@@ -32,15 +43,17 @@ export const sampleDiagram: Diagram = {
     { id: 'MC1', type: 'mitsubishi.s-t10.ac200v', x: 60, y: 680 },
     { id: 'THR1', type: 'mitsubishi.th-t18', x: 60, y: 860, params: { heater: 3.6 } },
     { id: 'M1', type: 'generic.motor.3p', x: 84, y: 1060, params: { ratedCurrent: 3.6 } },
-    { id: 'PSU1', type: 'generic.psu.dc24v', x: 420, y: 680, params: { outputCurrent: 5 } },
-    { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 300, y: 900 },
+    { id: 'PSU1', type: 'generic.psu.dc24v', x: 300, y: 120, params: { outputCurrent: 5 }, sheet: 'S2' },
+    { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 120, y: 380, sheet: 'S2' },
     { id: 'FAN1', type: 'generic.panel-fan.ac200v', x: 600, y: 470 },
-    { id: 'PLC1', type: 'keyence.kv-8000.cpu', x: 820, y: 700 },
-    { id: 'IN1', type: 'keyence.kv-c32xc.input', x: 933, y: 700, mount: { device: 'PLC1', slot: 1 } },
-    { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 979, y: 700, mount: { device: 'PLC1', slot: 2 } },
-    { id: 'TB3', type: 'generic.mil-terminal-block.34p', x: 800, y: 1000 },
-    { id: 'TB4', type: 'generic.mil-terminal-block.34p', x: 1080, y: 1000 },
-    { id: 'HMI1', type: 'keyence.vt5-w07', x: 1100, y: 330 },
+    { id: 'PLC1', type: 'keyence.kv-8000.cpu', x: 200, y: 260, sheet: 'S3' },
+    { id: 'IN1', type: 'keyence.kv-c32xc.input', x: 0, y: 0, mount: { device: 'PLC1', slot: 1 }, sheet: 'S3', comments: { 'CN1#1': 'PH1 ワーク検出' } },
+    { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 0, y: 0, mount: { device: 'PLC1', slot: 2 }, sheet: 'S3', comments: { 'CN1#1': 'PL2 運転中表示' } },
+    { id: 'TB3', type: 'generic.mil-terminal-block.34p', x: 120, y: 620, sheet: 'S3' },
+    { id: 'TB4', type: 'generic.mil-terminal-block.34p', x: 420, y: 620, sheet: 'S3' },
+    { id: 'HMI1', type: 'keyence.vt5-w07', x: 520, y: 0, sheet: 'S3' },
+    { id: 'PH1', type: 'keyence.pz-g41', x: 120, y: 120, sheet: 'S4' },
+    { id: 'PL2', type: 'generic.pilot-lamp.dc24v', x: 420, y: 140, sheet: 'S4' },
   ],
   wires: [
     // 一次側
@@ -77,6 +90,12 @@ export const sampleDiagram: Diagram = {
     // 入力ユニットのコモン（+24V）、出力ユニットのコモン（0V）
     w('PLC1:24V+', 'TB3:33', 'P24', 'blue', 0.75),
     w('PLC1:24V-', 'TB4:33', 'N24', 'blue', 0.75),
+    // 入出力機器（R000: 光電センサー、R200: 表示灯）
+    w('PSU1:+V1', 'PH1:BN', 'P24', 'blue', 0.75),
+    w('PSU1:-V1', 'PH1:BU', 'N24', 'blue', 0.75),
+    w('TB3:1', 'PH1:BK', 'R000', 'blue', 0.75),
+    w('PSU1:+V1', 'PL2:X1', 'P24', 'blue', 0.75),
+    w('TB4:1', 'PL2:X2', 'R200', 'blue', 0.75),
     // MIL ケーブル・LAN ケーブル
     { id: 'C1', from: { device: 'IN1', terminal: 'CN1' }, to: { device: 'TB3', terminal: 'CN' }, wireNo: 'CBL-IN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
     { id: 'C2', from: { device: 'OUT1', terminal: 'CN1' }, to: { device: 'TB4', terminal: 'CN' }, wireNo: 'CBL-OUT1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
@@ -88,3 +107,5 @@ export const sampleDiagram: Diagram = {
     w('PLC1:FG', 'HMI1:FG', 'E', 'green', 2),
   ],
 };
+
+export const sampleDiagram: Diagram = splitCrossSheetWires(base, getDeviceDefinition);

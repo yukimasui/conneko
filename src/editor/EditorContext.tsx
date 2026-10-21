@@ -25,6 +25,10 @@ export interface EditorContextValue {
   params: Map<string, ParamValues | undefined>;
   /** ユニットを装着している親の機器ID */
   hosts: Set<string>;
+  /** リンクの名前 → そのリンクを置いた場所 */
+  linkPeers: Map<string, { id: string; sheet: string; sheetName: string }[]>;
+  /** 機器へ移動する（シートを切り替えて選択する） */
+  onJump: (deviceId: string) => void;
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -35,6 +39,8 @@ export const EditorContext = createContext<EditorContextValue>({
   issues: [],
   params: new Map(),
   hosts: new Set(),
+  linkPeers: new Map(),
+  onJump: () => {},
 });
 
 export const useEditorContext = () => useContext(EditorContext);

@@ -21,26 +21,33 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import type { ParamValues, TerminalSide } from './devices/types';
+import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
 import { FAN_LENGTH } from './editor/CableGraphics';
 import { EditorContext, type WireGeometry } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
+import { IoDialog } from './editor/IoDialog';
 import { IssuePanel } from './editor/IssuePanel';
 import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { assignLanes, stubLength, type LaneInput } from './editor/routing';
+import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
+import { ioHosts } from './model/io';
+import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
   nextWireId,
   parseDiagram,
+  sheetsOf,
   toDiagramFile,
   type Diagram,
   type DiagramSettings,
   type Mount,
+  type Sheet,
 } from './model/diagram';
 import { sampleDiagram } from './model/sample';
 
@@ -55,7 +62,7 @@ function worst(map: Map<string, Severity>, id: string, s: Severity) {
 
 /** 位置を除いた図面の内容（チェック結果の再計算を、機器の移動中に行わないためのキー） */
 function topologyKey(d: Diagram) {
-  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount]), d.wires.map((w) => ({ ...w, bend: undefined })), d.settings]);
+  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments]), d.wires.map((w) => ({ ...w, bend: undefined })), d.settings, d.sheets]);
 }
 
 /**
@@ -87,6 +94,10 @@ function Editor() {
   const [nodes, setNodesRaw] = useState<DeviceFlowNode[]>(() => arrangeMounted(initial.nodes));
   const [edges, setEdges, onEdgesChange] = useEdgesState<WireFlowEdge>(initial.edges);
   const [settings, setSettings] = useState<DiagramSettings>(sampleDiagram.settings ?? {});
+  const [sheets, setSheets] = useState<Sheet[]>(() => sheetsOf(sampleDiagram));
+  const [sheet, setSheet] = useState<string>(() => sheetsOf(sampleDiagram)[0].id);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [ioDevice, setIoDevice] = useState<string | null>(null);
   // 機器の変更のたびに、装着したユニットを親に合わせて並べ直す
   const setNodes = useCallback((update: DeviceFlowNode[] | ((ns: DeviceFlowNode[]) => DeviceFlowNode[])) => {
     setNodesRaw((ns) => arrangeMounted(typeof update === 'function' ? update(ns) : update));
@@ -109,7 +120,7 @@ function Editor() {
   }, []);
 
   // --- チェック ---
-  const diagram = useMemo(() => ({ ...flowToDiagram(nodes, edges), settings }), [nodes, edges, settings]);
+  const diagram = useMemo(() => ({ ...flowToDiagram(nodes, edges, sheets), settings }), [nodes, edges, settings, sheets]);
   const topo = topologyKey(diagram);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const issues = useMemo(() => checkDiagram(diagram, getDeviceDefinition), [topo]);
@@ -128,7 +139,8 @@ function Editor() {
 
   // --- 配線のスタブ長とレーン（重なり回避） ---
   const { lanes, geometry } = useMemo(() => {
-    const byId = new Map(nodes.map((n) => [n.id, n]));
+    // 表示中のシートの電線だけで重なりを避ける
+    const byId = new Map(nodes.filter((n) => n.data.sheet === sheet).map((n) => [n.id, n]));
     const inputs: LaneInput[] = [];
     const geometry = new Map<string, WireGeometry>();
     for (const e of edges) {
@@ -151,7 +163,62 @@ function Editor() {
       inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend });
     }
     return { lanes: assignLanes(inputs), geometry };
-  }, [nodes, edges, resolvedOf]);
+  }, [nodes, edges, resolvedOf, sheet]);
+
+  // --- シートと移動 ---
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const edgesRef = useRef(edges);
+  edgesRef.current = edges;
+
+  /** シートを切り替え、そのシートの機器（ids を指定すればそれ）が見えるように表示する */
+  const showSheet = useCallback(
+    (id: string, ids?: string[]) => {
+      setSheet(id);
+      const targets = ids ?? nodesRef.current.filter((n) => n.data.sheet === id).map((n) => n.id);
+      if (targets.length) {
+        window.setTimeout(() => fitView({ nodes: targets.map((x) => ({ id: x })), padding: ids ? 0.5 : 0.15, duration: 350, maxZoom: ids ? 1.3 : 1.5 }), 60);
+      }
+    },
+    [fitView],
+  );
+
+  const switchSheet = useCallback(
+    (id: string) => {
+      setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
+      setEdges((es) => es.map((e) => (e.selected ? { ...e, selected: false } : e)));
+      showSheet(id);
+    },
+    [setNodes, setEdges, showSheet],
+  );
+
+  /** 機器へ移動する（シートを切り替えて選択する） */
+  const focusDevice = useCallback(
+    (id: string) => {
+      const n = nodesRef.current.find((x) => x.id === id);
+      if (!n) return;
+      setNodes((ns) => ns.map((x) => (x.selected !== (x.id === id) ? { ...x, selected: x.id === id } : x)));
+      setEdges((es) => es.map((e) => (e.selected ? { ...e, selected: false } : e)));
+      showSheet(n.data.sheet, [id]);
+    },
+    [setNodes, setEdges, showSheet],
+  );
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const linkPeers = useMemo(() => {
+    const out = new Map<string, { id: string; sheet: string; sheetName: string }[]>();
+    for (const d of diagram.devices) {
+      if (d.type !== LINK_TYPE) continue;
+      const name = String(d.params?.name ?? '').trim();
+      const sheetId = d.sheet ?? sheets[0].id;
+      out.set(name, [...(out.get(name) ?? []), { id: d.id, sheet: sheetId, sheetName: sheets.find((s) => s.id === sheetId)?.name ?? '' }]);
+    }
+    return out;
+  }, [topo]);
+
+  // I/O を持つ PLC（親と装着したユニット）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ioDevices = useMemo(() => new Set(ioHosts(diagram, getDeviceDefinition).flatMap((h) => mountFamily(diagram, h))), [topo]);
 
   const context = useMemo(() => {
     const deviceSeverity = new Map<string, Severity>();
@@ -160,8 +227,105 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()) };
-  }, [issues, lanes, geometry, params, bus]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice };
+  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice]);
+
+  // シートごとの最も重い指摘（タブに印を付ける）
+  const sheetSeverity = useMemo(() => {
+    const bySheet = new Map<string, Severity>();
+    const sheetOfDevice = new Map(nodes.map((n) => [n.id, n.data.sheet]));
+    const sheetOfWire = new Map(edges.map((e) => [e.id, sheetOfDevice.get(e.source)]));
+    for (const i of issues) {
+      for (const s of new Set([...i.devices.map((d) => sheetOfDevice.get(d)), ...i.wires.map((w) => sheetOfWire.get(w))])) {
+        if (s) worst(bySheet, s, i.severity);
+      }
+    }
+    return bySheet;
+  }, [issues, nodes, edges]);
+
+  const sheetCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of nodes) counts.set(n.data.sheet, (counts.get(n.data.sheet) ?? 0) + 1);
+    return counts;
+  }, [nodes]);
+
+  // 表示中のシートの機器・電線だけを描く（ほかは hidden）
+  const shownNodes = useMemo(() => nodes.map((n) => (n.data.sheet === sheet ? n : { ...n, hidden: true })), [nodes, sheet]);
+  const shownEdges = useMemo(() => {
+    const visible = new Set(nodes.filter((n) => n.data.sheet === sheet).map((n) => n.id));
+    return edges.map((e) => (visible.has(e.source) && visible.has(e.target) ? e : { ...e, hidden: true }));
+  }, [nodes, edges, sheet]);
+
+  /** 編集操作の結果（Diagram）を、選択状態などを保ったまま反映する */
+  const applyDiagram = useCallback(
+    (next: Diagram, message?: string) => {
+      const flow = diagramToFlow(next);
+      setNodes((ns) => {
+        const old = new Map(ns.map((n) => [n.id, n]));
+        return flow.nodes.map((n) => {
+          const o = old.get(n.id);
+          return o ? { ...o, position: n.position, data: n.data, draggable: n.draggable ?? true } : n;
+        });
+      });
+      setEdges((es) => {
+        const old = new Map(es.map((e) => [e.id, e]));
+        return flow.edges.map((e) => {
+          const o = old.get(e.id);
+          return o ? { ...o, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, data: e.data } : e;
+        });
+      });
+      setSheets(sheetsOf(next));
+      if (message) notify(message);
+    },
+    [setNodes, setEdges, notify],
+  );
+
+  // --- シートの編集 ---
+  const addSheet = useCallback(() => {
+    const id = nextSheetId({ devices: [], wires: [], sheets });
+    setSheets((ss) => [...ss, { id, name: `シート${ss.length + 1}` }]);
+    switchSheet(id);
+  }, [sheets, switchSheet]);
+
+  const deleteSheet = useCallback(
+    (id: string) => {
+      const count = nodes.filter((n) => n.data.sheet === id).length;
+      const name = sheets.find((s) => s.id === id)?.name;
+      if (count && !window.confirm(`シート「${name}」と、そこにある ${count} 台の機器を削除しますか？`)) return;
+      const next = removeSheet(diagram, id);
+      applyDiagram(next);
+      if (sheet === id) switchSheet(sheetsOf(next)[0].id);
+    },
+    [nodes, sheets, diagram, applyDiagram, sheet, switchSheet],
+  );
+
+  const moveSheetTab = useCallback((id: string, delta: -1 | 1) => {
+    setSheets((ss) => {
+      const i = ss.findIndex((s) => s.id === id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= ss.length) return ss;
+      const out = [...ss];
+      [out[i], out[j]] = [out[j], out[i]];
+      return out;
+    });
+  }, []);
+
+  const moveDevicesToSheet = useCallback(
+    (ids: string[], sheetId: string) => {
+      const name = sheets.find((s) => s.id === sheetId)?.name ?? sheetId;
+      applyDiagram(moveToSheet(diagram, ids, sheetId, getDeviceDefinition), `${ids.join(', ')} をシート「${name}」へ移しました（またがる電線はリンクにしました）`);
+    },
+    [sheets, diagram, applyDiagram],
+  );
+
+  const moveToNewSheet = useCallback(
+    (ids: string[]) => {
+      const id = nextSheetId({ devices: [], wires: [], sheets });
+      const withSheet = { ...diagram, sheets: [...sheets, { id, name: `シート${sheets.length + 1}` }] };
+      applyDiagram(moveToSheet(withSheet, ids, id, getDeviceDefinition), `${ids.join(', ')} を新しいシートへ移しました`);
+    },
+    [sheets, diagram, applyDiagram],
+  );
 
   // --- 機器の追加 ---
   const addDevice = useCallback(
@@ -182,13 +346,13 @@ function Editor() {
             id,
             type: 'device',
             position: { x: Math.round(pos.x - def.width / 2), y: Math.round(pos.y - def.height / 2) },
-            data: { deviceType: type },
+            data: { deviceType: type, sheet },
             selected: true,
           },
         ];
       });
     },
-    [screenToFlowPosition, setNodes],
+    [screenToFlowPosition, setNodes, sheet],
   );
 
   const onDrop = useCallback(
@@ -278,7 +442,9 @@ function Editor() {
           if (n.id !== id) return n;
           const { mount: _, ...rest } = n.data;
           const { ioIn: _i, ioOut: _o, ...params } = (n.data.params ?? {}) as ParamValues;
-          const data = { ...rest, ...(Object.keys(params).length ? { params } : { params: undefined }), ...(mount ? { mount } : {}) };
+          // 装着したユニットは親と同じシートに置く
+          const hostSheet = mount ? ns.find((x) => x.id === mount.device)?.data.sheet : undefined;
+          const data = { ...rest, ...(Object.keys(params).length ? { params } : { params: undefined }), ...(mount ? { mount } : {}), sheet: hostSheet ?? rest.sheet };
           return mount
             ? { ...n, data, draggable: false }
             : { ...n, data, draggable: true, zIndex: undefined, position: { x: n.position.x, y: n.position.y + 60 } };
@@ -311,21 +477,103 @@ function Editor() {
       }
       setNodes((ns) => ns.map((n) => ({ ...n, selected: issue.devices.includes(n.id) && issue.wires.length === 0 })));
       setEdges((es) => es.map((e) => ({ ...e, selected: wireSet.has(e.id) && e.id === issue.wires[0] })));
-      if (nodeIds.size) fitView({ nodes: [...nodeIds].map((id) => ({ id })), padding: 0.4, duration: 400, maxZoom: 1.5 });
+      // 指摘のある機器のシートへ切り替える（複数のシートにまたがる場合は最初の機器のシート）
+      const first = nodes.find((n) => nodeIds.has(n.id));
+      if (first) {
+        const ids = [...nodeIds].filter((id) => nodes.find((n) => n.id === id)?.data.sheet === first.data.sheet);
+        showSheet(first.data.sheet, ids);
+      }
     },
-    [edges, setNodes, setEdges, fitView],
+    [edges, nodes, setNodes, setEdges, showSheet],
+  );
+
+  const selectWire = useCallback(
+    (id: string) => {
+      const e = edges.find((x) => x.id === id);
+      const src = e && nodes.find((n) => n.id === e.source);
+      if (!e || !src) return;
+      setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)));
+      setEdges((es) => es.map((x) => (x.selected !== (x.id === id) ? { ...x, selected: x.id === id } : x)));
+      showSheet(src.data.sheet, [e.source, e.target]);
+    },
+    [edges, nodes, setNodes, setEdges, showSheet],
+  );
+
+  // --- 右クリックメニュー ---
+  const onNodeContextMenu = useCallback(
+    (e: React.MouseEvent, node: DeviceFlowNode) => {
+      e.preventDefault();
+      const def = getDeviceDefinition(node.data.deviceType);
+      const others = sheets.filter((s) => s.id !== node.data.sheet);
+      const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
+      const peers = (linkPeers.get(name) ?? []).filter((p) => p.id !== node.id);
+      const items: MenuItem[] = [
+        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setIoDevice(node.id) }] : []),
+        ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
+        {
+          label: node.data.mount ? '別のシートへ移動（親と一緒に）' : '別のシートへ移動',
+          children: [
+            ...others.map((s) => ({ label: s.name, onClick: () => moveDevicesToSheet([node.id], s.id) })),
+            { label: '新しいシート', onClick: () => moveToNewSheet([node.id]) },
+          ],
+        },
+        { label: '削除', danger: true, separator: true, hint: 'Delete', onClick: () => deleteElements({ nodes: [{ id: node.id }] }) },
+      ];
+      setMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [sheets, linkPeers, ioDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements],
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (e: React.MouseEvent, edge: WireFlowEdge) => {
+      e.preventDefault();
+      const isCable = edge.data?.wireType === CABLE_WIRE_TYPE;
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          {
+            label: 'リンクで分ける（電線を図から消す）',
+            disabled: isCable,
+            onClick: () => applyDiagram(splitWireWithLinks(diagram, edge.id, getDeviceDefinition), '電線を両端のリンクに置き換えました'),
+          },
+          { label: '削除', danger: true, separator: true, hint: 'Delete', onClick: () => deleteElements({ edges: [{ id: edge.id }] }) },
+        ],
+      });
+    },
+    [diagram, applyDiagram, deleteElements],
+  );
+
+  const onPaneContextMenu = useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      e.preventDefault();
+      const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          { label: 'ここにリンクを置く', onClick: () => addDevice(LINK_TYPE, at) },
+          { label: 'シートを追加', separator: true, onClick: addSheet },
+        ],
+      });
+    },
+    [screenToFlowPosition, addDevice, addSheet],
   );
 
   // --- ファイル入出力 ---
   const loadDiagram = useCallback(
-    (d: Diagram) => {
+    (raw: Diagram) => {
+      // シートをまたぐ電線（AI が書いたものなど）はリンクに置き換える
+      const d = splitCrossSheetWires(raw, getDeviceDefinition);
       const flow = diagramToFlow(d);
       setNodes(flow.nodes);
       setEdges(flow.edges);
       setSettings(d.settings ?? {});
-      window.setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+      setSheets(sheetsOf(d));
+      setIoDevice(null);
+      showSheet(sheetsOf(d)[0].id);
     },
-    [setNodes, setEdges, fitView],
+    [setNodes, setEdges, showSheet],
   );
 
   const newDiagram = () => {
@@ -420,16 +668,31 @@ function Editor() {
           />
         </header>
         <Palette onAdd={(type) => addDevice(type)} />
-        <main className="canvas" ref={canvasRef} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <main className="canvas" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+          <SheetTabs
+            sheets={sheets}
+            current={sheet}
+            counts={sheetCounts}
+            severity={sheetSeverity}
+            onSelect={switchSheet}
+            onAdd={addSheet}
+            onRename={(id, name) => setSheets((ss) => ss.map((s) => (s.id === id ? { ...s, name } : s)))}
+            onDelete={deleteSheet}
+            onMove={moveSheetTab}
+          />
+          <div className="canvas__flow" ref={canvasRef}>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={shownNodes}
+            edges={shownEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             isValidConnection={isValidConnection}
+            onNodeContextMenu={onNodeContextMenu}
+            onEdgeContextMenu={onEdgeContextMenu}
+            onPaneContextMenu={onPaneContextMenu}
             connectionMode={ConnectionMode.Loose}
             defaultEdgeOptions={{ zIndex: 1001 }}
             // 装着したユニットをベースユニットの上に描くため、選択しても重なり順を変えない
@@ -449,6 +712,7 @@ function Editor() {
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => (context.deviceSeverity.get(n.id) === 'error' ? '#ef4444' : '#94a3b8')} />
           </ReactFlow>
           {toast && <div className="toast">{toast}</div>}
+          </div>
         </main>
         <Inspector
           node={selectedNode}
@@ -463,11 +727,28 @@ function Editor() {
           onRenameDevice={renameDevice}
           onParamChange={changeParam}
           onMountChange={changeMount}
+          sheets={sheets}
+          onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
+          ioDevices={ioDevices}
+          onEditIo={setIoDevice}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
-        <IssuePanel issues={issues} onSelect={selectIssue} />
+        <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {ioDevice && (
+        <IoDialog
+          diagram={diagram}
+          deviceId={ioDevice}
+          onApply={applyDiagram}
+          onJump={(id) => {
+            setIoDevice(null);
+            focusDevice(id);
+          }}
+          onClose={() => setIoDevice(null)}
+        />
+      )}
       {modal && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>

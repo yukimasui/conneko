@@ -1,30 +1,59 @@
 import { useState } from 'react';
 import type { CheckIssue, Severity } from '../check/checkDiagram';
+import type { Diagram } from '../model/diagram';
+import { ConnectionList } from './ConnectionList';
 
 const SEVERITY_NAMES: Record<Severity, string> = { error: 'エラー', warning: '警告', info: '情報' };
 
-export function IssuePanel({ issues, onSelect }: { issues: CheckIssue[]; onSelect: (issue: CheckIssue) => void }) {
+type Tab = 'issues' | 'connections';
+
+interface Props {
+  issues: CheckIssue[];
+  diagram: Diagram;
+  onSelect: (issue: CheckIssue) => void;
+  onSelectWire: (id: string) => void;
+  onJump: (deviceId: string) => void;
+}
+
+/** 画面下のパネル（配線チェックの結果と、接続リスト） */
+export function IssuePanel({ issues, diagram, onSelect, onSelectWire, onJump }: Props) {
   const [open, setOpen] = useState(true);
+  const [tab, setTab] = useState<Tab>('issues');
   const count = (s: Severity) => issues.filter((i) => i.severity === s).length;
+  const show = (t: Tab) => {
+    if (open && tab === t) setOpen(false);
+    else {
+      setTab(t);
+      setOpen(true);
+    }
+  };
 
   return (
     <section className={`issues${open ? ' is-open' : ''}`}>
-      <button type="button" className="issues__header" onClick={() => setOpen(!open)}>
-        <span className="panel-title">配線チェック</span>
-        {issues.length === 0 ? (
-          <span className="badge badge--ok">問題なし</span>
-        ) : (
-          (['error', 'warning', 'info'] as Severity[]).map((s) =>
-            count(s) ? (
-              <span key={s} className={`badge badge--${s}`}>
-                {SEVERITY_NAMES[s]} {count(s)}
-              </span>
-            ) : null,
-          )
-        )}
-        <span className="issues__toggle">{open ? '▾' : '▴'}</span>
-      </button>
-      {open && issues.length > 0 && (
+      <div className="issues__header">
+        <button type="button" className={`issues__tab${tab === 'issues' && open ? ' is-active' : ''}`} onClick={() => show('issues')}>
+          <span className="panel-title">配線チェック</span>
+          {issues.length === 0 ? (
+            <span className="badge badge--ok">問題なし</span>
+          ) : (
+            (['error', 'warning', 'info'] as Severity[]).map((s) =>
+              count(s) ? (
+                <span key={s} className={`badge badge--${s}`}>
+                  {SEVERITY_NAMES[s]} {count(s)}
+                </span>
+              ) : null,
+            )
+          )}
+        </button>
+        <button type="button" className={`issues__tab${tab === 'connections' && open ? ' is-active' : ''}`} onClick={() => show('connections')}>
+          <span className="panel-title">接続リスト</span>
+          <span className="badge">{diagram.wires.length}</span>
+        </button>
+        <button type="button" className="issues__toggle" onClick={() => setOpen(!open)} aria-label={open ? '閉じる' : '開く'}>
+          {open ? '▾' : '▴'}
+        </button>
+      </div>
+      {open && tab === 'issues' && issues.length > 0 && (
         <ul className="issues__list">
           {issues.map((i) => (
             <li key={i.key}>
@@ -36,6 +65,7 @@ export function IssuePanel({ issues, onSelect }: { issues: CheckIssue[]; onSelec
           ))}
         </ul>
       )}
+      {open && tab === 'connections' && <ConnectionList diagram={diagram} onSelectWire={onSelectWire} onJump={onJump} />}
     </section>
   );
 }

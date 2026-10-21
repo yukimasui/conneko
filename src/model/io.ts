@@ -9,7 +9,7 @@ import { buildModel, key } from '../check/model';
 import { functionsOf, resolveDevice } from '../devices/resolve';
 import type { DeviceDefinition, SignalKind } from '../devices/types';
 import { CABLE_WIRE_TYPE, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type TerminalRef } from './diagram';
-import { connectTerminals, LINK_TYPE, mountFamily, type WireAttrs } from './ops';
+import { connectTerminals, LINK_TYPE, mountFamily, uniqueLinkName, type WireAttrs } from './ops';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
 
@@ -157,7 +157,7 @@ export function setComment(d: Diagram, device: string, terminal: string, text: s
  */
 export function connectIo(d: Diagram, point: IoPoint, target: TerminalRef, attrs: Omit<WireAttrs, 'wireNo'>, lookup: DefLookup): Diagram {
   if (!point.endpoint) return d;
-  let out = connectTerminals(d, point.endpoint, target, { ...attrs, wireNo: point.address }, lookup, point.address);
+  let out = connectTerminals(d, point.endpoint, target, { ...attrs, wireNo: point.address }, lookup, uniqueLinkName(d, point.address));
   if (!point.comment) {
     const dev = d.devices.find((x) => x.id === target.device);
     const def = dev && lookup(dev.type);

@@ -3,13 +3,17 @@
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { ParamValues } from '../devices/types';
-import type { Diagram, Mount } from '../model/diagram';
+import { sheetOf, type Diagram, type Mount } from '../model/diagram';
 
 export interface DeviceNodeData extends Record<string, unknown> {
   deviceType: string;
   params?: ParamValues;
   /** 増設ユニットの連結・ベースユニットへの装着 */
   mount?: Mount;
+  /** シートID */
+  sheet: string;
+  /** 端子・ピンごとのコメント */
+  comments?: Record<string, string>;
 }
 
 export interface WireEdgeData extends Record<string, unknown> {
@@ -29,7 +33,13 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
       id: d.id,
       type: 'device',
       position: { x: d.x, y: d.y },
-      data: { deviceType: d.type, ...(d.params ? { params: d.params } : {}), ...(d.mount ? { mount: d.mount } : {}) },
+      data: {
+        deviceType: d.type,
+        sheet: sheetOf(diagram, d),
+        ...(d.params ? { params: d.params } : {}),
+        ...(d.mount ? { mount: d.mount } : {}),
+        ...(d.comments ? { comments: d.comments } : {}),
+      },
       // 装着したユニットは親と一緒に動く（単独では動かさない）
       ...(d.mount ? { draggable: false } : {}),
     })),
@@ -51,8 +61,9 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
   };
 }
 
-export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[]): Diagram {
+export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sheets?: Diagram['sheets']): Diagram {
   return {
+    ...(sheets?.length ? { sheets } : {}),
     devices: nodes.map((n) => ({
       id: n.id,
       type: n.data.deviceType,
@@ -60,6 +71,8 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[]): D
       y: n.position.y,
       ...(n.data.params ? { params: n.data.params } : {}),
       ...(n.data.mount ? { mount: n.data.mount } : {}),
+      sheet: n.data.sheet,
+      ...(n.data.comments ? { comments: n.data.comments } : {}),
     })),
     wires: edges.map((e) => ({
       id: e.id,

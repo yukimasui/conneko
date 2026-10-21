@@ -5,7 +5,7 @@ import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
-import { CABLE_WIRE_TYPE, type Mount } from '../model/diagram';
+import { CABLE_WIRE_TYPE, type Mount, type Sheet } from '../model/diagram';
 import { terminalTitle } from './DeviceNode';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
@@ -25,6 +25,11 @@ interface Props {
   onRenameDevice: (oldId: string, newId: string) => string | null;
   onParamChange: (id: string, key: string, value: number | string) => void;
   onMountChange: (id: string, mount: Mount | undefined) => void;
+  sheets: Sheet[];
+  onSheetChange: (id: string, sheet: string) => void;
+  /** I/O を持つ PLC（親・ユニット）の機器ID */
+  ioDevices: Set<string>;
+  onEditIo: (id: string) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -257,7 +262,23 @@ export function Inspector(props: Props) {
             {def.bus && !def.bus.host && <MountField node={node} def={def} props={props} />}
             {def.bus?.host && <BusHostInfo id={node.id} bus={props.bus} />}
             {def.bus?.io && resolved && <IoHeadField node={node} def={def} params={resolved.params} props={props} />}
-            {def.params?.map((p) => (
+            {props.ioDevices.has(node.id) && (
+              <button type="button" className="primary" onClick={() => props.onEditIo(node.id)}>
+                I/O 割付・接続を編集…
+              </button>
+            )}
+            {def.params?.map((p) =>
+              p.input === 'text' ? (
+                <label key={p.key} className="field">
+                  <span>{p.label}</span>
+                  <input
+                    key={`${node.id}:${String(node.data.params?.[p.key] ?? p.default)}`}
+                    defaultValue={String(node.data.params?.[p.key] ?? p.default)}
+                    onBlur={(e) => props.onParamChange(node.id, p.key, e.target.value.trim())}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                  />
+                </label>
+              ) : (
               <label key={p.key} className="field">
                 <span>{p.label}</span>
                 <select
@@ -274,7 +295,20 @@ export function Inspector(props: Props) {
                   ))}
                 </select>
               </label>
-            ))}
+              ),
+            )}
+            {props.sheets.length > 1 && (
+              <label className="field">
+                <span>シート</span>
+                <select value={node.data.sheet} onChange={(e) => props.onSheetChange(node.id, e.target.value)}>
+                  {props.sheets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="field">
               <span>端子</span>
               <div className="terminal-list">
