@@ -1316,3 +1316,26 @@ textarea {
 .io-table tr.is-pickable:hover td {
   background: #eef4ff;
 }
+
+/* --- I/O の入れ替え --- */
+.io-swap {
+  padding: 1px 7px;
+  font-size: 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.io-swap.is-target:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.io-swap.is-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.io-table tr.is-swap td {
+  background: #fef9c3;
+}
+.io-banner.is-swap {
+  background: #e0f2fe;
+}

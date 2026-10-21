@@ -241,3 +241,43 @@ export function addTerminalBlock(d: Diagram, unitId: string, connectorId: string
   };
   return { ...d, devices: [...d.devices, tb], wires: [...d.wires, cable] };
 }
+
+/**
+ * 2 つの I/O 点の割付を入れ替える: 現場の機器への電線、コメント、線番（入出力番号）、入出力番号を名前にしたリンク。
+ * どちらも電線をつなぐ端子（ネジ端子・変換端子台）があること。
+ */
+export function swapIo(d: Diagram, a: IoPoint, b: IoPoint, lookup: DefLookup): Diagram {
+  if (!a.endpoint || !b.endpoint) return d;
+  const ea = a.endpoint;
+  const eb = b.endpoint;
+  const m = buildModel(d, lookup, noop);
+  const rootA = m.fixed.find(key(ea.device, ea.terminal));
+  const rootB = m.fixed.find(key(eb.device, eb.terminal));
+  const netOf = (r: TerminalRef) => m.fixed.find(key(r.device, r.terminal));
+  const same = (r: TerminalRef, e: TerminalRef) => r.device === e.device && r.terminal === e.terminal;
+  // 入出力番号（または「番号-2」など）を、相手の番号に置き換える
+  const rename = (text: string | undefined, root: string, from: string, to: string) => {
+    if (!text || (root !== rootA && root !== rootB)) return text;
+    return text === from || text.startsWith(`${from}-`) ? to + text.slice(from.length) : text;
+  };
+  const swapName = (text: string | undefined, root: string) =>
+    root === rootA ? rename(text, root, a.address, b.address) : root === rootB ? rename(text, root, b.address, a.address) : text;
+
+  const wires = d.wires.map((w) => {
+    if (w.wireType === CABLE_WIRE_TYPE) return w;
+    const root = netOf(w.from);
+    const move = (r: TerminalRef) => (same(r, ea) ? eb : same(r, eb) ? ea : r);
+    const wireNo = swapName(w.wireNo, root);
+    return { ...w, from: move(w.from), to: move(w.to), ...(wireNo ? { wireNo } : {}) };
+  });
+  const devices = d.devices.map((x) => {
+    if (x.type !== LINK_TYPE) return x;
+    const name = String(x.params?.name ?? '');
+    const next = swapName(name, netOf({ device: x.id, terminal: 'T' }));
+    return next === name ? x : { ...x, params: { ...x.params, name: next ?? '' } };
+  });
+  let out: Diagram = { ...d, devices, wires };
+  out = setComment(out, a.device, a.terminal, b.comment);
+  out = setComment(out, b.device, b.terminal, a.comment);
+  return out;
+}

@@ -5,7 +5,7 @@ import { resolveDevice } from '../devices/resolve';
 import type { DeviceDefinition, TerminalDef } from '../devices/types';
 
 const collator = new Intl.Collator('ja', { numeric: true });
-import { addTerminalBlock, connectIo, disconnectIo, ioSystem, setComment, type IoPoint } from '../model/io';
+import { addTerminalBlock, connectIo, disconnectIo, ioSystem, setComment, swapIo, type IoPoint } from '../model/io';
 import { sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
 import { SIGNAL_NAMES } from './DeviceNode';
 
@@ -238,6 +238,8 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
   const [onlyFree, setOnlyFree] = useState(false);
   const [picked, setPicked] = useState<TerminalRef | null>(null);
   const [dropRow, setDropRow] = useState<string | null>(null);
+  /** 入れ替え元の I/O 点 */
+  const [swapFrom, setSwapFrom] = useState<IoPoint | null>(null);
 
   if (!system || !system.units.length) {
     return (
@@ -303,6 +305,16 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
             })}
           </nav>
           <section className="io-table-wrap">
+            {swapFrom && (
+              <div className="io-banner is-swap">
+                <span>
+                  {swapFrom.address}（{swapFrom.comment || '接続なし'}）と入れ替える I/O の「⇄ ここ」を押してください。
+                </span>
+                <button type="button" onClick={() => setSwapFrom(null)}>
+                  やめる
+                </button>
+              </div>
+            )}
             <div className="io-toolbar">
               <input type="search" placeholder="番号・コメント・接続先で絞り込み" value={filter} onChange={(e) => setFilter(e.target.value)} />
               <label className="muted small">
@@ -331,13 +343,14 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                   <th>コメント</th>
                   <th>接続先</th>
                   <th>経由</th>
+                  <th title="2 つの I/O の接続先・コメントを入れ替える">入替</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((p) => (
                   <tr
                     key={pointKey(p)}
-                    className={`${p.dir === 'in' ? 'is-in' : 'is-out'}${dropRow === pointKey(p) ? ' is-drop' : ''}${picked && p.endpoint ? ' is-pickable' : ''}`}
+                    className={`${p.dir === 'in' ? 'is-in' : 'is-out'}${dropRow === pointKey(p) ? ' is-drop' : ''}${picked && p.endpoint ? ' is-pickable' : ''}${swapFrom && pointKey(swapFrom) === pointKey(p) ? ' is-swap' : ''}`}
                     onDragOver={(e) => {
                       if (!p.endpoint || !e.dataTransfer.types.includes(TERMINAL_MIME)) return;
                       e.preventDefault();
@@ -407,6 +420,37 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                       </div>
                     </td>
                     <td className="muted small">{p.via.join('・')}</td>
+                    <td>
+                      {swapFrom && pointKey(swapFrom) === pointKey(p) ? (
+                        <button type="button" className="io-swap is-active" onClick={() => setSwapFrom(null)} title="入れ替えをやめる">
+                          取消
+                        </button>
+                      ) : swapFrom ? (
+                        <button
+                          type="button"
+                          className="io-swap is-target"
+                          disabled={swapFrom.dir !== p.dir || !p.endpoint}
+                          onClick={() => {
+                            const from = swapFrom;
+                            setSwapFrom(null);
+                            onApply(swapIo(diagram, from, p, getDeviceDefinition), `${from.address} と ${p.address} を入れ替えました`);
+                          }}
+                          title={`${swapFrom.address} と入れ替える`}
+                        >
+                          ⇄ ここ
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="io-swap"
+                          disabled={!p.endpoint}
+                          onClick={() => setSwapFrom(p)}
+                          title="ほかの I/O と入れ替える（次に入れ替え先を選ぶ）"
+                        >
+                          ⇅
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

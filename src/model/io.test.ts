@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { checkDiagram } from '../check/checkDiagram';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import type { Diagram } from './diagram';
-import { addTerminalBlock, connectIo, disconnectIo, ioHosts, ioSystem, setComment } from './io';
-import { moveToSheet, splitCrossSheetWires, splitWireWithLinks } from './ops';
+import { addTerminalBlock, connectIo, disconnectIo, ioHosts, ioSystem, setComment, swapIo } from './io';
+import { moveToSheet, promoteLinkNames, splitCrossSheetWires, splitWireWithLinks } from './ops';
 
 const lookup = getDeviceDefinition;
 const attrs = { color: 'blue', sizeSq: 0.75, wireType: 'KIV' };
@@ -84,6 +84,35 @@ describe('I/O の一覧と接続', () => {
     expect(ioSystem(d, 'PLC1', lookup)!.units[0].points[0].comment).toBe('原点センサー');
     d = setComment(d, 'IN1', 'CN1#1', '');
     expect(d.devices.find((x) => x.id === 'IN1')!.comments).toBeUndefined();
+  });
+});
+
+describe('I/O の入れ替えとリンク名の昇格', () => {
+  const point = (d: Diagram, address: string) => ioSystem(d, 'PLC1', lookup)!.units[0].points.find((p) => p.address === address)!;
+
+  it('2 つの入力の接続先・コメント・線番・リンク名を入れ替える', () => {
+    let d = addTerminalBlock(base(), 'IN1', 'CN1', deviceDefinitions, lookup);
+    d = connectIo(d, point(d, 'R000'), { device: 'S1', terminal: 'BK' }, attrs, lookup);
+    d = swapIo(d, point(d, 'R000'), point(d, 'R001'), lookup);
+    expect(point(d, 'R000').connections).toEqual([]);
+    expect(point(d, 'R000').comment).toBe('');
+    expect(point(d, 'R001').connections.map((c) => c.name)).toEqual(['S1.BK']);
+    expect(point(d, 'R001').comment).toContain('S1');
+    expect(d.devices.filter((x) => x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['R001', 'R001']);
+    expect(d.wires.filter((w) => w.wireType !== 'CABLE').map((w) => w.wireNo)).toEqual(['R001', 'R001']);
+    expect(checkDiagram(d, lookup).filter((i) => i.rule.startsWith('link-') || i.rule === 'wire-no-duplicate')).toEqual([]);
+  });
+
+  it('リンク R000 を消すと、R000-2 が R000 に戻る', () => {
+    let d = addTerminalBlock(base(), 'IN1', 'CN1', deviceDefinitions, lookup);
+    // 相手のいないリンク R000 が残っているところへ R000 をつなぐと R000-2 になる
+    d = { ...d, devices: [...d.devices, { id: 'LK99', type: 'generic.link', x: 0, y: 0, sheet: 'S2', params: { name: 'R000', side: 'left' } }] };
+    d = connectIo(d, point(d, 'R000'), { device: 'S1', terminal: 'BK' }, attrs, lookup);
+    expect(d.devices.filter((x) => x.type === 'generic.link' && x.id !== 'LK99').map((x) => x.params?.name)).toEqual(['R000-2', 'R000-2']);
+    const removed = { ...d, devices: d.devices.filter((x) => x.id !== 'LK99') };
+    const out = promoteLinkNames(removed, ['R000']);
+    expect(out.devices.filter((x) => x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['R000', 'R000']);
+    expect(out.wires.filter((w) => w.wireType !== 'CABLE').map((w) => w.wireNo)).toEqual(['R000', 'R000']);
   });
 });
 

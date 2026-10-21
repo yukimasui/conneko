@@ -218,3 +218,33 @@ export function placeLinkAt(d: Diagram, ref: TerminalRef, name: string, at: { x:
   const wire: DiagramWire = { id: nextWireId(d.wires.map((w) => w.id)), from: ref, to: { device: id, terminal: 'T' }, ...attrs };
   return { ...d, devices: [...d.devices, device], wires: [...d.wires, wire] };
 }
+
+/** 「名前-番号」の形の名前の、元の名前と番号 */
+function splitSuffix(name: string): { base: string; n: number } | undefined {
+  const m = /^(.*)-(\d+)$/.exec(name);
+  return m && m[1] ? { base: m[1], n: Number(m[2]) } : undefined;
+}
+
+/**
+ * なくなったリンク名（removed）について、同じ名前のリンクが残っていなければ、
+ * 「名前-2」のように番号を付けて作ったリンクのうち番号のいちばん小さいものを元の名前に戻す（電線の線番も戻す）。
+ */
+export function promoteLinkNames(d: Diagram, removed: Iterable<string>): Diagram {
+  let out = d;
+  for (const base of new Set(removed)) {
+    if (!base || linkNames(out).has(base)) continue;
+    const candidates = [...linkNames(out)]
+      .map((name) => ({ name, s: splitSuffix(name) }))
+      .filter((x) => x.s?.base === base)
+      .sort((a, b) => a.s!.n - b.s!.n);
+    const from = candidates[0]?.name;
+    if (!from) continue;
+    const ids = new Set(out.devices.filter((x) => x.type === LINK_TYPE && String(x.params?.name ?? '').trim() === from).map((x) => x.id));
+    out = {
+      ...out,
+      devices: out.devices.map((x) => (ids.has(x.id) ? { ...x, params: { ...x.params, name: base } } : x)),
+      wires: out.wires.map((w) => (w.wireNo === from && (ids.has(w.from.device) || ids.has(w.to.device)) ? { ...w, wireNo: base } : w)),
+    };
+  }
+  return out;
+}

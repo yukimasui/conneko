@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -39,7 +39,7 @@ import { buildAiPrompt } from './io/aiPrompt';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
 import { applyIoCandidate, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
-import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, placeLinkAt, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
+import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -297,6 +297,26 @@ function Editor() {
     },
     [setNodes, setEdges, notify],
   );
+
+  // リンクの名前がなくなったら（リンクの削除・名前の変更・I/O の切断など）、「名前-2」などを元の名前に戻す
+  const linkNameKey = [...linkPeers.keys()].filter(Boolean).sort().join('\n');
+  const prevLinkNames = useRef(linkNameKey);
+  const skipPromote = useRef(false);
+  useEffect(() => {
+    const before = prevLinkNames.current.split('\n').filter(Boolean);
+    prevLinkNames.current = linkNameKey;
+    // 別の図面を読み込んだときは対象外
+    if (skipPromote.current) {
+      skipPromote.current = false;
+      return;
+    }
+    const now = new Set(linkNameKey.split('\n'));
+    const gone = before.filter((n) => !now.has(n));
+    if (!gone.length) return;
+    const next = promoteLinkNames(diagram, gone);
+    if (next !== diagram) applyDiagram(next, `リンク「${gone.join('・')}」がなくなったため、番号付きのリンクを元の名前に戻しました`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkNameKey]);
 
   // --- シートの編集 ---
   const addSheet = useCallback(() => {
@@ -609,6 +629,7 @@ function Editor() {
     (raw: Diagram) => {
       // シートをまたぐ電線（AI が書いたものなど）はリンクに置き換える
       const d = splitCrossSheetWires(raw, getDeviceDefinition);
+      skipPromote.current = true;
       const flow = diagramToFlow(d);
       setNodes(flow.nodes);
       setEdges(flow.edges);
