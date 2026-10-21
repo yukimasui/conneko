@@ -27,8 +27,11 @@ export const WIRE_HEX: Record<WireColor, { fill: string; edge: string; name: str
   SH: { fill: '#c9c9c9', edge: '#7a7a7a', name: 'シールド' },
 };
 
-/** 芯線の役割（plus / minus は電源、pass はケーブルの中継線、nc はコネクタの未使用ピン、それ以外は信号線） */
-export type LeadRole = 'plus' | 'minus' | 'out' | 'in' | 'analog' | 'shield' | 'pass' | 'nc';
+/**
+ * 芯線の役割（plus / minus は電源、pass はケーブルの中継線、nc はコネクタの未使用ピン、
+ * select は +V か 0V のどちらかにつないで動作を選ぶ線（PZ-M の桃など）、それ以外は信号線）
+ */
+export type LeadRole = 'plus' | 'minus' | 'out' | 'in' | 'analog' | 'shield' | 'pass' | 'nc' | 'select';
 
 export interface Lead {
   /** 端子ID（省略時は色略号） */
@@ -49,6 +52,7 @@ export function leadProps(l: Lead, p: ParamValues, vmin: number, vmax: number): 
   const note = l.note ? { note: l.note } : {};
   if (l.role === 'plus') return { ...note, role: 'input', accepts: acc('+') };
   if (l.role === 'minus') return { ...note, role: 'input', accepts: acc('-') };
+  if (l.role === 'select') return { ...note, role: 'input', accepts: { system: 'DC', minVoltage: vmin, maxVoltage: vmax, conductors: ['+', '-'] } };
   if (l.role === 'pass') return { ...note, role: 'pass', optional: true };
   if (l.role === 'nc') return { note: l.note ?? '未使用（何もつながない）', role: 'signal', optional: true };
   const signal = typeof l.signal === 'function' ? l.signal(p) : l.signal;

@@ -130,13 +130,20 @@ export function buildPhoto(o: PhotoOpts): DeviceDefinition {
     width: W,
     height: H,
     svg: (p) => `${extra}${o.body(p)}
-  <text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">${o.title(p)}</text>`,
+  ${titleText(W, o.title(p))}`,
     terminals,
     ...(pins ? { pins } : {}),
     links,
     ...(o.params ? { params: o.params } : {}),
     ...(o.loadCurrent !== undefined ? { loadCurrent: o.loadCurrent } : {}),
   };
+}
+
+/** 上端の見出し。幅に収まるように文字の大きさを下げる（全角 1 文字 ≒ 1em、半角 ≒ 0.55em） */
+export function titleText(W: number, text: string) {
+  const em = [...text].reduce((n, c) => n + (c.charCodeAt(0) < 0x2000 ? 0.55 : 1), 0);
+  const size = Math.max(3, Math.min(4.6, +((W - 6) / em).toFixed(2)));
+  return `<text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="${size}" fill="#333">${text}</text>`;
 }
 
 /** M8 / M12 の接続ケーブル（generic.m8-4p-cable / generic.m12-4p-cable）の案内文 */
