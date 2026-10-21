@@ -14,12 +14,15 @@ const SAFETY_TYPES = [
   'idec.hs5e-a4403-g',
   'idec.he1g-l21sm',
   'idec.hr6s-af',
+  'idec.fs1b-c31s',
   'idec.rf1v-2a2bl-d24',
   'keyence.gc-1000',
   'keyence.gl-r.receiver',
   'keyence.gl-r.emitter',
   'keyence.sz-v32',
+  'keyence.gs-11p5',
   'mitsubishi.sd-t12.dc24v',
+  'mitsubishi.sd-t21.dc24v',
   'mitsubishi.ws0-cpu0-xtio',
   'omron.g9sp-n10s',
   'omron.g9se-201',
@@ -30,7 +33,10 @@ const SAFETY_TYPES = [
   'omron.g7sa-3a1b',
   'omron.er6022-021m',
   'omron.d4n-4c20',
+  'omron.f3sg-sr.receiver',
+  'omron.f3sg-sr.emitter',
   'pilz.pnoz-x2-8p',
+  'pilz.pnoz-s4',
 ];
 
 const lookup = (type: string) => getDeviceDefinition(type);
