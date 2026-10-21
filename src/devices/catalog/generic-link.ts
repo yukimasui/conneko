@@ -41,11 +41,13 @@ const def: DeviceDefinition = {
     {
       key: 'side',
       label: '電線をつなぐ側',
+      // 自動: つないだ相手の端子のある側に向ける（アプリが位置から left / right に決める。決まらなければ左）
       options: [
+        { value: 'auto', label: '自動（相手の側）' },
         { value: 'left', label: '左' },
         { value: 'right', label: '右' },
       ],
-      default: 'left',
+      default: 'auto',
     },
   ],
   terminals: (p) => [

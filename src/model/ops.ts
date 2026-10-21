@@ -68,10 +68,8 @@ function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: str
   const gap = 50;
   let x = p.x + gap;
   let y = p.y - H / 2;
-  let side: 'left' | 'right' = 'left';
   if (p.side === 'left') {
     x = p.x - gap - W;
-    side = 'right';
   } else if (p.side === 'top' || p.side === 'bottom') {
     x = p.x + 20;
     y = p.side === 'top' ? p.y - gap - H : p.y + gap;
@@ -87,7 +85,8 @@ function linkAt(d: Diagram, placed: DiagramDevice[], ref: TerminalRef, name: str
 
   const id = nextDeviceId(linkDef.labelPrefix, usedIds);
   usedIds.push(id);
-  const device: DiagramDevice = { id, type: LINK_TYPE, x: Math.round(x), y: Math.round(y), params: { name, side }, sheet };
+  // 向きは「自動」（相手の端子の側に向く）
+  const device: DiagramDevice = { id, type: LINK_TYPE, x: Math.round(x), y: Math.round(y), params: { name, side: 'auto' }, sheet };
   return { device, wire: wire(id) };
 }
 
@@ -204,15 +203,13 @@ export function placeLinkAt(d: Diagram, ref: TerminalRef, name: string, at: { x:
   const dev = d.devices.find((x) => x.id === ref.device);
   const linkDef = lookup(LINK_TYPE);
   if (!dev || !linkDef) return d;
-  const p = terminalPoint(d, ref, lookup);
-  const side = p && p.x > at.x ? 'right' : 'left';
   const id = nextDeviceId(linkDef.labelPrefix, d.devices.map((x) => x.id));
   const device: DiagramDevice = {
     id,
     type: LINK_TYPE,
     x: Math.round(at.x - linkDef.width / 2),
     y: Math.round(at.y - linkDef.height / 2),
-    params: { name, side },
+    params: { name, side: 'auto' },
     sheet: sheetOf(d, dev),
   };
   const wire: DiagramWire = { id: nextWireId(d.wires.map((w) => w.id)), from: ref, to: { device: id, terminal: 'T' }, ...attrs };

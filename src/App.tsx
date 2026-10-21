@@ -158,12 +158,37 @@ function Editor() {
   const bus = useMemo(() => computeBus(diagram.devices, getDeviceDefinition), [topo]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const params = useMemo(() => new Map(diagram.devices.map((d) => [d.id, effectiveParams(d, bus)])), [bus, topo]);
+  // 向きが「自動」のリンクは、つないだ相手の端子のある側に電線をつなぐ（相手が右にあれば右につなぎ、矢印は左を向く）
+  const linkSides = useMemo(() => {
+    const out = new Map<string, 'left' | 'right'>();
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    for (const n of nodes) {
+      if (n.data.deviceType !== LINK_TYPE || (n.data.params?.side ?? 'auto') !== 'auto') continue;
+      const e = edges.find((x) => x.source === n.id || x.target === n.id);
+      const other = e && byId.get(e.source === n.id ? e.target : e.source);
+      const def = other && getDeviceDefinition(other.data.deviceType);
+      const handle = e && (e.source === n.id ? e.targetHandle : e.sourceHandle);
+      const t = other && def && handle ? resolveDevice(def, params.get(other.id)).terminal(handle) : undefined;
+      const linkDef = getDeviceDefinition(LINK_TYPE);
+      if (!other || !t || !linkDef) continue;
+      // side は電線をつなぐ側。相手が左にあれば左につなぐ（矢印は右＝飛び先を向く）
+      out.set(n.id, other.position.x + t.x < n.position.x + linkDef.width / 2 ? 'left' : 'right');
+    }
+    return out;
+  }, [nodes, edges, params]);
+  const shownParams = useMemo(() => {
+    if (!linkSides.size) return params;
+    const out = new Map(params);
+    for (const [id, side] of linkSides) out.set(id, { ...params.get(id), side });
+    return out;
+  }, [params, linkSides]);
+
   const resolvedOf = useCallback(
     (nodeId: string, type?: string) => {
       const def = type ? getDeviceDefinition(type) : undefined;
-      return def ? resolveDevice(def, params.get(nodeId)) : undefined;
+      return def ? resolveDevice(def, shownParams.get(nodeId)) : undefined;
     },
-    [params],
+    [shownParams],
   );
 
   // --- 配線のスタブ長とレーン（重なり回避） ---
@@ -262,8 +287,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers, showNotes };
-  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice, showMarkers, showNotes]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params: shownParams, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers, showNotes };
+  }, [issues, lanes, geometry, shownParams, bus, linkPeers, focusDevice, showMarkers, showNotes]);
 
   // シートごとの最も重い指摘（タブに印を付ける）
   const sheetSeverity = useMemo(() => {
