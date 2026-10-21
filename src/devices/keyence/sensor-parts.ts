@@ -141,6 +141,25 @@ export function proxBody(cx: number, y: number, dia: number, len: number, face =
   };
 }
 
+/**
+ * M12 / M8 コネクタに差したケーブルのプラグ（ストレート型、下向き）。cx, y はプラグの上端（ローレットナット）。
+ * 返り値の y1 がケーブルの出口。
+ */
+export function cablePlug(cx: number, y: number, size: 'M12' | 'M8' = 'M12') {
+  const nw = size === 'M12' ? 15 : 11;
+  const bw = size === 'M12' ? 12 : 9;
+  const knurl = Array.from({ length: Math.floor(nw / 2) }, (_, i) => `<line x1="${+(cx - nw / 2 + 1.5 + i * 2).toFixed(2)}" y1="${y + 0.8}" x2="${+(cx - nw / 2 + 1.5 + i * 2).toFixed(2)}" y2="${y + 7.2}" stroke="#7a7f84" stroke-width="0.5"/>`).join('');
+  return {
+    svg: `
+  <rect x="${cx - nw / 2}" y="${y}" width="${nw}" height="8" rx="1.2" fill="#c9cdd1" stroke="#6d7277" stroke-width="0.5"/>
+  ${knurl}
+  <path d="M${cx - bw / 2} ${y + 8} H${cx + bw / 2} V${y + 24} L${cx + bw / 2 - 2.5} ${y + 30} H${cx - bw / 2 + 2.5} L${cx - bw / 2} ${y + 24} Z" fill="#1f2022" stroke="#0a0a0b" stroke-width="0.5"/>
+  ${[12, 15, 18, 21].map((d) => `<line x1="${cx - bw / 2}" y1="${y + d}" x2="${cx + bw / 2}" y2="${y + d}" stroke="#3a3c3f" stroke-width="0.6"/>`).join('')}
+  <text x="${cx}" y="${y + 28}" text-anchor="middle" font-family="sans-serif" font-size="2.6" fill="#9a9da2">${size}</text>`,
+    y1: y + 30,
+  };
+}
+
 /** 出力形式のパラメータ（NPN / PNP） */
 export const OUTPUT_PARAM = {
   key: 'output',
