@@ -38,22 +38,50 @@ export const XSEL_SYS_IO: { pin: number; id: string; label: string; note: string
   { pin: 11, id: 'RDY-', label: 'RDY Out-', note: 'レディー接点出力（−側）' },
 ];
 
+/**
+ * XSEL-P / Q のシステム I/O（取扱説明書 MJ0148「第 4 章 ⑩システム I/O コネクタ」。FMC1.5/9-ST-3.5 × 2、左 1〜9・右 10〜18）:
+ *   9 DET IN、8 EMGin IN、7 EMGin +24V、6 EMG1 line+・5 EMG1 line-、4 EMG2 line+・3 EMG2 line-、2 SDN Out+・1 SDN Out-、
+ *   18 DET +24V、17 ENBin IN、16 ENBin +24V、15 ENB1 line+・14 ENB1 line-、13 ENB2 line+・12 ENB2 line-、11 RDY Out+・10 RDY Out-。
+ *   付属は端子台のみで、EMG・ENB はケーブルで短絡して出荷される。
+ */
+export const XSEL_PQ_SYS_IO: { pin: number; id: string; label: string; note: string }[] = [
+  { pin: 9, id: 'DETIN', label: 'DET IN', note: '外部接点異常（溶着）検出入力' },
+  { pin: 8, id: 'EMGIN', label: 'EMGin IN', note: '非常停止検出入力（EMGin +24V から非常停止スイッチを通して戻す）' },
+  { pin: 7, id: 'EMG24V', label: 'EMGin +24V', note: '非常停止検出入力用の 24V 電源出力' },
+  { pin: 6, id: 'EMG1+', label: 'EMG1 line+', note: '非常停止スイッチ 1（ティーチングボックスの非常停止接点 系統 1、+側）' },
+  { pin: 5, id: 'EMG1-', label: 'EMG1 line-', note: '非常停止スイッチ 1（−側）' },
+  { pin: 4, id: 'EMG2+', label: 'EMG2 line+', note: '非常停止スイッチ 2（Q タイプで使用、+側）' },
+  { pin: 3, id: 'EMG2-', label: 'EMG2 line-', note: '非常停止スイッチ 2（−側）' },
+  { pin: 2, id: 'SDN+', label: 'SDN Out+', note: '外部リレー駆動遮断の接点出力（無電圧接点）' },
+  { pin: 1, id: 'SDN-', label: 'SDN Out-', note: '外部リレー駆動遮断の接点出力（−側）' },
+  { pin: 18, id: 'DETOUT', label: 'DET +24V', note: '外部接点異常入力用の 24V 電源出力' },
+  { pin: 17, id: 'ENBIN', label: 'ENBin IN', note: 'イネーブル検出入力（ENBin +24V からセーフティーゲートなどを通して戻す）' },
+  { pin: 16, id: 'ENB24V', label: 'ENBin +24V', note: 'イネーブル検出入力用の 24V 電源出力' },
+  { pin: 15, id: 'ENB1+', label: 'ENB1 line+', note: 'イネーブルスイッチ 1（セーフティーゲートなど、+側）' },
+  { pin: 14, id: 'ENB1-', label: 'ENB1 line-', note: 'イネーブルスイッチ 1（−側）' },
+  { pin: 13, id: 'ENB2+', label: 'ENB2 line+', note: 'セーフティーゲートスイッチ 2（Q タイプで使用、+側）' },
+  { pin: 12, id: 'ENB2-', label: 'ENB2 line-', note: 'セーフティーゲートスイッチ 2（−側）' },
+  { pin: 11, id: 'RDY+', label: 'RDY Out+', note: 'レディー信号の接点出力（無電圧接点）' },
+  { pin: 10, id: 'RDY-', label: 'RDY Out-', note: 'レディー信号の接点出力（−側）' },
+];
+
 const SUPPLY_IDS = new Set(['DETOUT', 'EMG24V', 'AUTO2OUT', 'ENB24V']);
 
 /**
  * システム I/O の 2 列のプラグ（左 10〜1、右 20〜11。上から）を描き、端子を返す。
  * x, y は左のプラグの左上、pitch はピッチ[px]。左のプラグの電線は左へ、右のプラグの電線は右へ出る。
  */
-export function xselSystemIo(x: number, y: number, pitch: number, sa: boolean) {
-  const left = XSEL_SYS_IO.slice(0, 10).map((s) => s.id);
-  const right = XSEL_SYS_IO.slice(10).map((s) => s.id);
+export function xselSystemIo(x: number, y: number, pitch: number, sa: boolean, table = XSEL_SYS_IO) {
+  const half = table.length / 2;
+  const left = table.slice(0, half).map((s) => s.id);
+  const right = table.slice(half).map((s) => s.id);
   const w = 8;
   const L = plugV({ x, y, ids: left, pitch, w, wire: 'left' });
   const R = plugV({ x: x + w + 1.5, y, ids: right, pitch, w, wire: 'right' });
   const pos = { ...L.pos, ...R.pos };
   const svg = `${L.svg}${R.svg}
-  ${XSEL_SYS_IO.map((s) => text(s.pin > 10 ? x + w * 2 + 3 : x - 2, pos[s.id].y + 1, String(s.pin), 2.2, '#333', s.pin > 10 ? 'start' : 'end')).join('')}`;
-  const terminals: TerminalDef[] = XSEL_SYS_IO.map((s): TerminalDef => {
+  ${table.map((s) => text(s.pin > half ? x + w * 2 + 3 : x - 2, pos[s.id].y + 1, String(s.pin), 2.2, '#333', s.pin > half ? 'start' : 'end')).join('')}`;
+  const terminals: TerminalDef[] = table.map((s): TerminalDef => {
     const p = pos[s.id];
     const base = { id: s.id, label: `${s.label}（${s.pin}）`, note: s.note, x: p.x, y: p.y, side: p.side };
     if (SUPPLY_IDS.has(s.id)) return { ...base, role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' }, optional: true };
