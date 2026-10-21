@@ -1,5 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
+import { FSN_HOST_BUS } from '../keyence/fs-n';
 import { OUTPUT_PARAM, outName, sensorCable, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
@@ -58,6 +59,8 @@ const def: DeviceDefinition = {
   links: sensorOutputLinks(['BK'], 0.1),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.034,
+  // 子機（FS-N42 / FS-N44）を最大 16 台連結できる
+  bus: FSN_HOST_BUS,
 };
 
 export default def;

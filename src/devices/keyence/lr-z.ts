@@ -21,7 +21,8 @@ import {
  *
  * M8 接続ケーブルの標準線色で端子を定義する:
  *   1 茶 = DC10〜30V、2 白 = 外部入力（チューニング / 投光停止）、3 青 = 0V、4 黒 = 制御出力
- * ※ピン 1〜4 と機能の対応は M8 4ピンセンサの標準的な割り当てによる推定（KEYENCE の入出力回路図は Web 非公開）。
+ * ピン 1〜4 と機能の対応は LR-ZB 取扱説明書（96M11812）の入出力回路図で確認（https://www.manualsdir.com/manuals/657872/keyence-lr-zbxn_p-series.html、第三者の転載。
+ * LR-ZB250AN/AP 取扱説明書 https://www.manualsdir.com/manuals/657870/keyence-lr-zb250an_ap.html も同じ）。
  *
  * 2 通りの姿を作る（buildLrz）:
  * - 'cable': M8 ケーブル（別売）を差した姿。ケーブルの芯線の先が端子（BN / WH / BU / BK）
@@ -98,7 +99,7 @@ const svg = (p: ParamValues, variant: 'cable' | 'm8') => `${lrzBody(`LR-ZB250C${
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">CMOS レーザセンサ 35〜250mm・${outName(p)}</text>`;
 
 const DESCRIPTION =
-  'KEYENCE のアンプ内蔵型 CMOS レーザセンサ LR-Z シリーズ LR-ZB250C（距離設定型、検出距離 35〜250mm、角型、M8 4ピンコネクタ）。出力形式は params の output で NPN（LR-ZB250CN）/PNP（LR-ZB250CP）を選ぶ。M8 のピン 1 茶 = +24V、3 青 = 0V、4 黒 = 制御出力（オープンコレクタ 30V 100mA）、2 白 = 外部入力（チューニング / 投光停止。NPN タイプは 0V、PNP タイプは +V と短絡で ON）。電源 DC10〜30V、消費電流 24V 時 18mA 以下。ピンと線色の対応は M8 センサの標準割り当てによる推定。';
+  'KEYENCE のアンプ内蔵型 CMOS レーザセンサ LR-Z シリーズ LR-ZB250C（距離設定型、検出距離 35〜250mm、角型、M8 4ピンコネクタ）。出力形式は params の output で NPN（LR-ZB250CN）/PNP（LR-ZB250CP）を選ぶ。M8 のピン 1 茶 = +24V、3 青 = 0V、4 黒 = 制御出力（オープンコレクタ 30V 100mA）、2 白 = 外部入力（チューニング / 投光停止。NPN タイプは 0V、PNP タイプは +V と短絡で ON）。電源 DC10〜30V、消費電流 24V 時 18mA 以下。ピンと線色の対応は LR-ZB 取扱説明書の入出力回路図による。';
 
 export function buildLrz(variant: 'cable' | 'm8'): DeviceDefinition {
   const common = {
@@ -184,7 +185,7 @@ export function buildLrzSeries(conn: 'cable' | 'M8'): DeviceDefinition {
         ? 'M8 のピン 1 茶 = +24V、3 青 = 0V、4 黒 = 制御出力、2 白 = 外部入力。' + cableHint('M8')
         : '芯線は茶 = +24V、青 = 0V、黒 = 制御出力、白 = 外部入力。') +
       '制御出力はオープンコレクタ DC30V 以下・100mA 以下。外部入力はチューニング / 投光停止（NPN タイプは 0V、PNP タイプは +V と短絡で ON）。' +
-      '電源 DC10〜30V。ピン・芯線と機能の対応は外形図の芯線表記と M8 センサの標準割り当てによる推定（KEYENCE の入出力回路図は Web 非公開）。',
+      '電源 DC10〜30V、消費電流 24V 時 18mA 以下。ピン・芯線と機能の対応は LR-ZB 取扱説明書（96M11812）の入出力回路図による（LR-ZH500 は仕様表で同じ入出力とされているものとした）。',
     width: W,
     body: (p) => lrzBody(lrzModel(t(p).code, conn, p), t(p).digit, conn === 'M8' ? 'm8' : 'cable'),
     exit: conn === 'M8' ? { x: CN.x, y: CN.y + 3 } : { x: SX + SW - 9, y: SY + SH + 6 },
