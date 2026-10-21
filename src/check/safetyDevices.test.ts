@@ -35,6 +35,8 @@ const SAFETY_TYPES = [
   'omron.g7sa-3a1b',
   'omron.er6022-021m',
   'omron.d4n-4c20',
+  'omron.g9sx-ns202-rt',
+  'omron.d40a-1c5',
   'omron.f3sg-sr.receiver',
   'omron.f3sg-sr.emitter',
   'pilz.pnoz-x2-8p',
@@ -180,6 +182,31 @@ describe('安全回路の電気チェック', () => {
         w('LCR.OSSD2', 'SC1.Si1'),
         // 自動復帰（黄を +24V）
         w('LCR.RESET', 'LCR.+24V'),
+      ],
+    };
+    const issues = checkDiagram(d, lookup);
+    expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
+    expect(issues.filter((i) => i.rule === 'no-power')).toEqual([]);
+  });
+
+  it('非接触ドアスイッチ D40A を G9SX-NS の D3/D4 から給電しても誤検出しない', () => {
+    const d: Diagram = {
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+        { id: 'SR1', type: 'omron.g9sx-ns202-rt', x: 0, y: 0 },
+        { id: 'DS1', type: 'omron.d40a-1c5', x: 0, y: 0 },
+        { id: 'DS2', type: 'omron.d40a-1c5', x: 0, y: 0 },
+      ],
+      wires: [
+        w('PSU1.+V1', 'SR1.A1'),
+        w('PSU1.-V1', 'SR1.A2'),
+        w('SR1.D3', 'DS1.+'),
+        w('SR1.D4', 'DS1.-'),
+        w('SR1.D3', 'DS2.+'),
+        w('SR1.D4', 'DS2.-'),
+        w('SR1.D1', 'DS1.IN'),
+        w('DS1.OUT', 'DS2.IN'),
+        w('DS2.OUT', 'SR1.D2'),
       ],
     };
     const issues = checkDiagram(d, lookup);
