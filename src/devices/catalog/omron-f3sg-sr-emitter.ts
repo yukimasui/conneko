@@ -97,7 +97,7 @@ const def: DeviceDefinition = {
   name: 'セーフティライトカーテン 送光器',
   model: 'F3SG-4SRA□-14 送光器 + F39-JG□C-L',
   maker: 'オムロン',
-  category: 'sensor',
+  category: 'safety',
   description:
     'オムロン F3SG-SR シリーズ セーフティライトカーテンの送光器（タイプ4、PL e / カテゴリ4）。電源は茶 +24V / 青 0V（DC24V ±20%。図は PNP の場合）。' +
     'TEST 入力（黒）は通常 0V に接続する。検出距離切替（黄）は開放または +24V で Long。光同期の場合、COM 線（白・黄）は受光器と接続しない。受光器（omron.f3sg-sr.receiver）と同じ電源から給電する。',

@@ -215,7 +215,7 @@ const def: DeviceDefinition = {
   name: 'セーフティコントローラ',
   model: 'GC-1000R',
   maker: 'KEYENCE',
-  category: 'control',
+  category: 'safety',
   description:
     'KEYENCE GC シリーズのメインコントローラ（安全リレー出力内蔵タイプ）。安全入力 Si0〜Si13（14 点）、テスト出力 To0〜To3、安全出力 So0〜So3（PNP・OSSD、各 500mA）、AUX 出力 Ao0〜Ao3（非安全）、' +
     '安全リレー出力 SRo 3a（13-14、23-24、33-34、AC250V 6A。DC24V のコイルだけでなく AC200V の接触器も直接開閉できる）。電源は +24V / 0V（DC24V ±20%）。PL e / カテゴリ4、SIL3。' +

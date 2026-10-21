@@ -119,7 +119,7 @@ const def: DeviceDefinition = {
   name: 'セーフティライトカーテン 受光器',
   model: 'GL-R□H 受光器 + GL-RP□PM（11芯 PNP）',
   maker: 'KEYENCE',
-  category: 'sensor',
+  category: 'safety',
   description:
     'KEYENCE GL-R シリーズ セーフティライトカーテンの受光器（タイプ4、PL e / カテゴリ4、SIL3）。電源は茶 +24V / 青 0V（DC24V ±20%）。安全出力は OSSD1（黒）・OSSD2（白）の PNP 2 出力（各 500mA）。' +
     '配線例: OSSD1/OSSD2 を安全コントローラー・安全リレーの 2 チャンネル入力（例: GC-1000 の Si0/Si1）へ。安全機器と 0V は共通にする。' +

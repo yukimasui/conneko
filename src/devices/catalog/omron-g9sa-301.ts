@@ -144,7 +144,7 @@ const def: DeviceDefinition = {
   name: 'セーフティリレーユニット',
   model: 'G9SA-301 24VAC/DC',
   maker: 'オムロン',
-  category: 'control',
+  category: 'safety',
   description:
     'オムロン G9SA シリーズのセーフティリレーユニット（幅45mm、M3 ネジ端子）。電源 A1/A2 は 24V（AC/DC、85〜110%。図では DC24V として扱い A2 が −）。安全出力 3a（13-14、23-24、33-34、AC250V/DC30V 5A）、補助出力 1b（41-42）。PL e / カテゴリ4。PE は保護接地（PTC で地絡・チャンネル間短絡を検出）。' +
     '2 チャンネル入力: 非常停止の b 接点 1 回路目を T11-T12、2 回路目を T21-T22 に接続する。' +

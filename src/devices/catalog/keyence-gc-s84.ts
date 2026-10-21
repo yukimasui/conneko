@@ -100,7 +100,7 @@ const def: DeviceDefinition = {
   name: 'セーフティコントローラ 増設ユニット',
   model: 'GC-S84',
   maker: 'KEYENCE',
-  category: 'control',
+  category: 'safety',
   description:
     'KEYENCE GC シリーズの安全入出力増設ユニット（幅22.2mm）。メインコントローラ GC-1000 / GC-1000R の右側面に連結して使う（連結はケーブル不要のため図では配線しない）。' +
     '安全入力 Si0〜Si7、テスト出力 To0/To1、安全出力 So0〜So3（PNP・OSSD）。ユニット自身の電源 +24V / 0V（60mA）を別に配線する。端子名はメインコントローラと同じ規則（偶数・奇数の Si を 2 チャンネルの組にする）。',

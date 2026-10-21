@@ -151,7 +151,7 @@ const def: DeviceDefinition = {
   name: 'セーフティリレーユニット（オフディレー）',
   model: 'G9SE-221-T05',
   maker: 'オムロン',
-  category: 'control',
+  category: 'safety',
   description:
     'オムロン G9SE シリーズのオフディレー付きセーフティリレーユニット（幅22.5mm、Push-In Plus 端子）。電源 A1(+)/A2(−) は DC24V（−15%/+10%）。' +
     '安全出力はリレー接点で、瞬時 2a（13-14、23-24）とオフディレー 2a（37-38、47-48。入力が OFF してから設定時間 0〜5 秒後に開く。停止カテゴリ1 用）、AC250V/DC30V 5A。補助出力 X1（PNP）。PL e / カテゴリ4、SIL3。' +

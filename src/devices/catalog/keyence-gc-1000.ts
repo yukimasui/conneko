@@ -194,7 +194,7 @@ const def: DeviceDefinition = {
   name: 'セーフティコントローラ',
   model: 'GC-1000',
   maker: 'KEYENCE',
-  category: 'control',
+  category: 'safety',
   description:
     'KEYENCE GC シリーズのメインコントローラ（Ethernet 内蔵）。安全入力 Si0〜Si15（16 点）、テスト出力 To0〜To3、安全出力 So0〜So5（PNP・OSSD、各 500mA）、AUX 出力 Ao0〜Ao3（非安全）。電源は +24V / 0V（DC24V −30%/+20%、200mA 以下）。' +
     'ISO 13849-1 カテゴリ4 PL e / SIL3。2 チャンネル入力は隣り合う偶数・奇数の Si を組にする（例: 非常停止の b 接点 2 回路を To0→Si0、To1→Si1 に配線。ライトカーテンの OSSD1/OSSD2 は Si0/Si1 へ直接）。' +

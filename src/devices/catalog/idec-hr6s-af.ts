@@ -149,7 +149,7 @@ const def: DeviceDefinition = {
   name: 'セーフティモジュール',
   model: 'HR6S-AF',
   maker: 'IDEC',
-  category: 'control',
+  category: 'safety',
   description:
     'IDEC HR6S シリーズの非常停止・安全ドア用セーフティモジュール（幅22.5mm、着脱式端子台。プッシュイン HR6S-AF1C／ネジ HR6S-AF1P）。電源 A1/A2 は DC24V（±20%。AC24V 品としても使える）。安全出力 3a（13-14、23-24、33-34、DC-13 24V 3A）。PL e / カテゴリ4、SIL3。' +
     '2 チャンネル入力（FUNCTION 1）: 非常停止の b 接点 1 回路目を S11-S12、2 回路目を S21-S22 に接続する（S11/S21 のテストパルスで横絡を検出）。' +

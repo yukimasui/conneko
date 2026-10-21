@@ -118,7 +118,7 @@ const def: DeviceDefinition = {
   name: 'セーフティリレーユニット',
   model: 'G9SE-201',
   maker: 'オムロン',
-  category: 'control',
+  category: 'safety',
   description:
     'オムロン G9SE シリーズのセーフティリレーユニット（幅17.5mm、Push-In Plus 端子）。電源 A1(+)/A2(−) は DC24V（−15%/+10%）。安全出力はリレー接点 2a（13-14、23-24、AC250V/DC30V 5A）、補助出力 X1（PNP）。PL e / カテゴリ4、SIL3。' +
     '2 チャンネル入力: 非常停止の b 接点 1 回路目を T11-T12、2 回路目を T21-T22 に接続する（テストパルスで入力間短絡を検出）。' +

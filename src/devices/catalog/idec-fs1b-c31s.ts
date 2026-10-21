@@ -176,7 +176,7 @@ const def: DeviceDefinition = {
   name: 'セーフティコントローラ',
   model: 'FS1B-C31S SafetyOne',
   maker: 'IDEC',
-  category: 'control',
+  category: 'safety',
   description:
     'IDEC SafetyOne FS1B-C31S（ロジック選択式セーフティコントローラ。プログラム不要で、LOGIC スイッチで用途別のロジックを選ぶ。FS1A-C11S/C21S の後継）。PL e / カテゴリ4、SIL3。電源は V+ / V−（DC24V、20.4〜28.8V、無負荷 6W）。' +
     '安全入力は Tn（パルス出力）と Xn（入力）の組で、例えば非常停止の b 接点 1 回路目を T0→X0、2 回路目を T1→X1 に配線する。X16/X17 はリセット入力。' +

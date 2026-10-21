@@ -124,7 +124,7 @@ const def: DeviceDefinition = {
   name: '安全リレー',
   model: 'PNOZ X2.8P 24VAC/DC',
   maker: 'Pilz',
-  category: 'control',
+  category: 'safety',
   description:
     'Pilz PNOZ X シリーズの非常停止・安全ドア用安全リレー（777301、幅22.5mm）。電源 A1/A2 は 24V（AC/DC、−15%/+10%。図では DC24V として扱う）。安全出力は 3a（13-14、23-24、33-34、AC240V/DC24V 6A）、補助出力 1b（41-42）。PL e / カテゴリ4、SIL CL3。' +
     '横絡検出ありの 2 チャンネル入力: S11-S52 を短絡し、非常停止の b 接点 1 回路目を S11-S12、2 回路目を S21-S22 に接続する。' +

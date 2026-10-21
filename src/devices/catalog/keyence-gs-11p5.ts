@@ -103,7 +103,7 @@ const def: DeviceDefinition = {
   name: '非接触式セーフティインタロックスイッチ',
   model: 'GS-11P5（PNP、ケーブル 5m）',
   maker: 'KEYENCE',
-  category: 'sensor',
+  category: 'safety',
   description:
     'KEYENCE GS シリーズの非接触式セーフティインタロックスイッチ（スタンダードタイプ、PNP）。扉側のアクチュエータが近づく（10mm 以内）と OSSD が ON になり、扉が開くと OFF になる。PL e / カテゴリ4、SIL3、ISO 14119 タイプ4。電源は茶 +24V / 青 0V（DC24V、0.8W）。' +
     '安全出力は OSSD1（黒）・OSSD2（白）、各 150mA。OSSD を安全コントローラー・安全リレーの 2 チャンネル入力（例: GC-1000 の Si2/Si3）に接続する。' +

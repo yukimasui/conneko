@@ -91,7 +91,7 @@ const def: DeviceDefinition = {
   name: '非接触ドアスイッチ',
   model: 'D40A-1C5（ケーブル 5m）',
   maker: 'オムロン',
-  category: 'sensor',
+  category: 'safety',
   description:
     'オムロン D40A 小形非接触ドアスイッチ（電源 DC24V +10%/−15%、0.6W、IP67）。アクチュエータが 5mm 以内に近づくと ON、15mm 以上離れると OFF。表示灯は扉開で赤、扉閉で黄。' +
     'OSSD 出力は持たず、専用コントローラ G9SX-NS（omron.g9sx-ns202-rt）と組み合わせて PL d / カテゴリ3。配線: 茶 → D3、青 → D4、白 → D1（または前段の黒）、黒 → D2（または次段の白）。最大 30 台を直列接続できる。黄は扉閉で ON する補助出力（PNP 10mA）。',

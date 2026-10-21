@@ -107,7 +107,7 @@ const def: DeviceDefinition = {
   name: 'セーフティライトカーテン 受光器',
   model: 'F3SG-4SRA□-14 受光器 + F39-JG□C-D',
   maker: 'オムロン',
-  category: 'sensor',
+  category: 'safety',
   description:
     'オムロン F3SG-SR シリーズ セーフティライトカーテンの受光器（タイプ4、PL e / カテゴリ4）。電源は茶 +24V / 青 0V（DC24V ±20%）で、茶と青を入れ替えると NPN 出力になる（図は PNP）。安全出力 OSSD1（黒）・OSSD2（白）各 300mA。' +
     '配線例: OSSD1/OSSD2 を安全コントローラー・安全リレー（G9SP、G9SE、G9SA など）の 2 チャンネル入力へ。工場出荷時は自動リセット・EDM なし。' +

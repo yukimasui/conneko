@@ -122,7 +122,8 @@ export type DeviceCategory =
   | 'load'
   | 'control'
   | 'plc'
-  | 'sensor';
+  | 'sensor'
+  | 'safety';
 
 /**
  * コネクタのピン（画面上の端子としては表示しない）。

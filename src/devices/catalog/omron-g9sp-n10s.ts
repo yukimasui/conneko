@@ -174,7 +174,7 @@ const def: DeviceDefinition = {
   name: 'セーフティコントローラ',
   model: 'G9SP-N10S',
   maker: 'オムロン',
-  category: 'control',
+  category: 'safety',
   description:
     'オムロン G9SP シリーズのスタンドアロン形セーフティコントローラ。安全入力 Si0〜Si9、テスト出力 T0〜T3（T3 はムーティングランプ用 300mA）、安全出力 So0〜So3（PNP 各 0.8A）、標準出力 O0〜O3。' +
     '電源は V1/G1（内部・入力回路用）と V2/G2（出力回路用）の 2 系統でいずれも DC24V（20.4〜26.4V）。PL e / カテゴリ4、SIL3。' +

@@ -144,7 +144,7 @@ const def: DeviceDefinition = {
   name: '両手操作コントローラ',
   model: 'G9SA-TH301 24VAC/DC',
   maker: 'オムロン',
-  category: 'control',
+  category: 'safety',
   description:
     'オムロン G9SA シリーズの両手操作コントローラ（幅45mm、M3 ネジ端子）。プレスなどで作業者の両手を危険区域の外に置かせるため、2 個の押ボタンを 0.5 秒以内に同時に押している間だけ安全出力が閉じる。' +
     '電源 A1/A2 は 24V（AC/DC。図では DC24V として扱い A2 が −）。安全出力 3a（13-14、23-24、33-34）、補助出力 1b（41-42）。PE は保護接地。' +

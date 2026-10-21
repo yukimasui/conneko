@@ -105,7 +105,7 @@ const def: DeviceDefinition = {
   name: 'セーフティライトカーテン 送光器',
   model: 'GL-R□H 送光器 + GL-RP□P（5芯）',
   maker: 'KEYENCE',
-  category: 'sensor',
+  category: 'safety',
   description:
     'KEYENCE GL-R シリーズ セーフティライトカーテンの送光器（タイプ4、PL e / カテゴリ4、SIL3）。電源は茶 +24V / 青 0V（DC24V ±20%）、灰は FE（機能接地）。5 芯ケーブルでは白・黒は送光器側で未使用（1 本ずつ絶縁する）。' +
     '受光器（keyence.gl-r.receiver）とセットで使い、光同期なら送光器と受光器の間の配線は不要。受光器と同じ電源（0V 共通）から給電する。',

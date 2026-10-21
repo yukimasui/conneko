@@ -145,7 +145,7 @@ const def: DeviceDefinition = {
   name: 'セーフティレーザスキャナ',
   model: 'SZ-V32 + SZ-VP□（18芯）',
   maker: 'KEYENCE',
-  category: 'sensor',
+  category: 'safety',
   description:
     'KEYENCE SZ-V シリーズのセーフティレーザスキャナ（マルチバンクタイプ、検出角 190°、保護領域最大 8.4m、タイプ3 / PL d / カテゴリ3）。電源は茶 +24V / 青 0V（DC24V ±10%、無負荷 11.8W）。' +
     '安全出力は OSSD1（黒）・OSSD2（白）、各 500mA（PNP/NPN は設定で選択）。配線例: OSSD1→K1、OSSD2→K2 のコイル（または安全コントローラーの 2 チャンネル入力）。EDM（赤）は K1・K2 の b 接点（ミラー接点）を経由して +24V へ。リセット（黄）はリセットスイッチ（a 接点）経由で +24V へ。' +

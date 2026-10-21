@@ -101,7 +101,7 @@ const def: DeviceDefinition = {
   name: 'セーフティインタロックスイッチ',
   model: 'HS5D-02RN 2b',
   maker: 'IDEC',
-  category: 'control',
+  category: 'safety',
   description:
     'IDEC HS5D シリーズの小形セーフティインタロックスイッチ（安全ドアスイッチ、樹脂ヘッド、G1/2、M3 ネジ端子）。扉側にアクチュエータ（HS9Z-A51 など）を付け、扉を開けてアクチュエータが抜けると b 接点が強制的に開く。' +
     '主回路 11-12・モニタ回路 21-22 はいずれも直接開路動作（IEC 60947-5-1）の b 接点（DC-13 30V 4A）。ヘッドを外すと 11-12 が開く。' +

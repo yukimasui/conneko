@@ -120,7 +120,7 @@ const def: DeviceDefinition = {
   name: '安全リレー',
   model: 'PNOZ s4 24VDC',
   maker: 'Pilz',
-  category: 'control',
+  category: 'safety',
   description:
     'Pilz PNOZsigma シリーズの非常停止・安全ドア用安全リレー PNOZ s4（750104、幅22.5mm）。電源 A1/A2 は DC24V。安全出力 3a（13-14、23-24、33-34、AC240V/DC24V 6A）、補助出力 1b（41-42）、半導体補助出力 Y32。PL e / カテゴリ4、SIL CL3。' +
     '2 チャンネル入力（横絡検出あり）: 非常停止の b 接点 1 回路目を S11-S12、2 回路目を S21-S22 に接続する。正面の mode スイッチで自動／手動／監視付きスタートと横絡検出の有無を選ぶ。' +

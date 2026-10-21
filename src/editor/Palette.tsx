@@ -14,6 +14,7 @@ const CATEGORY_NAMES: Record<DeviceCategory, string> = {
   control: '操作・表示',
   plc: 'PLC',
   sensor: 'センサー',
+  safety: '安全機器',
 };
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_NAMES) as DeviceCategory[];

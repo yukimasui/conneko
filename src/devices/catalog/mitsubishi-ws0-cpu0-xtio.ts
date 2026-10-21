@@ -157,7 +157,7 @@ const def: DeviceDefinition = {
   name: '安全コントローラ',
   model: 'MELSEC-WS WS0-CPU0 + WS0-XTIO',
   maker: '三菱電機',
-  category: 'control',
+  category: 'safety',
   description:
     '三菱電機 MELSEC-WS 安全コントローラの最小構成（CPU ユニット WS0-CPU0、メモリプラグ WS0-MPL0、安全入出力複合ユニット WS0-XTIO）。SIL3 / PL e / カテゴリ4。' +
     '電源は 2 系統で、メモリプラグの CPU-A1(+)/CPU-A2(GND) が CPU と入力回路・テスト出力用、XTIO の A1/A2 が安全出力 Q1〜Q4 用（いずれも DC24V、16.8〜30V）。' +
