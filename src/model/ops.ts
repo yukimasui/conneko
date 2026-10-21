@@ -187,3 +187,34 @@ export function nextSheetId(d: Diagram): string {
   while (used.has(`S${n}`)) n++;
   return `S${n}`;
 }
+
+/** 端子の近くにリンクを置いてつなぐ（近くに同じ名前のリンクがあればそれにつなぐ） */
+export function linkTerminal(d: Diagram, ref: TerminalRef, name: string, attrs: WireAttrs, lookup: DefLookup): Diagram {
+  const dev = d.devices.find((x) => x.id === ref.device);
+  if (!dev || !lookup(LINK_TYPE)) return d;
+  const r = linkAt(d, [], ref, name, sheetOf(d, dev), attrs, lookup, d.devices.map((x) => x.id), d.wires.map((w) => w.id));
+  return { ...d, devices: r.device ? [...d.devices, r.device] : d.devices, wires: [...d.wires, r.wire] };
+}
+
+/**
+ * 指定した位置（キャンバス上の点。リンクの中心）にリンクを置き、端子とつなぐ。
+ * リンクの電線をつなぐ側は、端子のある側に向ける。
+ */
+export function placeLinkAt(d: Diagram, ref: TerminalRef, name: string, at: { x: number; y: number }, attrs: WireAttrs, lookup: DefLookup): Diagram {
+  const dev = d.devices.find((x) => x.id === ref.device);
+  const linkDef = lookup(LINK_TYPE);
+  if (!dev || !linkDef) return d;
+  const p = terminalPoint(d, ref, lookup);
+  const side = p && p.x > at.x ? 'right' : 'left';
+  const id = nextDeviceId(linkDef.labelPrefix, d.devices.map((x) => x.id));
+  const device: DiagramDevice = {
+    id,
+    type: LINK_TYPE,
+    x: Math.round(at.x - linkDef.width / 2),
+    y: Math.round(at.y - linkDef.height / 2),
+    params: { name, side },
+    sheet: sheetOf(d, dev),
+  };
+  const wire: DiagramWire = { id: nextWireId(d.wires.map((w) => w.id)), from: ref, to: { device: id, terminal: 'T' }, ...attrs };
+  return { ...d, devices: [...d.devices, device], wires: [...d.wires, wire] };
+}

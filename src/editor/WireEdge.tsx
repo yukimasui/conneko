@@ -18,7 +18,7 @@ const SIDE: Record<Position, TerminalSide> = {
 };
 
 function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireFlowEdge>) {
-  const { lanes, geometry, wireSeverity } = useEditorContext();
+  const { lanes, geometry, wireSeverity, showMarkers } = useEditorContext();
   const geo = geometry.get(id);
   const isCable = !!(geo?.sConnector && geo.tConnector);
   const { setEdges, screenToFlowPosition } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
@@ -99,6 +99,7 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
       <EdgeLabelRenderer>
         {data?.wireNo &&
           !isCable &&
+          showMarkers &&
           ([
             [sourceX, sourceY, SIDE[sourcePosition]],
             [targetX, targetY, SIDE[targetPosition]],

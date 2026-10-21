@@ -11,6 +11,7 @@ import {
   useEdgesState,
   useReactFlow,
   type Connection,
+  type FinalConnectionState,
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -21,6 +22,7 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import type { ParamValues, TerminalSide } from './devices/types';
+import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
 import { FAN_LENGTH } from './editor/CableGraphics';
@@ -36,7 +38,8 @@ import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
-import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
+import { applyIoCandidate, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
+import { LINK_TYPE, mountFamily, moveToSheet, nextSheetId, placeLinkAt, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -98,6 +101,21 @@ function Editor() {
   const [sheet, setSheet] = useState<string>(() => sheetsOf(sampleDiagram)[0].id);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [ioDevice, setIoDevice] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [showMarkers, setShowMarkers] = useState(() => {
+    try {
+      return localStorage.getItem('conneko.markers') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const [picker, setPicker] = useState<null | {
+    x: number;
+    y: number;
+    at: { x: number; y: number };
+    from: { device: string; terminal: string };
+    suggestions: Suggestions;
+  }>(null);
   // 機器の変更のたびに、装着したユニットを親に合わせて並べ直す
   const setNodes = useCallback((update: DeviceFlowNode[] | ((ns: DeviceFlowNode[]) => DeviceFlowNode[])) => {
     setNodesRaw((ns) => arrangeMounted(typeof update === 'function' ? update(ns) : update));
@@ -227,8 +245,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice };
-  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers };
+  }, [issues, lanes, geometry, params, bus, linkPeers, focusDevice, showMarkers]);
 
   // シートごとの最も重い指摘（タブに印を付ける）
   const sheetSeverity = useMemo(() => {
@@ -391,6 +409,27 @@ function Editor() {
       ]);
     },
     [setEdges, wireDefaults, terminalOf],
+  );
+
+  // 端子から引いた電線を何もないところで離したら、接続先の候補（電源・PLC の空き入出力・リンク）を出す
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+      setConnecting(false);
+      if (state.isValid || state.toHandle || !state.fromNode || !state.fromHandle?.id) return;
+      const target = event.target as Element | null;
+      if (!target?.closest('.react-flow__pane')) return;
+      const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
+      if (terminalOf(from.device, from.terminal)?.connector) return;
+      const point = 'changedTouches' in event ? event.changedTouches[0] : event;
+      setPicker({
+        x: point.clientX,
+        y: point.clientY,
+        at: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
+        from,
+        suggestions: suggestConnections(diagram, from, getDeviceDefinition),
+      });
+    },
+    [terminalOf, screenToFlowPosition, diagram],
   );
 
   // コネクタは同じ種類（または変換ケーブルのある種類）のコネクタとだけ（ケーブルで）つなげる
@@ -641,6 +680,21 @@ function Editor() {
             <button type="button" onClick={copyAiPrompt} title="現在の図面と指示文をコピーします">AI用にコピー</button>
             <button type="button" onClick={() => setModal({ kind: 'paste' })} title="AIが返したJSONを貼り付けて読み込みます">JSONを貼り付け</button>
           </div>
+          <label className="toolbar__toggle" title="端子の近くに線番（マークチューブ）を表示します">
+            <input
+              type="checkbox"
+              checked={showMarkers}
+              onChange={(e) => {
+                setShowMarkers(e.target.checked);
+                try {
+                  localStorage.setItem('conneko.markers', e.target.checked ? 'on' : 'off');
+                } catch {
+                  // 保存できない環境では何もしない
+                }
+              }}
+            />
+            線番表示
+          </label>
           <label className="toolbar__setting" title="安全機能に要求するパフォーマンスレベル（ISO 13849-1）。これを下回る安全機器を警告します">
             要求PL
             <select
@@ -668,7 +722,7 @@ function Editor() {
           />
         </header>
         <Palette onAdd={(type) => addDevice(type)} />
-        <main className="canvas" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <main className={`canvas${connecting ? ' is-connecting' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <SheetTabs
             sheets={sheets}
             current={sheet}
@@ -689,6 +743,8 @@ function Editor() {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onConnectStart={() => setConnecting(true)}
+            onConnectEnd={onConnectEnd}
             isValidConnection={isValidConnection}
             onNodeContextMenu={onNodeContextMenu}
             onEdgeContextMenu={onEdgeContextMenu}
@@ -737,6 +793,27 @@ function Editor() {
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {picker && (
+        <ConnectPicker
+          x={picker.x}
+          y={picker.y}
+          from={`${picker.from.device}.${picker.from.terminal}`}
+          suggestions={picker.suggestions}
+          onClose={() => setPicker(null)}
+          onPower={(c) => {
+            setPicker(null);
+            applyDiagram(applyPowerCandidate(diagram, picker.from, c, picker.at, wireDefaults, getDeviceDefinition), `${picker.from.device}.${picker.from.terminal} を ${c.name} につなぎました${c.attach ? `（${c.attach.device} 側にもリンクを置きました）` : ''}`);
+          }}
+          onIo={(c) => {
+            setPicker(null);
+            applyDiagram(applyIoCandidate(diagram, picker.from, c, wireDefaults, getDeviceDefinition), `${picker.from.device}.${picker.from.terminal} を ${c.point.address}（${c.point.device}）につなぎました`);
+          }}
+          onLink={(name) => {
+            setPicker(null);
+            applyDiagram(placeLinkAt(diagram, picker.from, name, picker.at, wireDefaults, getDeviceDefinition), `リンク「${name}」を置きました`);
+          }}
+        />
+      )}
       {ioDevice && (
         <IoDialog
           diagram={diagram}

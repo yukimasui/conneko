@@ -25,14 +25,17 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
       const r = el.getBoundingClientRect();
       setPos({ x: Math.min(x, window.innerWidth - r.width - 8), y: Math.min(y, window.innerHeight - r.height - 8) });
     }
-    const down = (e: MouseEvent) => {
+    // キャンバスはマウスのイベントを止めるため、取り込み（capture）で外側のクリックを拾う
+    const down = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('mousedown', down);
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('wheel', onClose, true);
     window.addEventListener('keydown', key);
     return () => {
-      window.removeEventListener('mousedown', down);
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('wheel', onClose, true);
       window.removeEventListener('keydown', key);
     };
   }, [x, y, onClose]);

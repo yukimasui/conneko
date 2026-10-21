@@ -29,6 +29,8 @@ export interface EditorContextValue {
   linkPeers: Map<string, { id: string; sheet: string; sheetName: string }[]>;
   /** 機器へ移動する（シートを切り替えて選択する） */
   onJump: (deviceId: string) => void;
+  /** 端子の近くに線番（マークチューブ）を表示する */
+  showMarkers: boolean;
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -41,6 +43,7 @@ export const EditorContext = createContext<EditorContextValue>({
   hosts: new Set(),
   linkPeers: new Map(),
   onJump: () => {},
+  showMarkers: true,
 });
 
 export const useEditorContext = () => useContext(EditorContext);

@@ -65,6 +65,101 @@ function rankTerminals(
     .sort((a, b) => b.score - a.score);
 }
 
+/** 機器の端子をパッチボードから I/O の行へドラッグするときのデータの種類 */
+const TERMINAL_MIME = 'application/x-conneko-terminal';
+
+interface FieldTerminal {
+  ref: TerminalRef;
+  label: string;
+  kind: string;
+  wired: boolean;
+}
+
+interface FieldDevice {
+  id: string;
+  name: string;
+  sheet: string;
+  terminals: FieldTerminal[];
+}
+
+/** パッチボードに並べる、I/O につなげる現場の機器の端子（入力用・出力用） */
+function fieldDevices(diagram: Diagram, family: Set<string>, sample: IoPoint, wired: (dev: string, t: string) => boolean): FieldDevice[] {
+  const out: FieldDevice[] = [];
+  for (const d of diagram.devices) {
+    const def = getDeviceDefinition(d.type);
+    if (!def || family.has(d.id) || NOT_FIELD.has(def.category)) continue;
+    const r = resolveDevice(def, d.params);
+    const terminals = r.terminals
+      .map((t) => ({ t, score: terminalScore(r, t, sample) }))
+      .filter((x) => x.score >= 2)
+      .map(({ t }) => ({
+        ref: { device: d.id, terminal: t.id },
+        label: t.label && t.label !== t.id ? `${t.id}（${t.label}）` : t.id,
+        kind: t.signal ? SIGNAL_NAMES[t.signal.kind] ?? '' : t.role === 'input' ? '負荷' : '接点',
+        wired: wired(d.id, t.id),
+      }));
+    if (terminals.length) out.push({ id: d.id, name: `${def.name} ${def.model}`, sheet: sheetOf(diagram, d), terminals });
+  }
+  return out;
+}
+
+/** 現場の機器の端子の一覧（ドラッグして I/O の行に落とす、またはクリックしてから行をクリックしてつなぐ） */
+function PatchBoard({
+  diagram,
+  devices,
+  picked,
+  onPick,
+}: {
+  diagram: Diagram;
+  devices: FieldDevice[];
+  picked: TerminalRef | null;
+  onPick: (t: TerminalRef | null) => void;
+}) {
+  const [showWired, setShowWired] = useState(false);
+  const sheets = sheetsOf(diagram);
+  const list = devices.map((d) => ({ ...d, terminals: d.terminals.filter((t) => showWired || !t.wired) })).filter((d) => d.terminals.length);
+  const isPicked = (t: TerminalRef) => picked?.device === t.device && picked.terminal === t.terminal;
+  return (
+    <aside className="io-patch">
+      <div className="io-patch__head">
+        <strong>つなげる機器</strong>
+        <label className="muted small">
+          <input type="checkbox" checked={showWired} onChange={(e) => setShowWired(e.target.checked)} /> 配線済みも表示
+        </label>
+      </div>
+      <p className="muted small io-patch__hint">端子を左の I/O の行へドラッグ（またはクリックしてから行をクリック）してつなぎます。</p>
+      <div className="io-patch__list">
+        {list.map((d) => (
+          <div key={d.id} className="io-patch__device">
+            <div className="io-patch__name">
+              <strong>{d.id}</strong> <span className="muted">{d.name}</span>
+              <span className="io-patch__sheet">{sheets.find((s) => s.id === d.sheet)?.name}</span>
+            </div>
+            {d.terminals.map((t) => (
+              <button
+                key={t.ref.terminal}
+                type="button"
+                draggable
+                className={`io-patch__terminal${isPicked(t.ref) ? ' is-picked' : ''}${t.wired ? ' is-wired' : ''}`}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(TERMINAL_MIME, JSON.stringify(t.ref));
+                  e.dataTransfer.effectAllowed = 'link';
+                }}
+                onClick={() => onPick(isPicked(t.ref) ? null : t.ref)}
+                title={t.wired ? 'すでに電線がつながっています' : undefined}
+              >
+                <span>{t.label}</span>
+                <span className="muted">{t.kind}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+        {!list.length && <p className="muted small">つなげる機器がありません。キャンバスにセンサー・スイッチ・負荷などを置いてください。</p>}
+      </div>
+    </aside>
+  );
+}
+
 function pointKind(p: IoPoint): string {
   const dir = p.dir === 'in' ? '入力' : '出力';
   return p.kind && p.kind !== 'dc' ? `${dir}（${SIGNAL_NAMES[p.kind] ?? p.kind}）` : dir;
@@ -141,6 +236,8 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
   const [connecting, setConnecting] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [onlyFree, setOnlyFree] = useState(false);
+  const [picked, setPicked] = useState<TerminalRef | null>(null);
+  const [dropRow, setDropRow] = useState<string | null>(null);
 
   if (!system || !system.units.length) {
     return (
@@ -163,6 +260,15 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
     (p) => (!onlyFree || !p.connections.length) && (!words || `${p.address} ${p.label} ${p.comment} ${p.connections.map((c) => c.name).join(' ')}`.toLowerCase().includes(words)),
   );
   const pointKey = (p: IoPoint) => `${p.device}:${p.terminal}`;
+  const connect = (p: IoPoint, t: TerminalRef) => {
+    setPicked(null);
+    setConnecting(null);
+    onApply(connectIo(diagram, p, t, IO_WIRE, getDeviceDefinition), `${p.address} を ${t.device}.${t.terminal} につなぎました`);
+  };
+  const wiredSet = new Set(diagram.wires.flatMap((w) => [`${w.from.device}:${w.from.terminal}`, `${w.to.device}:${w.to.terminal}`]));
+  // パッチボードは、このユニットの I/O（入力が多ければ入力）に向く端子を並べる
+  const sample = unit.points.find((p) => p.dir === (unit.points.filter((x) => x.dir === 'in').length >= unit.points.length / 2 ? 'in' : 'out')) ?? unit.points[0];
+  const field = sample ? fieldDevices(diagram, family, sample, (dev, t) => wiredSet.has(`${dev}:${t}`)) : [];
   const range = (u: (typeof system.units)[number]) => {
     const ins = u.points.filter((p) => p.dir === 'in');
     const outs = u.points.filter((p) => p.dir === 'out');
@@ -229,7 +335,25 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
               </thead>
               <tbody>
                 {rows.map((p) => (
-                  <tr key={pointKey(p)} className={p.dir === 'in' ? 'is-in' : 'is-out'}>
+                  <tr
+                    key={pointKey(p)}
+                    className={`${p.dir === 'in' ? 'is-in' : 'is-out'}${dropRow === pointKey(p) ? ' is-drop' : ''}${picked && p.endpoint ? ' is-pickable' : ''}`}
+                    onDragOver={(e) => {
+                      if (!p.endpoint || !e.dataTransfer.types.includes(TERMINAL_MIME)) return;
+                      e.preventDefault();
+                      setDropRow(pointKey(p));
+                    }}
+                    onDragLeave={() => setDropRow((r) => (r === pointKey(p) ? null : r))}
+                    onDrop={(e) => {
+                      setDropRow(null);
+                      const raw = e.dataTransfer.getData(TERMINAL_MIME);
+                      if (raw && p.endpoint) connect(p, JSON.parse(raw) as TerminalRef);
+                    }}
+                    onClick={(e) => {
+                      if (!picked || !p.endpoint || (e.target as Element).closest('input,button,select')) return;
+                      connect(p, picked);
+                    }}
+                  >
                     <td className="io-address" title={p.label}>
                       {p.address}
                     </td>
@@ -267,10 +391,7 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                             point={p}
                             family={family}
                             onCancel={() => setConnecting(null)}
-                            onConnect={(t) => {
-                              setConnecting(null);
-                              onApply(connectIo(diagram, p, t, IO_WIRE, getDeviceDefinition), `${p.address} を ${t.device}.${t.terminal} につなぎました`);
-                            }}
+                            onConnect={(t) => connect(p, t)}
                           />
                         ) : (
                           <button
@@ -292,6 +413,7 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
             </table>
             {!rows.length && <p className="muted small">該当する I/O はありません</p>}
           </section>
+          <PatchBoard diagram={diagram} devices={field} picked={picked} onPick={setPicked} />
         </div>
         <p className="muted small io-dialog__foot">
           接続すると、線番を入出力番号にした電線を引きます。別のシートの機器へは、入出力番号を名前にしたリンクを両方のシートに置いてつなぎます。
