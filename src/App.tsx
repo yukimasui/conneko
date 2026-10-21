@@ -724,8 +724,11 @@ function Editor() {
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     a.href = url;
     a.download = `conneko-${stamp}.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // すぐに無効にするとファイル名が付かないことがあるため、少し待ってから無効にする
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const openFile = async (file: File) => {
@@ -737,17 +740,19 @@ function Editor() {
     }
   };
 
-  /** ファイルとしてダウンロードさせる（名前は「図面名-種類-日付.拡張子」） */
+  /** ファイルとしてダウンロードさせる（名前は「conneko-種類-日付.拡張子」。日本語の名前は付かないブラウザがあるため英数字だけ） */
   const download = (text: string, kind: string, ext: string, type: string) => {
     const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement('a');
     const now = new Date();
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const base = (settings.title || 'conneko').replace(/[\\/:*?"<>|\s]+/g, '_');
     a.href = url;
-    a.download = `${base}-${kind}-${stamp}.${ext}`;
+    a.download = `conneko-${kind}-${stamp}.${ext}`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    // すぐに無効にするとファイル名が付かないことがあるため、少し待ってから無効にする
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const openExportMenu = (e: React.MouseEvent) => {
@@ -758,14 +763,14 @@ function Editor() {
       y: r.bottom + 4,
       items: [
         { label: '印刷・PDF…', onClick: () => setPrintDialog(true) },
-        { label: '部品表（CSV）', separator: true, onClick: () => download(bomCsv(diagram, getDeviceDefinition), '部品表', 'csv', 'text/csv') },
-        { label: '線番表（CSV）', onClick: () => download(wireCsv(diagram, getDeviceDefinition), '線番表', 'csv', 'text/csv') },
-        { label: 'I/O 表（CSV）', onClick: () => download(ioCsv(diagram, getDeviceDefinition), 'IO表', 'csv', 'text/csv') },
+        { label: '部品表（CSV）', separator: true, onClick: () => download(bomCsv(diagram, getDeviceDefinition), 'bom', 'csv', 'text/csv') },
+        { label: '線番表（CSV）', onClick: () => download(wireCsv(diagram, getDeviceDefinition), 'wires', 'csv', 'text/csv') },
+        { label: 'I/O 表（CSV）', onClick: () => download(ioCsv(diagram, getDeviceDefinition), 'io', 'csv', 'text/csv') },
         {
           label: `表示中のシートの画像（SVG）`,
           hint: sheetName,
           separator: true,
-          onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, sheetName || 'シート', 'svg', 'image/svg+xml'),
+          onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, `sheet${sheets.findIndex((s) => s.id === sheet) + 1}`, 'svg', 'image/svg+xml'),
         },
       ],
     });
