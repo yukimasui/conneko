@@ -97,7 +97,7 @@ const def: DeviceDefinition = {
   category: 'safety',
   description:
     'オムロン D4N 安全リミットスイッチ（樹脂ローラレバー形、スローアクション、電線引込口 M20、IP67）。扉・可動テーブルなどの位置検出に使い、レバーが押されると b 接点が強制的に開く（直接開路動作、IEC 60947-5-1 附属書 K）。' +
-    '接点は b 接点 11-12・21-22 と a 接点 33-34（AC-15 240V 3A）。安全回路では 11-12 と 21-22 を安全リレーの 2 チャンネル入力に 1 回路ずつ接続し、33-34 は PLC への状態入力などに使う。図ではレバーが押されていない状態として接点を閉とみなす。',
+    '接点は b 接点 11-12・21-22 と a 接点 33-34（AC-15 240V 3A）。安全回路では 11-12 と 21-22 を安全リレーの 2 チャンネル入力に 1 回路ずつ接続し、33-34 は PLC への状態入力などに使う。',
   labelPrefix: 'LS',
   width: W,
   height: H,
@@ -111,11 +111,13 @@ const def: DeviceDefinition = {
     role: 'signal' as const,
     optional: id === '33' || id === '34',
   })),
+  // レバーが押されていない状態で b 接点 11-12・21-22 が閉（直接開路動作）、a 接点 33-34 が開
   links: [
-    { from: '11', to: '12' },
-    { from: '21', to: '22' },
-    { from: '33', to: '34' },
+    { from: '11', to: '12', switch: 'NC', directOpening: true },
+    { from: '21', to: '22', switch: 'NC', directOpening: true },
+    { from: '33', to: '34', switch: 'NO' },
   ],
+  safety: { standards: ['IEC 60947-5-1 附属書 K', 'ISO 14119'] },
 };
 
 export default def;

@@ -131,7 +131,7 @@ const def: DeviceDefinition = {
   category: 'safety',
   description:
     'IDEC XW シリーズの非常停止用押ボタンスイッチ（Φ22 取付、Φ40 キノコ形、プッシュロック・ターンリセット、M3 ネジ端子）。直接開路動作（IEC 60947-5-5）の b 接点（NC）21-22・41-42 の 2 回路を持ち（DC-13 30V 1A）、安全リレー・安全コントローラーの 2 チャンネル入力（例: G9SE の T11-T12 と T21-T22）にそれぞれ 1 回路ずつ接続する。' +
-    '接点ブロックが外れると b 接点が開くセーフブレークアクション付き。図では接点を閉（押されていない状態）とみなす。',
+    '接点ブロックが外れると b 接点が開くセーフブレークアクション付き。',
   labelPrefix: 'EMG',
   width: W,
   height: H,
@@ -140,7 +140,10 @@ const def: DeviceDefinition = {
     { id: b.top, label: `${b.top}（b 接点 ${i + 1}・直接開路）`, x: b.x, y: TOP_Y, side: 'top' as const, role: 'signal' as const },
     { id: b.bottom, label: `${b.bottom}（b 接点 ${i + 1}・直接開路）`, x: b.x, y: BOT_Y, side: 'bottom' as const, role: 'signal' as const },
   ]),
-  links: BLOCKS.map((b) => ({ from: b.top, to: b.bottom })),
+  // 押されていない状態で閉じている b 接点（直接開路動作）
+  links: BLOCKS.map((b) => ({ from: b.top, to: b.bottom, switch: 'NC' as const, directOpening: true })),
+  // 非常停止スイッチ単体には PL の定めがない（B10d と組み合わせる安全回路の構成で決まる）
+  safety: { standards: ['IEC 60947-5-5', 'ISO 13850'] },
 };
 
 export default def;

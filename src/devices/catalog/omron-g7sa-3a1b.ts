@@ -95,7 +95,7 @@ const def: DeviceDefinition = {
   category: 'contactor',
   description:
     'オムロン G7SA 強制ガイド式リレー（EN 61810-3 タイプA）3a1b、コイル DC24V（15mA、極性あり: A1 が +）。表面取付ソケット P7SA-10F-ND（動作表示灯・サージ吸収ダイオード付き）に挿した状態。接点は AC250V/DC30V 6A（DC13 24V 1A）。' +
-    'a 接点 23-24・33-34・43-44、b 接点 11-12。a 接点が溶着しても b 接点は開いたままになるため、安全リレー・安全コントローラーの出力を増設するときは 11-12 を EDM（フィードバックループ）に直列に入れて溶着を検出する。図では接点を閉とみなす。',
+    'a 接点 23-24・33-34・43-44、b 接点 11-12。a 接点が溶着しても b 接点は開いたままになるため、安全リレー・安全コントローラーの出力を増設するときは 11-12 を EDM（フィードバックループ）に直列に入れて溶着を検出する。',
   labelPrefix: 'CR',
   width: W,
   height: H,
@@ -117,12 +117,14 @@ const def: DeviceDefinition = {
     { id: 'A2', label: 'A2（コイル −。旧表記 1）', x: COL[1], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['-'] } },
     { id: 'A1', label: 'A1（コイル +。旧表記 0）', x: COL[2], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['+'] } },
   ],
+  // a 接点 3 回路と、強制ガイドされた b 接点 11-12（a 接点が溶着すると開いたままになる）
   links: [
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
-    { from: '43', to: '44' },
-    { from: '11', to: '12' },
+    { from: '23', to: '24', switch: 'NO', linked: 'force-guided' },
+    { from: '33', to: '34', switch: 'NO', linked: 'force-guided' },
+    { from: '43', to: '44', switch: 'NO', linked: 'force-guided' },
+    { from: '11', to: '12', switch: 'NC', linked: 'force-guided' },
   ],
+  safety: { standards: ['EN 61810-3 タイプA'] },
   // コイル 15mA ＋ 表示灯
   loadCurrent: 0.02,
 };

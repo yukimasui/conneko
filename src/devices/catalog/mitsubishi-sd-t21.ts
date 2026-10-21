@@ -161,15 +161,18 @@ const def: DeviceDefinition = {
     { id: 'A1', label: 'A1(+)', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['+'] } },
     { id: 'A2', label: 'A2(−)', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['-'] } },
   ],
+  // 主接点・補助 a 接点 13-14・43-44 は a 接点、補助 b 接点 21-22・31-32 はミラー接点
   links: [
-    { from: '1/L1', to: '2/T1', directed: true },
-    { from: '3/L2', to: '4/T2', directed: true },
-    { from: '5/L3', to: '6/T3', directed: true },
-    { from: '13', to: '14' },
-    { from: '43', to: '44' },
-    { from: '21', to: '22' },
-    { from: '31', to: '32' },
+    { from: '1/L1', to: '2/T1', directed: true, switch: 'NO' },
+    { from: '3/L2', to: '4/T2', directed: true, switch: 'NO' },
+    { from: '5/L3', to: '6/T3', directed: true, switch: 'NO' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '43', to: '44', switch: 'NO' },
+    { from: '21', to: '22', switch: 'NC', linked: 'mirror' },
+    { from: '31', to: '32', switch: 'NC', linked: 'mirror' },
   ],
+  // 電磁接触器自体には PL の定めがない（B10d から安全回路の構成で求める）
+  safety: { standards: ['IEC 60947-4-1 附属書 F（ミラー接点）'] },
   // コイル消費電力 2.4W / 24V
   loadCurrent: 0.1,
 };
