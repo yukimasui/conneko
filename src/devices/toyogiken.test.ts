@@ -14,7 +14,7 @@ import { paramVariants } from './validate';
 const togi = deviceDefinitions.filter((d) => d.maker === '東洋技研');
 const withConnector = togi.filter((d) => resolveDevice(d).terminals.some((t) => t.connector));
 /** 1:1 タイプ（コネクタのピンと端子が 1 対 1） */
-const oneToOne = withConnector.filter((d) => /^toyogiken\.(pcn7|pcx|pcv5|pcw)-(1h\d+|4f40)2?$/.test(d.type));
+const oneToOne = withConnector.filter((d) => /^toyogiken\.(pcn7|pcx|pcxv|pcv5|pcw)-(1h\d+|4f40)2?$/.test(d.type));
 
 const def = (type: string): DeviceDefinition => {
   const d = getDeviceDefinition(type);
@@ -42,7 +42,7 @@ describe('東洋技研 機器定義', () => {
       expect(d.type.startsWith('toyogiken.'), d.type).toBe(true);
       expect(d.category, d.type).toBe('terminal');
     }
-    expect(oneToOne.length).toBe(20);
+    expect(oneToOne.length).toBe(22);
   });
 
   it.each(oneToOne.map((d) => [d.type, d] as const))('%s: コネクタの全ピンが端子と 1 対 1 でつながる', (_, d) => {
