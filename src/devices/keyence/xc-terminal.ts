@@ -47,6 +47,11 @@ export function buildXcTerminal(s: XcSpec): DeviceDefinition {
   };
   /** 端子番号 → コネクタの MIL 標準ピン番号 */
   const pinOf = (t: number) => (s.numbering === 'keyence' ? keyenceToStd(t, n) : t);
+  /** 端子の意味（つながるコネクタのピン） */
+  const noteOf = (t: number) =>
+    s.numbering === 'keyence'
+      ? `コネクタの MIL 標準ピン ${pinOf(t)}（KEYENCE の I/O ユニットのピン No.${t} に当たる。意味はつないだユニットのピン一覧の (No.${t}) を見る）`
+      : `コネクタの MIL 標準ピン ${t}（KV-SIR32XT など MIL 標準番号で書かれたユニットのピン番号と同じ）`;
 
   const nums = Array.from({ length: n }, (_, i) => i + 1);
 
@@ -111,14 +116,23 @@ export function buildXcTerminal(s: XcSpec): DeviceDefinition {
 `;
 
   const terminals: TerminalDef[] = [
-    { id: 'CN', label: `CN (MIL ${n}P)`, x: CN.x, y: CN.y, side: 'top', role: 'connector', connector: { kind: `MIL${n}`, pins: n, width: +CN.w.toFixed(2) } },
+    {
+      id: 'CN',
+      label: `CN (MIL ${n}P)`,
+      x: CN.x,
+      y: CN.y,
+      side: 'top',
+      role: 'connector',
+      // ケーブルのプラグは上から差す（正面向き）。プラグの厚みは約 8mm
+      connector: { kind: `MIL${n}`, pins: n, width: +CN.w.toFixed(2), facing: 'front', length: 16 },
+    },
     ...nums.map((t): TerminalDef => {
       const p = termPos(t);
-      // 電線は手前（図の下側）に出す（汎用の MIL 変換端子台と同じ）
-      return { id: String(t), label: `${t}（CN ピン ${pinOf(t)}）`, x: p.x, y: p.y, side: 'bottom', role: 'pass', optional: true };
+      // label は端子台の印字（端子番号）、note はつながるコネクタのピン。電線は手前（図の下側）に出す
+      return { id: String(t), label: String(t), note: noteOf(t), x: p.x, y: p.y, side: 'bottom', role: 'pass', optional: true };
     }),
   ];
-  const pins: PinDef[] = nums.map((p) => ({ id: `CN#${p}`, role: 'pass', optional: true }));
+  const pins: PinDef[] = nums.map((p) => ({ id: `CN#${p}`, label: `MIL ピン ${p}`, role: 'pass', optional: true }));
   const links: InternalLink[] = nums.map((t) => ({ from: `CN#${pinOf(t)}`, to: String(t) }));
 
   return {
