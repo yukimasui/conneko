@@ -54,6 +54,23 @@ export interface IoSystem {
 
 const noop = () => {};
 
+/**
+ * 入出力番号の並び順。X・Y で始まる番号は 16 進（三菱 iQ-R。8 進の FX も 16 進として読んで順番は変わらない）、
+ * ほか（KEYENCE の R など）は 10 進として比べる。
+ */
+export function compareAddress(a: string, b: string): number {
+  const parse = (s: string) => {
+    const m = /^([A-Z]*)([0-9A-F]+)$/i.exec(s);
+    if (!m) return { prefix: s, n: NaN };
+    const prefix = m[1].toUpperCase();
+    return { prefix, n: parseInt(m[2], prefix === 'X' || prefix === 'Y' ? 16 : 10) };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa.prefix !== pb.prefix || Number.isNaN(pa.n) || Number.isNaN(pb.n)) return a.localeCompare(b, 'ja', { numeric: true });
+  return pa.n - pb.n;
+}
+
 /** 機器が I/O を持つ PLC か */
 export function hasIo(def: DeviceDefinition | undefined, params?: Record<string, number | string>): boolean {
   if (!def || def.category !== 'plc') return false;
@@ -207,19 +224,32 @@ export function disconnectIo(d: Diagram, point: IoPoint, target: TerminalRef, lo
 }
 
 /**
- * ユニットのコネクタに、合う変換端子台をケーブルでつないで置く（ユニットの下に配置）。
+ * ユニットのコネクタにつなげる変換端子台の機種（汎用品を先に、メーカー・型式の順）。
  */
-export function addTerminalBlock(d: Diagram, unitId: string, connectorId: string, defs: DeviceDefinition[], lookup: DefLookup): Diagram {
+export function terminalBlocksFor(d: Diagram, unitId: string, connectorId: string, defs: DeviceDefinition[], lookup: DefLookup): DeviceDefinition[] {
   const unit = d.devices.find((x) => x.id === unitId);
   const def = unit && lookup(unit.type);
   const conn = def && resolveDevice(def, unit.params).terminal(connectorId)?.connector;
-  if (!unit || !def || !conn) return d;
-  const tbDef = defs.find((x) => {
-    if (x.category !== 'terminal') return false;
-    const c = resolveDevice(x).terminals.find((t) => t.connector)?.connector;
-    return !!c && (c.kind === conn.kind || !!conn.mates?.includes(c.kind) || !!c.mates?.includes(conn.kind));
-  });
-  if (!tbDef) return d;
+  if (!conn) return [];
+  return defs
+    .filter((x) => {
+      if (x.category !== 'terminal') return false;
+      const c = resolveDevice(x).terminals.find((t) => t.connector)?.connector;
+      return !!c && (c.kind === conn.kind || !!conn.mates?.includes(c.kind) || !!c.mates?.includes(conn.kind));
+    })
+    .sort((a, b) => Number(!!a.maker) - Number(!!b.maker) || (a.maker ?? '').localeCompare(b.maker ?? '', 'ja') || a.model.localeCompare(b.model, 'ja', { numeric: true }));
+}
+
+/**
+ * ユニットのコネクタに、合う変換端子台をケーブルでつないで置く（ユニットの下に配置）。
+ * type を省略すると、つなげる機種のうち最初のもの（汎用品）を使う。
+ */
+export function addTerminalBlock(d: Diagram, unitId: string, connectorId: string, defs: DeviceDefinition[], lookup: DefLookup, type?: string): Diagram {
+  const unit = d.devices.find((x) => x.id === unitId);
+  const def = unit && lookup(unit.type);
+  const candidates = terminalBlocksFor(d, unitId, connectorId, defs, lookup);
+  const tbDef = candidates.find((x) => x.type === type) ?? candidates[0];
+  if (!unit || !def || !tbDef) return d;
   const tbConn = resolveDevice(tbDef).terminals.find((t) => t.connector)!;
   const id = nextDeviceId(tbDef.labelPrefix, d.devices.map((x) => x.id));
   // 同じユニットに置いた端子台と重ならないよう、横にずらす

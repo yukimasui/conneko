@@ -4,8 +4,7 @@ import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
 import type { DeviceDefinition, TerminalDef } from '../devices/types';
 
-const collator = new Intl.Collator('ja', { numeric: true });
-import { addTerminalBlock, connectIo, disconnectIo, ioSystem, setComment, swapIo, type IoPoint } from '../model/io';
+import { addTerminalBlock, compareAddress, connectIo, disconnectIo, ioSystem, setComment, swapIo, terminalBlocksFor, type IoPoint } from '../model/io';
 import { sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
 import { SIGNAL_NAMES } from './DeviceNode';
 
@@ -164,6 +163,35 @@ function PatchBoard({
   );
 }
 
+/** 変換端子台のないコネクタの案内（機種を選んで追加する） */
+function TerminalBlockBanner({ diagram, unitId, connector, onApply }: { diagram: Diagram; unitId: string; connector: string; onApply: Props['onApply'] }) {
+  const candidates = terminalBlocksFor(diagram, unitId, connector, deviceDefinitions, getDeviceDefinition);
+  const [type, setType] = useState(candidates[0]?.type ?? '');
+  return (
+    <div className="io-banner">
+      <span>
+        {unitId} の {connector} に変換端子台がつながっていないため、電線をつなげません。
+      </span>
+      <select value={type} onChange={(e) => setType(e.target.value)}>
+        {candidates.map((d) => (
+          <option key={d.type} value={d.type}>
+            {d.maker ? `${d.maker} ` : ''}
+            {d.model}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="primary"
+        disabled={!candidates.length}
+        onClick={() => onApply(addTerminalBlock(diagram, unitId, connector, deviceDefinitions, getDeviceDefinition, type), `${unitId} の ${connector} に変換端子台を追加しました`)}
+      >
+        変換端子台を追加
+      </button>
+    </div>
+  );
+}
+
 function pointKind(p: IoPoint): string {
   const dir = p.dir === 'in' ? '入力' : '出力';
   return p.kind && p.kind !== 'dc' ? `${dir}（${SIGNAL_NAMES[p.kind] ?? p.kind}）` : dir;
@@ -251,7 +279,7 @@ export function IoEditor({ diagram, deviceId, onApply, onJump }: Omit<Props, 'on
   const family = new Set([system.host.id, ...system.units.map((u) => u.device.id)]);
   const unit = system.units.find((u) => u.device.id === unitId) ?? system.units.find((u) => u.device.id === deviceId) ?? system.units[0];
   const words = filter.trim().toLowerCase();
-  const rows = [...unit.points].sort((a, b) => collator.compare(a.address, b.address)).filter(
+  const rows = [...unit.points].sort((a, b) => compareAddress(a.address, b.address)).filter(
     (p) => (!onlyFree || !p.connections.length) && (!words || `${p.address} ${p.label} ${p.comment} ${p.connections.map((c) => c.name).join(' ')}`.toLowerCase().includes(words)),
   );
   const pointKey = (p: IoPoint) => `${p.device}:${p.terminal}`;
@@ -295,18 +323,7 @@ export function IoEditor({ diagram, deviceId, onApply, onJump }: Omit<Props, 'on
               </label>
             </div>
             {unit.bareConnectors.map((c) => (
-              <div key={c} className="io-banner">
-                <span>
-                  {unit.device.id} の {c} に変換端子台がつながっていないため、電線をつなげません。
-                </span>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => onApply(addTerminalBlock(diagram, unit.device.id, c, deviceDefinitions, getDeviceDefinition), `${unit.device.id} の ${c} に変換端子台を追加しました`)}
-                >
-                  変換端子台を追加
-                </button>
-              </div>
+              <TerminalBlockBanner key={c} diagram={diagram} unitId={unit.device.id} connector={c} onApply={onApply} />
             ))}
             <table className="io-table">
               <thead>

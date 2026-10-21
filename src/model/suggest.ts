@@ -11,7 +11,7 @@ import { CIRCUIT_COLOR_RULES, type CircuitKind } from '../data/wires';
 import { resolveDevice } from '../devices/resolve';
 import { resolveNum, type Conductor, type DeviceDefinition, type PowerSystem } from '../devices/types';
 import type { Diagram, TerminalRef } from './diagram';
-import { connectIo, ioHosts, ioSystem, type IoPoint } from './io';
+import { compareAddress, connectIo, ioHosts, ioSystem, type IoPoint } from './io';
 import { LINK_TYPE, linkNames, linkTerminal, NET_LINK_TYPE, placeLinkAt, uniqueLinkName, type WireAttrs } from './ops';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -167,7 +167,7 @@ export function suggestConnections(d: Diagram, from: TerminalRef, lookup: DefLoo
         }
       }
     }
-    io.sort((a, b) => a.point.address.localeCompare(b.point.address, 'ja', { numeric: true }));
+    io.sort((a, b) => compareAddress(a.point.address, b.point.address));
   }
   return { power, io, defaultName };
 }

@@ -1609,3 +1609,8 @@ textarea {
   height: 14px;
   flex: none;
 }
+
+.io-banner select {
+  max-width: 260px;
+  margin-left: auto;
+}

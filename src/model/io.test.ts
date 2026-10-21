@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { checkDiagram } from '../check/checkDiagram';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import type { Diagram } from './diagram';
-import { addTerminalBlock, connectIo, disconnectIo, ioHosts, ioSystem, setComment, swapIo } from './io';
+import { addTerminalBlock, compareAddress, connectIo, disconnectIo, ioHosts, ioSystem, setComment, swapIo } from './io';
 import { moveToSheet, promoteLinkNames, splitCrossSheetWires, splitWireWithLinks } from './ops';
 
 const lookup = getDeviceDefinition;
@@ -143,5 +143,13 @@ describe('シート', () => {
     ]);
     expect(out.wires).toHaveLength(2);
     expect(checkDiagram(out, lookup).filter((i) => i.rule.startsWith('link-'))).toEqual([]);
+  });
+});
+
+describe('入出力番号の並び', () => {
+  it('X・Y は 16 進、R は 10 進で並べる', () => {
+    expect(['Y3A', 'Y30', 'Y2F', 'Y40'].sort(compareAddress)).toEqual(['Y2F', 'Y30', 'Y3A', 'Y40']);
+    expect(['R1000', 'R200', 'R015', 'R100'].sort(compareAddress)).toEqual(['R015', 'R100', 'R200', 'R1000']);
+    expect(['X17', 'X20', 'X7'].sort(compareAddress)).toEqual(['X7', 'X17', 'X20']);
   });
 });
