@@ -7,31 +7,28 @@ import type { DeviceDefinition, PinDef, TerminalDef, InternalLink } from '../typ
  *
  * ピン番号は MIL 規格の標準的な千鳥番号（▲マーク側の端が 1・2、奥列が偶数 2,4…40、手前列が奇数 1,3…39）。
  * ネジ端子も同じ番号で、奥段が奇数 1〜39、手前段が偶数 2〜40。コネクタのピン n とネジ端子 n が導通する。
+ *
+ * 極数違い（34P など）でも使えるよう、定義の生成は buildMilTerminalBlock にまとめている。
  */
 
-const POLES = 40;
-const COLS = POLES / 2;
-const W = 284;
+export interface MilTerminalBlockOptions {
+  /** 極数（偶数） */
+  poles: number;
+  /** 本体の長さ[mm]（取付けタブを除く） */
+  lengthMm: number;
+  type: string;
+}
+
 const H = 92;
 
 /** ネジ端子 */
 const PITCH = 10.16;
 const ODD_Y = 50;
 const EVEN_Y = 72;
-const ODD_X0 = 43;
-const EVEN_X0 = ODD_X0 + PITCH / 2;
-const termX = (n: number) => {
-  const col = Math.floor((n - 1) / 2);
-  return +((n % 2 === 1 ? ODD_X0 : EVEN_X0) + col * PITCH).toFixed(2);
-};
-const termY = (n: number) => (n % 2 === 1 ? ODD_Y : EVEN_Y);
 
-/** コネクタ（中心・ピンピッチ 2.54mm） */
-const CN_X = 142;
+/** コネクタ（ピンピッチ 2.54mm） */
 const CN_Y = 18;
-const CN_WIDTH = 116;
 const PIN_PITCH = 5.08;
-const PIN_X0 = CN_X - ((COLS - 1) / 2) * PIN_PITCH;
 const PIN_EVEN_Y = 15.5;
 const PIN_ODD_Y = 20.6;
 
@@ -43,17 +40,44 @@ const screw = (x: number, y: number) => `
 const num = (x: number, y: number, n: number) =>
   `<text x="${x}" y="${y}" text-anchor="middle" font-family="sans-serif" font-size="4.2" font-weight="bold" fill="#f2f2f2">${n}</text>`;
 
-const nums = Array.from({ length: POLES }, (_, i) => i + 1);
+/** MIL コネクタ変換端子台の機器定義を生成する */
+export function buildMilTerminalBlock({ poles, lengthMm, type }: MilTerminalBlockOptions): DeviceDefinition {
+  const COLS = poles / 2;
+  /** 全幅（本体 + 左右の取付けタブ 7px ずつ） */
+  const W = lengthMm * 2 + 14;
+  const CN_X = W / 2;
 
-/** 端子を固定する段（端子ブロック） */
-const strip = (y: number, h: number, x0: number) => `
+  /** ネジ端子は奇数段・偶数段を半ピッチずらして中央にそろえる */
+  const ODD_X0 = Math.round(CN_X - ((COLS - 1) * PITCH + PITCH / 2) / 2);
+  const EVEN_X0 = ODD_X0 + PITCH / 2;
+  const termX = (n: number) => {
+    const col = Math.floor((n - 1) / 2);
+    return +((n % 2 === 1 ? ODD_X0 : EVEN_X0) + col * PITCH).toFixed(2);
+  };
+  const termY = (n: number) => (n % 2 === 1 ? ODD_Y : EVEN_Y);
+
+  /** コネクタ外形（ピン列の長さ + 両端のロックレバー分） */
+  const HOUSING_W = Math.round((COLS - 1) * PIN_PITCH + 27.5);
+  const HALF = HOUSING_W / 2;
+  const SHROUD_W = HOUSING_W - 20;
+  const CN_WIDTH = HOUSING_W - 8;
+  const PIN_X0 = CN_X - ((COLS - 1) / 2) * PIN_PITCH;
+
+  const nums = Array.from({ length: poles }, (_, i) => i + 1);
+
+  /** 端子を固定する段（端子ブロック） */
+  const strip = (y: number, h: number, x0: number) => `
   <rect x="${x0 - 6}" y="${y}" width="${(COLS - 1) * PITCH + 12}" height="${h}" rx="1.5" fill="url(#strip-{{uid}})" stroke="#0e0e0e" stroke-width="0.6"/>
   ${Array.from({ length: COLS - 1 }, (_, i) => {
     const x = (x0 + (i + 0.5) * PITCH).toFixed(2);
     return `<line x1="${x}" y1="${y + 1.5}" x2="${x}" y2="${y + h - 1.5}" stroke="#5d6167" stroke-width="0.7"/>`;
   }).join('')}`;
 
-const svg = `
+  /** ベース上下の切欠き（DINレール取付部の窓） */
+  const notches: number[] = [];
+  for (let x = 30; x + 14 < W - 30; x += 50) notches.push(x);
+
+  const svg = `
   <defs>
     <linearGradient id="base-{{uid}}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3b3e42"/>
@@ -83,17 +107,17 @@ const svg = `
   <!-- ベース -->
   <rect x="7" y="1" width="${W - 14}" height="${H - 2}" rx="3" fill="url(#base-{{uid}})" stroke="#111" stroke-width="1"/>
   <rect x="10" y="4" width="${W - 20}" height="${H - 8}" rx="2" fill="none" stroke="#4a4d52" stroke-width="0.6"/>
-  ${[30, 80, 130, 180, 230]
+  ${notches
     .map((x) => `<rect x="${x}" y="1.5" width="14" height="2.5" fill="#17181a"/><rect x="${x}" y="${H - 4}" width="14" height="2.5" fill="#17181a"/>`)
     .join('')}
 
-  <!-- MIL 40極 オスコネクタ（ボックスヘッダ） -->
-  <rect x="${CN_X - 62}" y="6" width="124" height="25" rx="1.5" fill="url(#plug-{{uid}})" stroke="#080808" stroke-width="0.8"/>
+  <!-- MIL ${poles}極 オスコネクタ（ボックスヘッダ） -->
+  <rect x="${CN_X - HALF}" y="6" width="${HOUSING_W}" height="25" rx="1.5" fill="url(#plug-{{uid}})" stroke="#080808" stroke-width="0.8"/>
   <!-- 両端のロックレバー -->
-  <rect x="${CN_X - 61}" y="8" width="7" height="21" rx="1" fill="#2c2c2c" stroke="#555" stroke-width="0.5"/>
-  <rect x="${CN_X + 54}" y="8" width="7" height="21" rx="1" fill="#2c2c2c" stroke="#555" stroke-width="0.5"/>
+  <rect x="${CN_X - HALF + 1}" y="8" width="7" height="21" rx="1" fill="#2c2c2c" stroke="#555" stroke-width="0.5"/>
+  <rect x="${CN_X + HALF - 8}" y="8" width="7" height="21" rx="1" fill="#2c2c2c" stroke="#555" stroke-width="0.5"/>
   <!-- 差込口 -->
-  <rect x="${CN_X - 52}" y="10" width="104" height="16.5" rx="0.8" fill="#0b0b0b" stroke="#444" stroke-width="0.5"/>
+  <rect x="${CN_X - SHROUD_W / 2}" y="10" width="${SHROUD_W}" height="16.5" rx="0.8" fill="#0b0b0b" stroke="#444" stroke-width="0.5"/>
   ${Array.from({ length: COLS }, (_, i) => {
     const x = (PIN_X0 + i * PIN_PITCH).toFixed(2);
     return `<rect x="${(+x - 0.8).toFixed(2)}" y="${PIN_EVEN_Y - 0.8}" width="1.6" height="1.6" fill="#e0b84a"/><rect x="${(+x - 0.8).toFixed(2)}" y="${PIN_ODD_Y - 0.8}" width="1.6" height="1.6" fill="#e0b84a"/>`;
@@ -102,11 +126,11 @@ const svg = `
   <rect x="${CN_X - 4.5}" y="26" width="9" height="3.2" fill="#0b0b0b"/>
   <!-- 1番ピンの▲マークとピン番号 -->
   <path d="M${PIN_X0} 27.4 L${PIN_X0 - 2} 30.4 H${PIN_X0 + 2} Z" fill="#f2f2f2"/>
-  <text x="${CN_X - 65}" y="17" text-anchor="end" font-family="sans-serif" font-size="4.2" fill="#ddd">2</text>
-  <text x="${CN_X - 65}" y="22.5" text-anchor="end" font-family="sans-serif" font-size="4.2" fill="#ddd">1</text>
-  <text x="${CN_X + 65}" y="17" font-family="sans-serif" font-size="4.2" fill="#ddd">40</text>
-  <text x="${CN_X + 65}" y="22.5" font-family="sans-serif" font-size="4.2" fill="#ddd">39</text>
-  <text x="22" y="20" font-family="sans-serif" font-size="5" font-weight="bold" fill="#cfd2d6">MIL 40P</text>
+  <text x="${CN_X - HALF - 3}" y="17" text-anchor="end" font-family="sans-serif" font-size="4.2" fill="#ddd">2</text>
+  <text x="${CN_X - HALF - 3}" y="22.5" text-anchor="end" font-family="sans-serif" font-size="4.2" fill="#ddd">1</text>
+  <text x="${CN_X + HALF + 3}" y="17" font-family="sans-serif" font-size="4.2" fill="#ddd">${poles}</text>
+  <text x="${CN_X + HALF + 3}" y="22.5" font-family="sans-serif" font-size="4.2" fill="#ddd">${poles - 1}</text>
+  <text x="22" y="20" font-family="sans-serif" font-size="5" font-weight="bold" fill="#cfd2d6">MIL ${poles}P</text>
 
   <!-- ネジ端子（奥段: 奇数、手前段: 偶数） -->
   ${strip(36, 21, ODD_X0)}
@@ -115,38 +139,44 @@ const svg = `
   ${nums.map((n) => screw(termX(n), termY(n))).join('')}
 `;
 
-const terminals: TerminalDef[] = [
-  {
-    id: 'CN',
-    x: CN_X,
-    y: CN_Y,
-    side: 'top',
-    role: 'connector',
-    connector: { kind: 'MIL40', pins: POLES, width: CN_WIDTH },
-  },
-  ...nums.map(
-    (n): TerminalDef => ({ id: String(n), x: termX(n), y: termY(n), side: 'bottom', role: 'pass', optional: true }),
-  ),
-];
+  const terminals: TerminalDef[] = [
+    {
+      id: 'CN',
+      x: CN_X,
+      y: CN_Y,
+      side: 'top',
+      role: 'connector',
+      connector: { kind: `MIL${poles}`, pins: poles, width: CN_WIDTH },
+    },
+    ...nums.map(
+      (n): TerminalDef => ({ id: String(n), x: termX(n), y: termY(n), side: 'bottom', role: 'pass', optional: true }),
+    ),
+  ];
 
-const pins: PinDef[] = nums.map((n) => ({ id: `CN#${n}`, role: 'pass', optional: true }));
+  const pins: PinDef[] = nums.map((n) => ({ id: `CN#${n}`, role: 'pass', optional: true }));
 
-const links: InternalLink[] = nums.map((n) => ({ from: `CN#${n}`, to: String(n) }));
+  const links: InternalLink[] = nums.map((n) => ({ from: `CN#${n}`, to: String(n) }));
 
-const def: DeviceDefinition = {
+  return {
+    type,
+    name: 'MILコネクタ変換端子台',
+    model: `MIL ${poles}P 中継端子台`,
+    category: 'terminal',
+    description: `PLC の I/O ユニットなどの MIL ${poles}極コネクタをネジ端子に変換する中継端子台。コネクタのピン n とネジ端子 n が導通する（ピン番号は MIL 標準の千鳥番号: 1・2 が▲側の端、奇数/偶数で列が分かれる）。`,
+    labelPrefix: 'TB',
+    width: W,
+    height: H,
+    svg,
+    terminals,
+    pins,
+    links,
+  };
+}
+
+const def: DeviceDefinition = buildMilTerminalBlock({
+  poles: 40,
+  lengthMm: 135,
   type: 'generic.mil-terminal-block.40p',
-  name: 'MILコネクタ変換端子台',
-  model: 'MIL 40P 中継端子台',
-  category: 'terminal',
-  description:
-    'PLC の I/O ユニットなどの MIL 40極コネクタをネジ端子に変換する中継端子台。コネクタのピン n とネジ端子 n が導通する（ピン番号は MIL 標準の千鳥番号: 1・2 が▲側の端、奇数/偶数で列が分かれる）。',
-  labelPrefix: 'TB',
-  width: W,
-  height: H,
-  svg,
-  terminals,
-  pins,
-  links,
-};
+});
 
 export default def;

@@ -347,7 +347,7 @@ function Editor() {
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#c5ccd6" />
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor={(n) => (context.deviceSeverity.get(n.id) === 'error' ? '#ef4444' : '#94a3b8')} />
+            <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => (context.deviceSeverity.get(n.id) === 'error' ? '#ef4444' : '#94a3b8')} />
           </ReactFlow>
           {toast && <div className="toast">{toast}</div>}
         </main>

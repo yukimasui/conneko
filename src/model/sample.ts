@@ -4,6 +4,7 @@ import type { Diagram, DiagramWire } from './diagram';
  * 起動時に表示するサンプル図面。
  * 三相200V → 漏電遮断器 → 電磁接触器 → サーマルリレー → モーター の主回路と、
  * サーキットプロテクタから取る操作回路・DC24V 回路。
+ * PLC（KEYENCE KV-8000）と入出力ユニットは MIL ケーブルで変換端子台へ、タッチパネル VT5 とは LAN でつなぐ。
  * 盤用ファン（FAN1）は「配置済み・未配線」の例として配線していない（AI 連携の練習用）。
  */
 
@@ -31,9 +32,15 @@ export const sampleDiagram: Diagram = {
     { id: 'MC1', type: 'mitsubishi.s-t10.ac200v', x: 60, y: 680 },
     { id: 'THR1', type: 'mitsubishi.th-t18', x: 60, y: 860, params: { heater: 3.6 } },
     { id: 'M1', type: 'generic.motor.3p', x: 84, y: 1060, params: { ratedCurrent: 3.6 } },
-    { id: 'PSU1', type: 'generic.psu.dc24v', x: 420, y: 680, params: { outputCurrent: 2.5 } },
+    { id: 'PSU1', type: 'generic.psu.dc24v', x: 420, y: 680, params: { outputCurrent: 5 } },
     { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 300, y: 900 },
     { id: 'FAN1', type: 'generic.panel-fan.ac200v', x: 600, y: 470 },
+    { id: 'PLC1', type: 'keyence.kv-8000.cpu', x: 820, y: 700 },
+    { id: 'IN1', type: 'keyence.kv-c32xc.input', x: 933, y: 700 },
+    { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 979, y: 700 },
+    { id: 'TB3', type: 'generic.mil-terminal-block.34p', x: 800, y: 1000 },
+    { id: 'TB4', type: 'generic.mil-terminal-block.34p', x: 1080, y: 1000 },
+    { id: 'HMI1', type: 'keyence.vt5-w07', x: 1100, y: 330 },
   ],
   wires: [
     // 一次側
@@ -62,8 +69,22 @@ export const sampleDiagram: Diagram = {
     w('CP2:4', 'PSU1:N', 'T3', 'black', 1.25),
     w('PSU1:+V1', 'PL1:X1', 'P24', 'blue', 0.75),
     w('PSU1:-V1', 'PL1:X2', 'N24', 'blue', 0.75),
+    // PLC・タッチパネルの電源（DC24V）
+    w('PSU1:+V2', 'PLC1:24V+', 'P24', 'blue', 1.25),
+    w('PSU1:-V2', 'PLC1:24V-', 'N24', 'blue', 1.25),
+    w('PLC1:24V+', 'HMI1:24V+', 'P24', 'blue', 1.25),
+    w('PLC1:24V-', 'HMI1:24V-', 'N24', 'blue', 1.25),
+    // 入力ユニットのコモン（+24V）、出力ユニットのコモン（0V）
+    w('PLC1:24V+', 'TB3:33', 'P24', 'blue', 0.75),
+    w('PLC1:24V-', 'TB4:33', 'N24', 'blue', 0.75),
+    // MIL ケーブル・LAN ケーブル
+    { id: 'C1', from: { device: 'IN1', terminal: 'CN1' }, to: { device: 'TB3', terminal: 'CN' }, wireNo: 'CBL-IN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    { id: 'C2', from: { device: 'OUT1', terminal: 'CN1' }, to: { device: 'TB4', terminal: 'CN' }, wireNo: 'CBL-OUT1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    { id: 'C3', from: { device: 'PLC1', terminal: 'ETH' }, to: { device: 'HMI1', terminal: 'LAN' }, wireNo: 'LAN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
     // 接地
     w('PS1:PE', 'M1:E', 'E', 'green', 3.5),
     w('PS1:PE', 'PSU1:PE', 'E', 'green', 2),
+    w('PSU1:PE', 'PLC1:FG', 'E', 'green', 2),
+    w('PLC1:FG', 'HMI1:FG', 'E', 'green', 2),
   ],
 };
