@@ -19,6 +19,7 @@ const SAFETY_TYPES = [
   'idec.rf1v-2a2bl-d24',
   'keyence.gc-1000',
   'keyence.gc-1000r',
+  'keyence.gc-s84',
   'keyence.gl-r.receiver',
   'keyence.gl-r.emitter',
   'keyence.sz-v32',
