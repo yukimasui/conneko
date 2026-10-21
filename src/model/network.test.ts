@@ -81,4 +81,12 @@ describe('ネットワークリンク', () => {
     expect(rules(d)).not.toContain('protocol-mismatch');
     expect(rules({ ...d, wires: [...d.wires, cable('C3', 'PLC1.PORT3', 'HUB1.P3')] })).toContain('protocol-mismatch');
   });
+
+  it('LAN ポートから離したときのリンク名の案は、EtherCAT なら ECAT1、ほかは LAN1 から空いている番号', () => {
+    let d = base();
+    expect(suggestConnections(d, { device: 'HMI1', terminal: 'LAN' }, lookup).defaultName).toBe('LAN1');
+    expect(suggestConnections(d, { device: 'PLC1', terminal: 'PORT3' }, lookup).defaultName).toBe('ECAT1');
+    d = applyNetwork(d, { device: 'HMI1', terminal: 'LAN' }, 'LAN1', { x: 0, y: 300 }, lookup);
+    expect(suggestConnections(d, { device: 'HMI2', terminal: 'LAN' }, lookup).defaultName).toBe('LAN2');
+  });
 });

@@ -7,6 +7,7 @@ import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { terminalTitle } from './DeviceNode';
+import { wireWidth } from './WireEdge';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
 export type WireDefaults = Pick<WireEdgeData, 'color' | 'sizeSq' | 'wireType'>;
@@ -75,6 +76,7 @@ function WireFields({ value, onChange }: { value: WireDefaults; onChange: (patch
       </label>
       <label className="field">
         <span>太さ</span>
+        <div className="size-row">
         <select value={value.sizeSq} onChange={(e) => onChange({ sizeSq: Number(e.target.value) })}>
           {sizes.map((s) => (
             <option key={s} value={s}>
@@ -82,6 +84,11 @@ function WireFields({ value, onChange }: { value: WireDefaults; onChange: (patch
             </option>
           ))}
         </select>
+          {/* 描いたときの太さの見本 */}
+          <svg className="size-preview" viewBox="0 0 60 14" aria-hidden="true">
+            <line x1="4" y1="7" x2="56" y2="7" stroke={WIRE_COLORS.find((c) => c.id === value.color)?.hex ?? '#1a1a1a'} strokeWidth={wireWidth(value.sizeSq)} strokeLinecap="round" />
+          </svg>
+        </div>
       </label>
     </>
   );

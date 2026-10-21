@@ -1587,3 +1587,18 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* --- 電線の太さの見本 --- */
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.size-row select {
+  flex: 1;
+}
+.size-preview {
+  width: 60px;
+  height: 14px;
+  flex: none;
+}

@@ -24,7 +24,7 @@ const IO_LIMIT = 40;
 export function ConnectPicker({ x, y, from, suggestions, onPower, onIo, onLink, onNetwork, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
-  const [linkName, setLinkName] = useState('');
+  const [linkName, setLinkName] = useState(suggestions.defaultName);
   const [pos, setPos] = useState({ x, y });
 
   useEffect(() => {

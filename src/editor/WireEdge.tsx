@@ -34,6 +34,11 @@ const ALIGN = 6;
 
 type Drag = { k: number; work: Point[]; horizontal: boolean; start: number; base: number };
 
+/** 電線の太さ[sq]を描く線の太さ[px]にする（細い線どうしでも見分けられるよう、太さに応じてはっきり変える） */
+export function wireWidth(sizeSq: number): number {
+  return Math.min(10, 1.2 + Math.pow(Math.max(sizeSq, 0.3), 0.6) * 1.1);
+}
+
 const isHorizontal = (a: Point, b: Point) => Math.abs(a.y - b.y) < 0.5 && Math.abs(a.x - b.x) >= 0.5;
 
 function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireFlowEdge>) {
@@ -142,7 +147,7 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
     setRoute(simplifyRoute(orthogonalize(work, sSide === 'top' || sSide === 'bottom')).slice(1, -1));
   };
 
-  const width = 2 + Math.min(data?.sizeSq ?? 2, 8) * 0.25;
+  const width = wireWidth(data?.sizeSq ?? 2);
 
   return (
     <>

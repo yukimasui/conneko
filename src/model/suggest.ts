@@ -40,6 +40,8 @@ export interface Suggestions {
   io: IoCandidate[];
   /** LAN ポートから引いた場合: 図面にあるネットワークリンクの名前（選ぶとネットワークリンクを置いてつなぐ） */
   networks?: string[];
+  /** 新しく置くリンクの名前の案（使われていない名前） */
+  defaultName: string;
 }
 
 const DEFAULT_CONDUCTORS: Record<PowerSystem, Conductor[]> = { AC: ['R', 'S', 'T', 'L', 'N'], DC: ['+', '-'] };
@@ -77,13 +79,26 @@ export function suggestConnections(d: Diagram, from: TerminalRef, lookup: DefLoo
   const m = buildModel(d, lookup, () => {});
   const k = key(from.device, from.terminal);
   const info = m.terminals.get(k);
-  if (!info) return { power: [], io: [] };
+  if (!info) return { power: [], io: [], defaultName: uniqueLinkName(d, '') };
   const t = info.terminal;
   if (t.connector) {
     // LAN ポート（ピンのない RJ-45）ならネットワークの候補、ほかのコネクタは候補なし
     const lan = t.connector.pins === 0 && t.connector.kind === 'RJ45';
-    return { power: [], io: [], ...(lan ? { networks: [...linkNames(d, NET_LINK_TYPE)].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })) } : {}) };
+    // 名前の案: EtherCAT のポートなら ECAT1, ECAT2 …、ほかは LAN1, LAN2 …
+    const prefix = t.connector.protocols?.length === 1 && t.connector.protocols[0] === 'ethercat' ? 'ECAT' : 'LAN';
+    const used = linkNames(d, NET_LINK_TYPE);
+    let n = 1;
+    while (used.has(`${prefix}${n}`)) n++;
+    return {
+      power: [],
+      io: [],
+      defaultName: `${prefix}${n}`,
+      ...(lan ? { networks: [...used].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })) } : {}),
+    };
   }
+  // 電線のリンクの名前の案: 端子にもう線番があればそれ（使われていれば番号を付ける）、なければ L1, L2 …
+  const wireNo = (m.wiresAt.get(k) ?? []).find((w) => w.wireNo)?.wireNo;
+  const defaultName = uniqueLinkName(d, wireNo ?? '');
   const ownRoot = m.fixed.find(k);
 
   // --- 電源 ---
@@ -154,7 +169,7 @@ export function suggestConnections(d: Diagram, from: TerminalRef, lookup: DefLoo
     }
     io.sort((a, b) => a.point.address.localeCompare(b.point.address, 'ja', { numeric: true }));
   }
-  return { power, io };
+  return { power, io, defaultName };
 }
 
 /** 電源の候補を選んだときの処理: 離した位置にリンクを置き、電源側にリンクがなければそちらにも置く */
