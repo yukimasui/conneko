@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * KEYENCE 非接触式セーフティインタロックスイッチ GS-11P5（GS シリーズ 非接触タイプ スタンダード、PNP、ケーブル 5m）。
@@ -97,6 +97,18 @@ const svg = `
 `;
 
 const power = { system: 'DC' as const, minVoltage: 19.2, maxVoltage: 28.8 };
+/** 安全出力（PNP、各 150mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.15 };
+
+/** 電源以外の芯線の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  OSSD1: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
+  OSSD2: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
+  // 単体使用時は +24V、直列接続時は前段の OSSD1/OSSD2 を受ける
+  IN1: { function: 'safety-input', channel: 1 },
+  IN2: { function: 'safety-input', channel: 2 },
+  AUX: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
 
 const def: DeviceDefinition = {
   type: 'keyence.gs-11p5',
@@ -116,8 +128,14 @@ const def: DeviceDefinition = {
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
     if (w.id === '+24V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } };
     if (w.id === '0V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
-    return { ...base, role: 'signal' as const, optional: true };
+    return { ...base, role: 'signal' as const, optional: true, ...SPEC[w.id] };
   }),
+  safetyChannels: [
+    // 前段の OSSD（または +24V）を受ける入力。テストパルスは返さない
+    { id: 'IN', label: '安全入力 1/2（前段の OSSD1/OSSD2、単体使用時は +24V）', kind: 'input', mode: 'ossd', channels: [{ input: 'IN1' }, { input: 'IN2' }] },
+    { id: 'OSSD', label: '安全出力 OSSD1/OSSD2', kind: 'output', channels: [{ output: 'OSSD1' }, { output: 'OSSD2' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061', 'ISO 14119 タイプ4'] },
   // 0.8W / 24V
   loadCurrent: 0.035,
 };

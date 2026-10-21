@@ -120,6 +120,7 @@ const def: DeviceDefinition = {
     if (w.id === '0V') return [{ ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } }];
     return [{ ...base, role: 'ground' as const, optional: true }];
   }),
+  safety: { esType: 4, pl: 'e', category: '4', sil: 3, standards: ['IEC 61496-1', 'IEC 61496-2', 'ISO 13849-1', 'IEC 61508'] },
   // 送光器の消費電流（機種により 37〜95mA）
   loadCurrent: 0.095,
 };

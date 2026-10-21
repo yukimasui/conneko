@@ -111,6 +111,7 @@ const def: DeviceDefinition = {
     if (w.id === '0V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
     return { ...base, role: 'signal' as const, optional: true };
   }),
+  safety: { esType: 4, pl: 'e', category: '4', sil: 3, standards: ['IEC 61496-1', 'IEC 61496-2', 'ISO 13849-1', 'IEC 61508'] },
   // 送光器の消費電流（例: F3SG-4SRA0160-14 で 68mA）
   loadCurrent: 0.07,
 };
