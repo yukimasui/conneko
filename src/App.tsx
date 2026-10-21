@@ -20,7 +20,8 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import type { TerminalSide } from './devices/types';
 import { DeviceNode } from './editor/DeviceNode';
-import { EditorContext } from './editor/EditorContext';
+import { FAN_LENGTH } from './editor/CableGraphics';
+import { EditorContext, type WireGeometry } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { IssuePanel } from './editor/IssuePanel';
@@ -28,7 +29,7 @@ import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { assignLanes, stubLength, type LaneInput } from './editor/routing';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
-import { nextDeviceId, nextWireId, parseDiagram, toDiagramFile, type Diagram } from './model/diagram';
+import { CABLE_WIRE_TYPE, nextDeviceId, nextWireId, parseDiagram, toDiagramFile, type Diagram } from './model/diagram';
 import { sampleDiagram } from './model/sample';
 
 const nodeTypes = { device: DeviceNode };
@@ -69,10 +70,10 @@ function Editor() {
   const issues = useMemo(() => checkDiagram(diagram, getDeviceDefinition), [topo]);
 
   // --- 配線のスタブ長とレーン（重なり回避） ---
-  const { lanes, stubs } = useMemo(() => {
+  const { lanes, geometry } = useMemo(() => {
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const inputs: LaneInput[] = [];
-    const stubs = new Map<string, { s: number; t: number }>();
+    const geometry = new Map<string, WireGeometry>();
     for (const e of edges) {
       const end = (nodeId: string, handle?: string | null) => {
         const n = byId.get(nodeId);
@@ -80,15 +81,17 @@ function Editor() {
         const t = def?.terminals.find((x) => x.id === handle);
         if (!n || !def || !t) return null;
         const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[t.side];
-        return { x: n.position.x + t.x, y: n.position.y + t.y, side: t.side as TerminalSide, stub: stubLength(toEdge) };
+        // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
+        const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 20) : stubLength(toEdge);
+        return { x: n.position.x + t.x, y: n.position.y + t.y, side: t.side as TerminalSide, stub, connector: t.connector };
       };
       const s = end(e.source, e.sourceHandle);
       const t = end(e.target, e.targetHandle);
       if (!s || !t) continue;
-      stubs.set(e.id, { s: s.stub, t: t.stub });
+      geometry.set(e.id, { sStub: s.stub, tStub: t.stub, sConnector: s.connector, tConnector: t.connector });
       inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend });
     }
-    return { lanes: assignLanes(inputs), stubs };
+    return { lanes: assignLanes(inputs), geometry };
   }, [nodes, edges]);
 
   const context = useMemo(() => {
@@ -98,8 +101,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, stubs, issues };
-  }, [issues, lanes, stubs]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues };
+  }, [issues, lanes, geometry]);
 
   // --- 機器の追加 ---
   const addDevice = useCallback(
@@ -140,8 +143,17 @@ function Editor() {
   );
 
   // --- 配線 ---
+  const terminalOf = useCallback(
+    (nodeId: string, handle?: string | null) => {
+      const n = nodes.find((x) => x.id === nodeId);
+      return n ? getDeviceDefinition(n.data.deviceType)?.terminals.find((t) => t.id === handle) : undefined;
+    },
+    [nodes],
+  );
+
   const onConnect = useCallback(
     (c: Connection) => {
+      const isCable = !!terminalOf(c.source, c.sourceHandle)?.connector;
       setEdges((es) => [
         ...es,
         {
@@ -151,16 +163,22 @@ function Editor() {
           sourceHandle: c.sourceHandle,
           target: c.target,
           targetHandle: c.targetHandle,
-          data: { ...wireDefaults },
+          data: isCable ? { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE } : { ...wireDefaults },
         },
       ]);
     },
-    [setEdges, wireDefaults],
+    [setEdges, wireDefaults, terminalOf],
   );
 
+  // コネクタは同じ種類のコネクタとだけ（ケーブルで）つなげる
   const isValidConnection = useCallback(
-    (c: Connection | WireFlowEdge) => !(c.source === c.target && c.sourceHandle === c.targetHandle),
-    [],
+    (c: Connection | WireFlowEdge) => {
+      if (c.source === c.target && c.sourceHandle === c.targetHandle) return false;
+      const a = terminalOf(c.source, c.sourceHandle)?.connector;
+      const b = terminalOf(c.target, c.targetHandle)?.connector;
+      return a || b ? !!a && !!b && a.kind === b.kind : true;
+    },
+    [terminalOf],
   );
 
   // --- 編集 ---

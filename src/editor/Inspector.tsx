@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import type { CheckIssue } from '../check/checkDiagram';
+import { CABLE_WIRE_TYPE } from '../model/diagram';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
 export type WireDefaults = Pick<WireEdgeData, 'color' | 'sizeSq' | 'wireType'>;
@@ -182,10 +183,14 @@ export function Inspector(props: Props) {
           {edge.source}.{edge.sourceHandle} ↔ {edge.target}.{edge.targetHandle}
         </p>
         <label className="field">
-          <span>線番</span>
+          <span>{data.wireType === CABLE_WIRE_TYPE ? 'ケーブル名' : '線番'}</span>
           <input value={data.wireNo ?? ''} placeholder="例: R1" onChange={(e) => props.onWireChange(edge.id, { wireNo: e.target.value || undefined })} />
         </label>
-        <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
+        {data.wireType === CABLE_WIRE_TYPE ? (
+          <p className="muted small">コネクタ間のケーブルです。両端の同じ番号のピンどうしが導通します。</p>
+        ) : (
+          <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
+        )}
         {data.bend ? (
           <button type="button" onClick={() => props.onWireChange(edge.id, { bend: undefined })}>
             曲がり位置を自動に戻す

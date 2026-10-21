@@ -20,13 +20,14 @@ const ROLE_NAMES: Record<string, string> = {
   input: '受電',
   ground: '接地',
   signal: '信号',
+  connector: 'コネクタ',
 };
 
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
   const { deviceSeverity } = useEditorContext();
   const severity = deviceSeverity.get(id);
-  const svg = useMemo(() => (def ? instantiateSvg(def, id) : ''), [def, id]);
+  const svg = useMemo(() => (def ? instantiateSvg(def, id, data.params) : ''), [def, id, data.params]);
 
   if (!def) {
     return (
@@ -60,7 +61,18 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
           type="source"
           position={POSITION[t.side]}
           className={`terminal terminal--${t.role}`}
-          style={{ left: t.x, top: t.y, right: 'auto', bottom: 'auto', transform: 'translate(-50%, -50%)' }}
+          style={{
+            left: t.x,
+            top: t.y,
+            right: 'auto',
+            bottom: 'auto',
+            transform: 'translate(-50%, -50%)',
+            // コネクタは差込口の幅いっぱいを接続点にする
+            ...(t.connector &&
+              (t.side === 'top' || t.side === 'bottom'
+                ? { width: t.connector.width, height: 10, borderRadius: 3 }
+                : { width: 10, height: t.connector.width, borderRadius: 3 })),
+          }}
           title={`${t.label ?? t.id}（${ROLE_NAMES[t.role] ?? t.role}）`}
         />
       ))}

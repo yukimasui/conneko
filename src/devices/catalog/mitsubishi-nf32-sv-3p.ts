@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, ParamValues } from '../types';
 
 /**
  * 三菱電機 ノーヒューズ遮断器（配線用遮断器）NF32-SV 3P（WS-Vシリーズ 汎用品）。
@@ -35,7 +35,16 @@ const terminalBlock = (y0: number, ty: number) => `
   <rect x="48" y="${y0 + 2}" width="4" height="36" rx="1" fill="#d2cec5" stroke="#aaa59b" stroke-width="0.6"/>
   <rect x="98" y="${y0 + 2}" width="4" height="36" rx="1" fill="#d2cec5" stroke="#aaa59b" stroke-width="0.6"/>`;
 
-const svg = `
+/** XML として安全な文字列にする（パラメータ値を SVG に埋め込む用） */
+const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 文字列が最大幅[px]に収まるフォントサイズ（文字幅は 1文字 ≒ ratio×フォントサイズ で概算） */
+const fitSize = (text: string, maxWidth: number, base: number, ratio = 0.62) =>
+  Math.min(base, +(maxWidth / (text.length * ratio)).toFixed(2));
+
+/** 定格表示などはパラメータに連動させる */
+const svg = (p: ParamValues) => {
+  const rating = `${esc(p.ratedCurrent)}A`;
+  return `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#dedad2"/>
@@ -111,8 +120,7 @@ const svg = `
   <!-- 右側: 定格表示と仕様 -->
   <rect x="101" y="56" width="38" height="36" rx="2" fill="#fbfaf7" stroke="#777" stroke-width="0.8"/>
   <text x="104" y="63" font-family="sans-serif" font-size="4.2" fill="#555">JET</text>
-  <text x="117" y="85" text-anchor="middle" font-family="sans-serif" font-size="16" font-weight="bold" fill="#222">20</text>
-  <text x="131" y="85" font-family="sans-serif" font-size="7" font-weight="bold" fill="#222">A</text>
+  <text x="120" y="84" text-anchor="middle" font-family="sans-serif" font-size="${fitSize(rating, 34, 16)}" font-weight="bold" fill="#222">${rating}</text>
   <text x="102" y="102" font-family="sans-serif" font-size="4.4" fill="#555">POLE 3P</text>
   <text x="102" y="109" font-family="sans-serif" font-size="4.4" fill="#555">50/60Hz  DC</text>
   <text x="102" y="116" font-family="sans-serif" font-size="4.4" fill="#555">AC 440V</text>
@@ -123,6 +131,7 @@ const svg = `
   <rect x="117" y="190" width="18" height="18" rx="9" fill="none" stroke="#777" stroke-width="0.9"/>
   <text x="126" y="202" text-anchor="middle" font-family="sans-serif" font-size="5.5" font-weight="bold" fill="#666">CCC</text>
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'mitsubishi.nf32-sv.3p',

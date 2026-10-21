@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, ParamValues } from '../types';
 
 /**
  * 三菱電機 サーキットプロテクタ CP30-BA 1P（1極品）。
@@ -27,7 +27,16 @@ const terminalBlock = (y0: number, ty: number) => `
   <rect x="${TX - 10}" y="${ty - 10}" width="20" height="20" rx="1.5" fill="#3b3b3b"/>
   ${screw(TX, ty)}`;
 
-const svg = `
+/** XML として安全な文字列にする（パラメータ値を SVG に埋め込む用） */
+const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 文字列が最大幅[px]に収まるフォントサイズ（文字幅は 1文字 ≒ ratio×フォントサイズ で概算） */
+const fitSize = (text: string, maxWidth: number, base: number, ratio = 0.62) =>
+  Math.min(base, +(maxWidth / (text.length * ratio)).toFixed(2));
+
+/** 定格表示などはパラメータに連動させる */
+const svg = (p: ParamValues) => {
+  const rating = `${esc(p.ratedCurrent)}A ${esc(p.characteristic)}`;
+  return `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#dcdbd6"/>
@@ -74,8 +83,9 @@ const svg = `
   <text x="${W / 2}" y="91" text-anchor="middle" font-family="sans-serif" font-size="5.6" font-weight="bold" fill="#444">CP30-BA</text>
   <text x="5" y="98" font-family="sans-serif" font-size="3.4" fill="#666">AC</text>
   <text x="5" y="102.5" font-family="sans-serif" font-size="3.4" fill="#666">DC</text>
-  <text x="${W - 5}" y="102" text-anchor="end" font-family="sans-serif" font-size="6" fill="#444">5A M</text>
+  <text x="${W - 4}" y="102" text-anchor="end" font-family="sans-serif" font-size="${fitSize(rating, 20, 6, 0.58)}" fill="#444">${rating}</text>
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'mitsubishi.cp30-ba.1p',

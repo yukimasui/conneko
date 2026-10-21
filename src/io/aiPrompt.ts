@@ -15,6 +15,7 @@ const ROLE_TEXT: Record<TerminalDef['role'], string> = {
   input: '受電',
   ground: '接地',
   signal: '信号',
+  connector: 'コネクタ',
 };
 
 function terminalLine(t: TerminalDef): string {
@@ -23,6 +24,7 @@ function terminalLine(t: TerminalDef): string {
   if (t.accepts) {
     parts.push(`${t.accepts.system}${t.accepts.minVoltage}〜${t.accepts.maxVoltage}V${t.accepts.conductors ? ` 接続可能な導体=${t.accepts.conductors.join('/')}` : ''}`);
   }
+  if (t.connector) parts.push(`${t.connector.kind}${t.connector.pins ? ` ${t.connector.pins}ピン` : ''}`);
   if (t.optional) parts.push('未使用可');
   return `    - ${parts.join(' / ')}`;
 }
@@ -36,8 +38,16 @@ function deviceSection(id: string, def: DeviceDefinition, params: Diagram['devic
   if (load !== undefined) lines.push(`  負荷電流: ${load}A`);
   lines.push('  端子:');
   lines.push(...def.terminals.map(terminalLine));
-  if (def.links?.length) {
-    lines.push(`  内部の導通: ${def.links.map((l) => `${l.from}${l.directed ? '→' : '↔'}${l.to}`).join(', ')}`);
+  for (const t of def.terminals.filter((x) => x.connector)) {
+    const pins = (def.pins ?? []).filter((p) => p.id.startsWith(`${t.id}#`));
+    if (pins.length) lines.push(`  コネクタ ${t.id} のピン: ${pins.map((p) => `${p.id.split('#')[1]}=${p.label ?? p.role}`).join(', ')}`);
+  }
+  const links = (def.links ?? []).filter((l) => !l.from.includes('#') && !l.to.includes('#'));
+  if (def.links?.some((l) => l.from.includes('#') || l.to.includes('#'))) {
+    lines.push('  コネクタのピン n はネジ端子 n（または同名の端子）と導通しています');
+  }
+  if (links.length) {
+    lines.push(`  内部の導通: ${links.map((l) => `${l.from}${l.directed ? '→' : '↔'}${l.to}`).join(', ')}`);
   }
   if (def.distinctGroups?.length) {
     lines.push(`  異なる相で給電する端子: ${def.distinctGroups.map((g) => g.join('/')).join('; ')}`);
@@ -65,6 +75,7 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
 - 追加する電線の形式: {"from": {"device": "機器名", "terminal": "端子ID"}, "to": {"device": "機器名", "terminal": "端子ID"}, "wireNo": "線番", "color": "色ID", "sizeSq": 太さ(mm²), "wireType": "電線種類ID"}
   - id は省略できます（アプリが自動採番します）。
   - 端子IDは下の「機器と端子」に書かれているものだけを使ってください。
+- コネクタ（MIL40, RJ45 など）どうしは、同じ種類のコネクタ間をケーブルでつなぎます。ケーブルは wireType を "CABLE" にした電線として書きます（color/sizeSq は任意）。ケーブルでつなぐと両端の同じ番号のピンが導通します。
 - 電源出力から保護機器（ブレーカー・サーキットプロテクタ）を通して負荷へ給電してください。
 - 三相の負荷には R/S/T の3相を、それぞれ別の端子に接続してください。直流は +/- の極性に注意してください。
 - 接地端子は電源の PE へ接続してください。

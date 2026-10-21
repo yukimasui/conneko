@@ -32,8 +32,9 @@ export type TerminalSide = 'top' | 'bottom' | 'left' | 'right';
  * - input: 電力を受け取る端子（モーター、コイル、電源ユニット入力など。accepts を指定）
  * - ground: 接地端子
  * - signal: 信号端子（接点・センサー出力など。電源チェックの対象外）
+ * - connector: コネクタ（MIL コネクタ、LAN ポートなど）。同じ種類のコネクタどうしをケーブルでつなぐ
  */
-export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal';
+export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal' | 'connector';
 
 /** 電源出力の仕様（role: 'supply' の端子に指定） */
 export interface SupplySpec {
@@ -54,6 +55,19 @@ export interface AcceptSpec {
   conductors?: Conductor[];
 }
 
+/** コネクタの仕様（role: 'connector' の端子に指定） */
+export interface ConnectorSpec {
+  /** コネクタの種類。同じ種類どうしだけケーブルでつなげる（例: 'MIL40', 'RJ45'） */
+  kind: string;
+  /**
+   * ピン数。ケーブルでつなぐと、両端の同じ番号のピンどうしが導通する。
+   * 通信用（LAN など）で電気的なピンを扱わない場合は 0。
+   */
+  pins: number;
+  /** コネクタの幅[px]（side に直交する方向）。ケーブルの芯線をこの幅に広げて描く */
+  width: number;
+}
+
 export interface TerminalDef {
   /** 機器内で一意な端子ID（例: 'L1', 'T1', 'A1', '+V'） */
   id: string;
@@ -67,6 +81,7 @@ export interface TerminalDef {
   role: TerminalRole;
   supply?: SupplySpec;
   accepts?: AcceptSpec;
+  connector?: ConnectorSpec;
   /** true の場合、未接続でも警告しない（予備端子・補助接点など） */
   optional?: boolean;
 }
@@ -109,6 +124,20 @@ export type DeviceCategory =
   | 'plc'
   | 'sensor';
 
+/**
+ * コネクタのピン（画面上の端子としては表示しない）。
+ * id は '<コネクタ端子ID>#<ピン番号>'（例: 'CN1#1'）。links から参照できる。
+ */
+export interface PinDef {
+  id: string;
+  /** ピンの名称（例: 'X000', 'COM', '+24V'） */
+  label?: string;
+  role: Exclude<TerminalRole, 'connector'>;
+  supply?: SupplySpec;
+  accepts?: AcceptSpec;
+  optional?: boolean;
+}
+
 export interface DeviceDefinition {
   /** 機器種別の一意なID（例: 'mitsubishi.nv32-sv.3p'）。JSONの type に使う */
   type: string;
@@ -128,9 +157,13 @@ export interface DeviceDefinition {
    * id 属性（グラデーション等）は複数配置時に衝突するため、必ず '{{uid}}' を含めること
    * （例: id="grad-{{uid}}" / fill="url(#grad-{{uid}})"）。描画時に機器ごとの値へ置換される。
    * 外部画像・フォント・<script> は使わない。
+   *
+   * パラメータで見た目を変える場合（定格電流の表示など）は関数にする。引数は既定値を補完済みのパラメータ。
    */
-  svg: string;
+  svg: string | ((params: ParamValues) => string);
   terminals: TerminalDef[];
+  /** コネクタのピン定義（ピンごとの名称・電気的仕様） */
+  pins?: PinDef[];
   links?: InternalLink[];
   params?: ParamDef[];
   /** 保護機器の定格（遮断）電流[A]。protects: true の経路に適用 */
@@ -157,4 +190,18 @@ export function resolveNum(
   const raw = params?.[v.param] ?? def.params?.find((p) => p.key === v.param)?.default;
   const n = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** 既定値を補完したパラメータを返す */
+export function paramsWithDefaults(def: DeviceDefinition, params: ParamValues | undefined): ParamValues {
+  const out: ParamValues = {};
+  for (const p of def.params ?? []) out[p.key] = p.default;
+  return { ...out, ...params };
+}
+
+/** パラメータの選択肢の表示名（label がなければ値＋単位） */
+export function paramLabel(def: DeviceDefinition, key: string, value: number | string): string {
+  const p = def.params?.find((x) => x.key === key);
+  const opt = p?.options.find((o) => o.value === value);
+  return opt?.label ?? `${value}${p?.unit ?? ''}`;
 }

@@ -108,9 +108,15 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
     }
     devices.set(device.id, { device, def });
     for (const t of def.terminals) terminals.set(key(device.id, t.id), { device, def, terminal: t });
+    // コネクタのピンも端子として扱う（画面上には表示しない）
+    for (const p of def.pins ?? []) {
+      terminals.set(key(device.id, p.id), { device, def, terminal: { ...p, x: 0, y: 0, side: 'top' } });
+    }
   }
 
   const validWires: DiagramWire[] = [];
+  /** ケーブルで導通するピンの組 */
+  const cablePairs: [string, string][] = [];
   for (const w of diagram.wires) {
     const bad = [w.from, w.to].filter((r) => !terminals.has(key(r.device, r.terminal)));
     if (bad.length) {
@@ -124,6 +130,27 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
       continue;
     }
     if (w.from.device === w.to.device && w.from.terminal === w.to.terminal) continue;
+    const a = terminals.get(key(w.from.device, w.from.terminal))!.terminal.connector;
+    const b = terminals.get(key(w.to.device, w.to.terminal))!.terminal.connector;
+    if (a || b) {
+      if (a && b && a.kind === b.kind) {
+        // ケーブル: 両端の同じ番号のピンどうしが導通する
+        for (let i = 1; i <= Math.min(a.pins, b.pins); i++) {
+          cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${i}`)]);
+        }
+      } else {
+        push({
+          severity: 'error',
+          rule: 'connector-mismatch',
+          message: a && b
+            ? `ケーブル ${w.id}: コネクタの種類が違います（${a.kind} と ${b.kind}）`
+            : `電線 ${w.id}: コネクタ（${(a ?? b)!.kind}）には同じ種類のコネクタからケーブルでつなぎます`,
+          devices: [w.from.device, w.to.device],
+          wires: [w.id],
+        });
+      }
+      continue;
+    }
     validWires.push(w);
   }
 
@@ -138,7 +165,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   // --- 未接続 ---
   for (const [k, info] of terminals) {
     const { terminal: t, device } = info;
-    if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass') continue;
+    if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector') continue;
     if (wiresAt.has(k)) continue;
     if (t.role === 'ground') {
       push({ severity: 'warning', rule: 'ground-missing', message: `${device.id}: 接地端子 ${t.id} が接地されていません`, devices: [device.id], wires: [], key: `unconnected:${k}` });
@@ -150,6 +177,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   // --- 同電位グループ ---
   const uf = new UnionFind();
   for (const w of validWires) uf.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
+  for (const [a, b] of cablePairs) uf.union(a, b);
   for (const { device, def } of devices.values()) {
     for (const l of def.links ?? []) uf.union(key(device.id, l.from), key(device.id, l.to));
   }
@@ -260,7 +288,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   }
 
   // --- 保護電流の伝搬 ---
-  const protection = computeProtection(devices, terminals, validWires, potentialOf);
+  const protection = computeProtection(devices, terminals, validWires, cablePairs, potentialOf);
 
   // 電線の許容電流
   for (const w of validWires) {
@@ -329,6 +357,7 @@ function computeProtection(
   devices: Map<string, { device: DiagramDevice; def: DeviceDefinition }>,
   terminals: Map<string, TerminalInfo>,
   wires: DiagramWire[],
+  cablePairs: [string, string][],
   potentialOf: (k: string) => Potential,
 ): Map<string, number> {
   type Edge = { to: string; protects?: number };
@@ -337,6 +366,10 @@ function computeProtection(
   for (const w of wires) {
     const a = key(w.from.device, w.from.terminal);
     const b = key(w.to.device, w.to.terminal);
+    add(a, { to: b });
+    add(b, { to: a });
+  }
+  for (const [a, b] of cablePairs) {
     add(a, { to: b });
     add(b, { to: a });
   }

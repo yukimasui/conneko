@@ -63,7 +63,14 @@ function skeleton(e: WireEndpoints): Skeleton {
   const p1 = { x: e.sx + DIR[e.sSide].x * ss, y: e.sy + DIR[e.sSide].y * ss };
   const p3 = { x: e.tx + DIR[e.tSide].x * ts, y: e.ty + DIR[e.tSide].y * ts };
   const horizontalMid = isVertical(e.sSide);
-  const mid = horizontalMid ? (p1.y + p3.y) / 2 : (p1.x + p3.x) / 2;
+  let mid = horizontalMid ? (p1.y + p3.y) / 2 : (p1.x + p3.x) / 2;
+  // 両端が同じ向き（上と上など）の場合は、機器の上を横切らないよう外側で折り返す
+  if (e.sSide === e.tSide) {
+    if (e.sSide === 'top') mid = Math.min(p1.y, p3.y);
+    else if (e.sSide === 'bottom') mid = Math.max(p1.y, p3.y);
+    else if (e.sSide === 'left') mid = Math.min(p1.x, p3.x);
+    else mid = Math.max(p1.x, p3.x);
+  }
   return { p0, p1, p3, p4, horizontalMid, mid };
 }
 
@@ -158,4 +165,33 @@ export function assignLanes(wires: LaneInput[]): Map<string, number> {
     cluster.forEach((it, i) => lanes.set(it.id, ((n - 1) / 2 - i) * LANE_GAP * it.acrossSign));
   }
   return lanes;
+}
+
+/** 折れ線の全長 */
+export function polylineLength(points: Point[]): number {
+  let len = 0;
+  for (let i = 1; i < points.length; i++) len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  return len;
+}
+
+/** 折れ線の始点から距離 from〜to の部分を切り出す */
+export function slicePolyline(points: Point[], from: number, to: number): Point[] {
+  const out: Point[] = [];
+  let acc = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const at = (d: number) => ({ x: a.x + ((b.x - a.x) * (d - acc)) / (len || 1), y: a.y + ((b.y - a.y) * (d - acc)) / (len || 1) });
+    if (acc + len >= from && acc <= to) {
+      if (!out.length) out.push(at(Math.max(from, acc)));
+      if (acc + len <= to) out.push(b);
+      else {
+        out.push(at(to));
+        break;
+      }
+    }
+    acc += len;
+  }
+  return out;
 }

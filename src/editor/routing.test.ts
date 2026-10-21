@@ -32,3 +32,12 @@ describe('assignLanes', () => {
     expect(lanes.size).toBe(0);
   });
 });
+
+describe('routeWire（同じ向きの端子）', () => {
+  it('上向きの端子どうしは、両方の端子より上で折り返す', () => {
+    const { points } = routeWire({ sx: 0, sy: 0, sSide: 'top', tx: 300, ty: 200, tSide: 'top', sStub: 20, tStub: 20 }, 0);
+    expect(Math.min(...points.map((p) => p.y))).toBe(-20);
+    // 始点側の機器を下向きに横切らない
+    expect(points.filter((p) => p.x === 0).every((p) => p.y <= 0)).toBe(true);
+  });
+});

@@ -20,26 +20,33 @@ const BOT_Y = 112;
 const AUX_X = [67, 82];
 const AUX_TOP_Y = 31;
 
-/** ヒーター呼びと整定電流範囲（TH-T18 ラインナップ） */
-const HEATERS: [number, string][] = [
-  [0.12, '0.1〜0.16'],
-  [0.17, '0.14〜0.22'],
-  [0.24, '0.2〜0.32'],
-  [0.35, '0.28〜0.42'],
-  [0.5, '0.4〜0.6'],
-  [0.7, '0.55〜0.85'],
-  [0.9, '0.7〜1.1'],
-  [1.3, '1〜1.6'],
-  [1.7, '1.4〜2'],
-  [2.1, '1.7〜2.5'],
-  [2.5, '2〜3'],
-  [3.6, '2.8〜4.4'],
-  [5, '4〜6'],
-  [6.6, '5.2〜8'],
-  [9, '7〜11'],
-  [11, '9〜13'],
-  [15, '12〜18'],
+/** ヒーター呼びと整定電流範囲 [呼び, 最小, 最大]（TH-T18 ラインナップ） */
+const HEATERS: [number, number, number][] = [
+  [0.12, 0.1, 0.16],
+  [0.17, 0.14, 0.22],
+  [0.24, 0.2, 0.32],
+  [0.35, 0.28, 0.42],
+  [0.5, 0.4, 0.6],
+  [0.7, 0.55, 0.85],
+  [0.9, 0.7, 1.1],
+  [1.3, 1, 1.6],
+  [1.7, 1.4, 2],
+  [2.1, 1.7, 2.5],
+  [2.5, 2, 3],
+  [3.6, 2.8, 4.4],
+  [5, 4, 6],
+  [6.6, 5.2, 8],
+  [9, 7, 11],
+  [11, 9, 13],
+  [15, 12, 18],
 ];
+const DEFAULT_HEATER = 9;
+
+/** ヒーター呼びに対応する整定範囲（ラインナップ外の値は呼びの ±20% 程度とする） */
+const heaterRange = (h: number): [number, number] => {
+  const found = HEATERS.find(([v]) => v === h);
+  return found ? [found[1], found[2]] : [+(h * 0.8).toPrecision(2), +(h * 1.2).toPrecision(2)];
+};
 
 const screw = (x: number, y: number, r = 6) => `
   <circle cx="${x}" cy="${y}" r="${r + 1.2}" fill="#2e2e2e"/>
@@ -60,7 +67,9 @@ const dialTicks = (cx: number, cy: number, r: number) =>
     return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="#444" stroke-width="0.6"/>`;
   }).join('');
 
-const svg = `
+const svg = (heater: number) => {
+  const [min, max] = heaterRange(heater);
+  return `
   <defs>
     <linearGradient id="black-{{uid}}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3a3a3a"/>
@@ -123,13 +132,16 @@ const svg = `
   <rect x="6" y="49" width="18" height="3" rx="1" fill="#79b4ff" opacity="0.6"/>
   ${label(15, 59, 'RESET', '#fff', 4)}
 
-  <!-- 電流整定ダイヤル -->
+  <!-- 電流整定ダイヤル（つまみに整定範囲の目盛り数字。上の赤い指標に呼び電流を合わせた状態） -->
   <circle cx="43" cy="56" r="12.5" fill="#151515"/>
   <circle cx="43" cy="56" r="11" fill="url(#dial-{{uid}})" stroke="#8d8672" stroke-width="0.6"/>
   ${dialTicks(43, 56, 11)}
-  <path d="M38 56 H48 M43 51 V61" stroke="#6a6352" stroke-width="2" stroke-linecap="round"/>
-  <path d="M43 45.5 L41.4 48.5 H44.6 Z" fill="#c22"/>
-  <text x="43" y="73" text-anchor="middle" font-family="sans-serif" font-size="3.4" fill="#ccc">A</text>
+  <path d="M40 58.5 H46 M43 55.5 V61.5" stroke="#6a6352" stroke-width="1.6" stroke-linecap="round"/>
+  <text x="43" y="52.6" text-anchor="middle" font-family="sans-serif" font-size="3.6" font-weight="bold" fill="#222">${heater}</text>
+  <text x="36.6" y="61.5" text-anchor="middle" font-family="sans-serif" font-size="2.9" fill="#333">${min}</text>
+  <text x="49.4" y="61.5" text-anchor="middle" font-family="sans-serif" font-size="2.9" fill="#333">${max}</text>
+  <path d="M43 45.5 L41.4 42.8 H44.6 Z" fill="#e33"/>
+  <text x="43" y="73.5" text-anchor="middle" font-family="sans-serif" font-size="4.2" font-weight="bold" fill="#eee">${heater}A</text>
 
   <!-- 動作表示窓（緑）とテストレバー（赤） -->
   <rect x="60" y="52" width="9" height="9" rx="1" fill="#0b2f14" stroke="#555" stroke-width="0.5"/>
@@ -152,6 +164,7 @@ const svg = `
   ${MAIN_X.map((x) => screw(x, BOT_Y, 6.5)).join('')}
   ${AUX_X.map((x) => screw(x, BOT_Y, 5)).join('')}
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'mitsubishi.th-t18',
@@ -164,7 +177,7 @@ const def: DeviceDefinition = {
   labelPrefix: 'THR',
   width: W,
   height: H,
-  svg,
+  svg: (p) => svg(Number(p.heater) || DEFAULT_HEATER),
   terminals: [
     // 一次側（上部の接続ピン）
     { id: '1/L1', x: PIN_X[0], y: PIN_Y, side: 'top', role: 'line' },
@@ -193,8 +206,8 @@ const def: DeviceDefinition = {
       key: 'heater',
       label: 'ヒーター呼び',
       unit: 'A',
-      options: HEATERS.map(([value, range]) => ({ value, label: `${value}A（整定 ${range}A）` })),
-      default: 9,
+      options: HEATERS.map(([value, min, max]) => ({ value, label: `${value}A（整定 ${min}〜${max}A）` })),
+      default: DEFAULT_HEATER,
     },
   ],
   protectionCurrent: { param: 'heater' },

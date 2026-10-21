@@ -10,6 +10,9 @@ import type { ParamValues } from '../devices/types';
 export const DIAGRAM_FORMAT = 'conneko-diagram';
 export const DIAGRAM_VERSION = 1;
 
+/** コネクタどうしをつなぐケーブルの wireType（色・太さは使わない） */
+export const CABLE_WIRE_TYPE = 'CABLE';
+
 export interface DiagramDevice {
   /** 機器名（図面内で一意。例: 'ELB1'） */
   id: string;

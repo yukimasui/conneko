@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, ParamValues } from '../types';
 
 /**
  * 三菱電機 ノーヒューズ遮断器（配線用遮断器）NF32-SV 2P（WS-Vシリーズ 汎用品）。
@@ -34,7 +34,16 @@ const terminalBlock = (y0: number, ty: number) => `
   ).join('')}
   <rect x="48" y="${y0 + 2}" width="4" height="36" rx="1" fill="#d2cec5" stroke="#aaa59b" stroke-width="0.6"/>`;
 
-const svg = `
+/** XML として安全な文字列にする（パラメータ値を SVG に埋め込む用） */
+const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 文字列が最大幅[px]に収まるフォントサイズ（文字幅は 1文字 ≒ ratio×フォントサイズ で概算） */
+const fitSize = (text: string, maxWidth: number, base: number, ratio = 0.62) =>
+  Math.min(base, +(maxWidth / (text.length * ratio)).toFixed(2));
+
+/** 定格表示などはパラメータに連動させる */
+const svg = (p: ParamValues) => {
+  const rating = `${esc(p.ratedCurrent)}A`;
+  return `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#dedad2"/>
@@ -110,14 +119,14 @@ const svg = `
   <!-- 定格表示 -->
   <rect x="51" y="128" width="38" height="34" rx="2" fill="#fbfaf7" stroke="#777" stroke-width="0.8"/>
   <text x="54" y="135" font-family="sans-serif" font-size="4.2" fill="#555">JET</text>
-  <text x="67" y="155" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="bold" fill="#222">20</text>
-  <text x="80" y="155" font-family="sans-serif" font-size="7" font-weight="bold" fill="#222">A</text>
+  <text x="70" y="154" text-anchor="middle" font-family="sans-serif" font-size="${fitSize(rating, 34, 15)}" font-weight="bold" fill="#222">${rating}</text>
   <text x="51" y="172" font-family="sans-serif" font-size="4.2" fill="#555">POLE 2P 50/60Hz</text>
   <g stroke="#a4a096" stroke-width="0.8">
     <path d="M51 179 H89 M51 185 H83 M51 191 H89 M51 197 H80"/>
   </g>
   <text x="51" y="207" font-family="sans-serif" font-size="4.2" fill="#666">MADE IN JAPAN</text>
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'mitsubishi.nf32-sv.2p',

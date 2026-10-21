@@ -1,5 +1,15 @@
 import { createContext, useContext } from 'react';
 import type { CheckIssue, Severity } from '../check/checkDiagram';
+import type { ConnectorSpec } from '../devices/types';
+
+/** 電線の両端の形状情報 */
+export interface WireGeometry {
+  sStub: number;
+  tStub: number;
+  /** 両端がコネクタならケーブルとして描く */
+  sConnector?: ConnectorSpec;
+  tConnector?: ConnectorSpec;
+}
 
 export interface EditorContextValue {
   /** 機器ID → 最も重い指摘の重要度 */
@@ -8,8 +18,8 @@ export interface EditorContextValue {
   wireSeverity: Map<string, Severity>;
   /** 電線ID → レーンのずらし量 */
   lanes: Map<string, number>;
-  /** 電線ID → 両端のスタブ長 */
-  stubs: Map<string, { s: number; t: number }>;
+  /** 電線ID → 両端の形状情報 */
+  geometry: Map<string, WireGeometry>;
   issues: CheckIssue[];
 }
 
@@ -17,7 +27,7 @@ export const EditorContext = createContext<EditorContextValue>({
   deviceSeverity: new Map(),
   wireSeverity: new Map(),
   lanes: new Map(),
-  stubs: new Map(),
+  geometry: new Map(),
   issues: [],
 });
 

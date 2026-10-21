@@ -28,6 +28,19 @@ const TERMINALS = [
 ];
 const EX = 144;
 
+/**
+ * 出力ごとの定格電流（200V 50Hz 4極の代表値[A]、高効率形の銘板値程度）。
+ * params の選択肢と銘板の表示に使う。
+ */
+const RATINGS = [
+  { kw: '0.2', amp: 1.2 },
+  { kw: '0.4', amp: 2.1 },
+  { kw: '0.75', amp: 3.6 },
+  { kw: '1.5', amp: 6.6 },
+  { kw: '2.2', amp: 9.6 },
+  { kw: '3.7', amp: 15.4 },
+];
+
 const screw = (x: number, y: number) => `
   <circle cx="${x}" cy="${y}" r="5.5" fill="url(#screw-{{uid}})" stroke="#555" stroke-width="0.8"/>
   <path d="M${x - 3.2} ${y - 3.2} L${x + 3.2} ${y + 3.2} M${x + 3.2} ${y - 3.2} L${x - 3.2} ${y + 3.2}" stroke="#444" stroke-width="1.2"/>`;
@@ -52,7 +65,10 @@ const slots = (() => {
   return s;
 })();
 
-const svg = `
+const svg = (ratedCurrent: number | string) => {
+  const amp = Number(ratedCurrent);
+  const kw = RATINGS.find((r) => r.amp === amp)?.kw;
+  return `
   <defs>
     <linearGradient id="frame-{{uid}}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#4f6674"/>
@@ -109,10 +125,12 @@ const svg = `
   ${fins}
 
   <!-- 銘板 -->
-  <rect x="58" y="92" width="44" height="26" rx="1.5" fill="#d9dcd6" stroke="#6a6d68" stroke-width="0.8"/>
-  <text x="80" y="101" text-anchor="middle" font-family="sans-serif" font-size="6.5" font-weight="bold" fill="#222">3~ MOTOR</text>
-  <text x="80" y="109" text-anchor="middle" font-family="sans-serif" font-size="5.5" fill="#333">200V 4P</text>
-  <text x="80" y="115.5" text-anchor="middle" font-family="sans-serif" font-size="4.5" fill="#555">50/60Hz  S1</text>
+  <rect x="56" y="86" width="50" height="36" rx="1.5" fill="#d9dcd6" stroke="#6a6d68" stroke-width="0.8"/>
+  <text x="81" y="95" text-anchor="middle" font-family="sans-serif" font-size="6.5" font-weight="bold" fill="#222">3~ MOTOR</text>
+  <line x1="59" y1="97.5" x2="103" y2="97.5" stroke="#8a8d88" stroke-width="0.5"/>
+  <text x="81" y="106" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#111">${kw ? `${kw}kW` : '---kW'} 4P</text>
+  <text x="81" y="113.5" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#222">200V ${Number.isFinite(amp) ? amp : '-'}A</text>
+  <text x="81" y="119.5" text-anchor="middle" font-family="sans-serif" font-size="4.5" fill="#555">50Hz  S1</text>
 
   <!-- 反負荷側ブラケット -->
   <rect x="${BX2}" y="68" width="8" height="62" rx="2" fill="url(#cover-{{uid}})" stroke="#33434d" stroke-width="1"/>
@@ -143,6 +161,7 @@ const svg = `
   <!-- 電線引込口 -->
   <rect x="${TB_X + TB_W - 2}" y="${TB_Y + 22}" width="6" height="14" rx="1.5" fill="#46596a" stroke="#33434d" stroke-width="0.8"/>
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'generic.motor.3p',
@@ -154,7 +173,7 @@ const def: DeviceDefinition = {
   labelPrefix: 'M',
   width: W,
   height: H,
-  svg,
+  svg: (p) => svg(p.ratedCurrent),
   terminals: [
     ...TERMINALS.map((t) => ({
       id: t.id,
@@ -166,20 +185,12 @@ const def: DeviceDefinition = {
     })),
     { id: 'E', label: '⏚', x: EX, y: TY, side: 'top', role: 'ground' },
   ],
-  // 値は 200V 50Hz 4極の代表的な定格電流[A]（高効率形の銘板値程度）
   params: [
     {
       key: 'ratedCurrent',
       label: '出力',
       unit: 'A',
-      options: [
-        { value: 1.2, label: '0.2kW (1.2A)' },
-        { value: 2.1, label: '0.4kW (2.1A)' },
-        { value: 3.6, label: '0.75kW (3.6A)' },
-        { value: 6.6, label: '1.5kW (6.6A)' },
-        { value: 9.6, label: '2.2kW (9.6A)' },
-        { value: 15.4, label: '3.7kW (15.4A)' },
-      ],
+      options: RATINGS.map((r) => ({ value: r.amp, label: `${r.kw}kW (${r.amp}A)` })),
       default: 3.6,
     },
   ],

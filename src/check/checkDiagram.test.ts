@@ -54,7 +54,44 @@ const lamp: DeviceDefinition = {
   ],
 };
 
-const defs = new Map([source3p, breaker, motor, lamp].map((d) => [d.type, d]));
+const dcSource: DeviceDefinition = {
+  ...base,
+  type: 'test.dc',
+  category: 'power-supply',
+  terminals: [
+    t('+V', 'supply', { supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 2 } }),
+    t('-V', 'supply', { supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: 2 } }),
+  ],
+};
+
+const mil = { kind: 'MIL40', pins: 2, width: 40 };
+const outputUnit: DeviceDefinition = {
+  ...base,
+  type: 'test.output-unit',
+  category: 'plc',
+  terminals: [t('CN1', 'connector', { connector: mil, optional: true })],
+  pins: [
+    { id: 'CN1#1', label: '+V', role: 'input', accepts: { system: 'DC', minVoltage: 20, maxVoltage: 28, conductors: ['+'] }, optional: true },
+    { id: 'CN1#2', label: 'COM', role: 'input', accepts: { system: 'DC', minVoltage: 20, maxVoltage: 28, conductors: ['-'] }, optional: true },
+  ],
+};
+
+const milTb: DeviceDefinition = {
+  ...base,
+  type: 'test.mil-tb',
+  category: 'terminal',
+  terminals: [t('CN', 'connector', { connector: mil, optional: true }), t('1', 'pass', { optional: true }), t('2', 'pass', { optional: true })],
+  pins: [
+    { id: 'CN#1', role: 'pass', optional: true },
+    { id: 'CN#2', role: 'pass', optional: true },
+  ],
+  links: [
+    { from: 'CN#1', to: '1' },
+    { from: 'CN#2', to: '2' },
+  ],
+};
+
+const defs = new Map([source3p, breaker, motor, lamp, dcSource, outputUnit, milTb].map((d) => [d.type, d]));
 const lookup = (type: string) => defs.get(type);
 
 let wireSeq = 0;
@@ -174,5 +211,31 @@ describe('checkDiagram', () => {
     d.wires[3].wireNo = 'U1';
     d.wires[4].wireNo = 'U1';
     expect(rules(d)).toContain('wire-no-duplicate');
+  });
+
+  describe('コネクタとケーブル', () => {
+    const milDiagram = (plusTo: string, minusTo: string): Diagram => ({
+      devices: [
+        { id: 'PSU1', type: dcSource.type, x: 0, y: 0 },
+        { id: 'OUT1', type: outputUnit.type, x: 0, y: 0 },
+        { id: 'TB1', type: milTb.type, x: 0, y: 0 },
+      ],
+      wires: [
+        wire('OUT1.CN1', 'TB1.CN', { wireType: 'CABLE' }),
+        wire('PSU1.+V', plusTo, { color: 'blue', sizeSq: 0.75 }),
+        wire('PSU1.-V', minusTo, { color: 'blue', sizeSq: 0.75 }),
+      ],
+    });
+
+    it('ケーブルを通してピンの電源条件をチェックする', () => {
+      expect(rules(milDiagram('TB1.1', 'TB1.2'))).toEqual([]);
+      expect(rules(milDiagram('TB1.2', 'TB1.1'))).toContain('conductor-mismatch');
+    });
+
+    it('コネクタに普通の電線をつなぐとエラーにする', () => {
+      const d = milDiagram('TB1.1', 'TB1.2');
+      d.wires.push(wire('PSU1.+V', 'TB1.CN'));
+      expect(rules(d)).toContain('connector-mismatch');
+    });
   });
 });

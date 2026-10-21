@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, ParamValues } from '../types';
 
 /**
  * 三菱電機 漏電遮断器 NV32-SV 3P（WS-Vシリーズ 汎用品）。
@@ -36,7 +36,19 @@ const terminalBlock = (y0: number, ty: number) => `
   <rect x="48" y="${y0 + 2}" width="4" height="36" rx="1" fill="#d2cec5" stroke="#aaa59b" stroke-width="0.6"/>
   <rect x="98" y="${y0 + 2}" width="4" height="36" rx="1" fill="#d2cec5" stroke="#aaa59b" stroke-width="0.6"/>`;
 
-const svg = `
+/** XML として安全な文字列にする（パラメータ値を SVG に埋め込む用） */
+const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 文字列が最大幅[px]に収まるフォントサイズ（文字幅は 1文字 ≒ ratio×フォントサイズ で概算） */
+const fitSize = (text: string, maxWidth: number, base: number, ratio = 0.62) =>
+  Math.min(base, +(maxWidth / (text.length * ratio)).toFixed(2));
+
+/** 定格表示などはパラメータに連動させる */
+const svg = (p: ParamValues) => {
+  const rating = `${esc(p.ratedCurrent)}A`;
+  const sens = `${esc(p.sensitivity)}mA`;
+  // 15/30mA は高速形（動作時間 0.1s 以内）
+  const sensSpec = typeof p.sensitivity === 'number' && p.sensitivity <= 30 ? `IΔn ${sens} 0.1s` : `IΔn ${sens}`;
+  return `
   <defs>
     <linearGradient id="body-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#dedad2"/>
@@ -113,9 +125,8 @@ const svg = `
   <!-- 定格表示（定格電流・定格感度電流） -->
   <rect x="10" y="148" width="40" height="42" rx="2" fill="#fbfaf7" stroke="#777" stroke-width="0.8"/>
   <text x="13" y="155" font-family="sans-serif" font-size="4.2" fill="#555">JET</text>
-  <text x="25" y="173" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="bold" fill="#222">20</text>
-  <text x="38" y="173" font-family="sans-serif" font-size="7" font-weight="bold" fill="#222">A</text>
-  <text x="30" y="185" text-anchor="middle" font-family="sans-serif" font-size="6" font-weight="bold" fill="#222">30mA</text>
+  <text x="30" y="172" text-anchor="middle" font-family="sans-serif" font-size="${fitSize(rating, 36, 15)}" font-weight="bold" fill="#222">${rating}</text>
+  <text x="30" y="185" text-anchor="middle" font-family="sans-serif" font-size="${fitSize(sens, 36, 6)}" font-weight="bold" fill="#222">${sens}</text>
   <text x="11" y="206" font-family="sans-serif" font-size="4.2" fill="#666">MADE IN JAPAN</text>
   <!-- 右側: テストボタン -->
   <circle cx="119" cy="70" r="9.5" fill="#c9c5bb" stroke="#9b978d" stroke-width="0.8"/>
@@ -131,13 +142,14 @@ const svg = `
   <!-- 右側: 仕様 -->
   <text x="102" y="139" font-family="sans-serif" font-size="4.4" fill="#555">POLE 3P 50/60Hz</text>
   <text x="102" y="146" font-family="sans-serif" font-size="4.4" fill="#555">Ue 100-440V</text>
-  <text x="102" y="153" font-family="sans-serif" font-size="4.4" fill="#555">IΔn 30mA 0.1s</text>
+  <text x="102" y="153" font-family="sans-serif" font-size="${fitSize(sensSpec, 38, 4.4, 0.55)}" fill="#555">${sensSpec}</text>
   <g stroke="#a4a096" stroke-width="0.8">
     <path d="M102 160 H138 M102 166 H132 M102 172 H138 M102 178 H130 M102 184 H136"/>
   </g>
   <rect x="117" y="190" width="18" height="18" rx="9" fill="none" stroke="#777" stroke-width="0.9"/>
   <text x="126" y="202" text-anchor="middle" font-family="sans-serif" font-size="5.5" font-weight="bold" fill="#666">CCC</text>
 `;
+};
 
 const def: DeviceDefinition = {
   type: 'mitsubishi.nv32-sv.3p',

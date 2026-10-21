@@ -4,6 +4,7 @@ import { getWireColor } from '../data/wires';
 import type { TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode, WireFlowEdge } from './flow';
+import { CableGraphics } from './CableGraphics';
 import { DIR, routeWire, toRoundedPath } from './routing';
 
 /** 線番マーカーを端子から離す距離 */
@@ -17,7 +18,9 @@ const SIDE: Record<Position, TerminalSide> = {
 };
 
 function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireFlowEdge>) {
-  const { lanes, stubs, wireSeverity } = useEditorContext();
+  const { lanes, geometry, wireSeverity } = useEditorContext();
+  const geo = geometry.get(id);
+  const isCable = !!(geo?.sConnector && geo.tConnector);
   const { setEdges, screenToFlowPosition } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
   const bend = data?.bend ?? 0;
   const lane = bend ? 0 : (lanes.get(id) ?? 0);
@@ -31,8 +34,8 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
       tx: targetX,
       ty: targetY,
       tSide: SIDE[targetPosition],
-      sStub: stubs.get(id)?.s,
-      tStub: stubs.get(id)?.t,
+      sStub: geo?.sStub,
+      tStub: geo?.tStub,
     },
     offset,
   );
@@ -77,14 +80,25 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
     <>
       {severity === 'error' && <path d={path} className="wire__alert" />}
       {selected && <path d={path} className="wire__selected" />}
-      <path d={path} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={width + 1.6} strokeLinecap="round" />
-      <path d={path} fill="none" stroke={hex} strokeWidth={width} strokeLinecap="round" />
-      {color?.stripeHex && (
-        <path d={path} fill="none" stroke={color.stripeHex} strokeWidth={width} strokeDasharray="6 6" />
+      {isCable ? (
+        <CableGraphics
+          points={route.points}
+          source={{ point: { x: sourceX, y: sourceY }, side: SIDE[sourcePosition], connector: geo!.sConnector! }}
+          target={{ point: { x: targetX, y: targetY }, side: SIDE[targetPosition], connector: geo!.tConnector! }}
+        />
+      ) : (
+        <>
+        <path d={path} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={width + 1.6} strokeLinecap="round" />
+        <path d={path} fill="none" stroke={hex} strokeWidth={width} strokeLinecap="round" />
+        {color?.stripeHex && (
+          <path d={path} fill="none" stroke={color.stripeHex} strokeWidth={width} strokeDasharray="6 6" />
+        )}
+        </>
       )}
       <path d={path} fill="none" stroke="transparent" strokeWidth={14} className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
         {data?.wireNo &&
+          !isCable &&
           ([
             [sourceX, sourceY, SIDE[sourcePosition]],
             [targetX, targetY, SIDE[targetPosition]],
@@ -98,13 +112,18 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
               {data.wireNo}
             </div>
           ))}
+        {isCable && data?.wireNo && !selected && (
+          <div className="wire-label cable-tag" style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)` }}>
+            {data.wireNo}
+          </div>
+        )}
         {selected && (
           <div
             className={`wire-label is-selected${severity ? ` has-${severity}` : ''}`}
             style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y + (route.horizontalMid ? -12 : 0)}px)` }}
           >
             {data?.wireNo || id}
-            <span className="wire-label__spec">{` ${data?.wireType ?? ''} ${data?.sizeSq ?? ''}sq`}</span>
+            <span className="wire-label__spec">{isCable ? ` ケーブル（${geo?.sConnector?.kind}）` : ` ${data?.wireType ?? ''} ${data?.sizeSq ?? ''}sq`}</span>
           </div>
         )}
         {selected && (

@@ -36,7 +36,17 @@ const text = (x: number, y: number, t: string, size = 5, fill = '#222', weight =
 const groundMark = (x: number, y: number) => `
   <path d="M${x} ${y - 4} V${y} M${x - 3.5} ${y} H${x + 3.5} M${x - 2.3} ${y + 1.4} H${x + 2.3} M${x - 1.1} ${y + 2.8} H${x + 1.1}" stroke="#222" stroke-width="0.8" fill="none"/>`;
 
-const svg = `
+/** 容量の選択肢 [定格出力電流 A, 出力容量 W] */
+const CAPACITIES: [number, number][] = [
+  [1.3, 30],
+  [2.5, 60],
+  [5, 120],
+  [10, 240],
+];
+const DEFAULT_CURRENT = 2.5;
+const wattOf = (a: number) => CAPACITIES.find(([c]) => c === a)?.[1] ?? Math.round(a * 24);
+
+const svg = (amps: number) => `
   <defs>
     <linearGradient id="case-{{uid}}" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#b9bcc1"/>
@@ -80,12 +90,13 @@ const svg = `
 
   <!-- 銘板 -->
   <rect x="7" y="66" width="${W - 14}" height="46" rx="2" fill="#f7f8f9" stroke="#a5a9ae" stroke-width="0.6"/>
-  ${text(W / 2, 75, 'POWER SUPPLY', 5.2, '#2b3a4a')}
-  <rect x="14" y="78.5" width="${W - 28}" height="13" rx="1.5" fill="#2b3a4a"/>
-  ${text(W / 2, 88.5, 'DC 24V', 9, '#fff')}
-  ${text(W / 2, 99, 'INPUT  AC100-240V', 4, '#333', 'normal')}
-  ${text(W / 2, 105, '50/60Hz', 4, '#333', 'normal')}
-  ${text(W / 2, 110.5, 'OUTPUT  DC24V', 4, '#333', 'normal')}
+  <text x="10" y="75.5" font-family="sans-serif" font-size="4.6" font-weight="bold" fill="#2b3a4a">POWER SUPPLY</text>
+  <rect x="50" y="69.5" width="20" height="8" rx="1.5" fill="#f2b705" stroke="#a87e00" stroke-width="0.5"/>
+  ${text(60, 75.6, `${wattOf(amps)}W`, 5, '#1d1d1d')}
+  <rect x="14" y="79.5" width="${W - 28}" height="13" rx="1.5" fill="#2b3a4a"/>
+  ${text(W / 2, 89.5, 'DC 24V', 9, '#fff')}
+  ${text(W / 2, 99.5, 'INPUT  AC100-240V  50/60Hz', 3.4, '#333', 'normal')}
+  ${text(W / 2, 106.5, `OUTPUT  DC24V  ${amps}A`, 4.4, '#111')}
 
   <!-- DC ON 表示灯・出力電圧調整 -->
   <circle cx="22" cy="125" r="3.6" fill="#1a1a1a"/>
@@ -119,7 +130,7 @@ const def: DeviceDefinition = {
   labelPrefix: 'PSU',
   width: W,
   height: H,
-  svg,
+  svg: (p) => svg(Number(p.outputCurrent) || DEFAULT_CURRENT),
   terminals: [
     { id: 'L', x: IN[0].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
     { id: 'N', x: IN[1].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
@@ -174,13 +185,8 @@ const def: DeviceDefinition = {
       key: 'outputCurrent',
       label: '容量（定格出力電流）',
       unit: 'A',
-      options: [
-        { value: 1.3, label: '30W（1.3A）' },
-        { value: 2.5, label: '60W（2.5A）' },
-        { value: 5, label: '120W（5A）' },
-        { value: 10, label: '240W（10A）' },
-      ],
-      default: 2.5,
+      options: CAPACITIES.map(([value, watt]) => ({ value, label: `${watt}W（${value}A）` })),
+      default: DEFAULT_CURRENT,
     },
   ],
   distinctGroups: [['L', 'N']],
