@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
+import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
+import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
-import { CABLE_WIRE_TYPE } from '../model/diagram';
+import { busAccepts, type BusLayout } from '../model/bus';
+import { CABLE_WIRE_TYPE, type Mount } from '../model/diagram';
+import { terminalTitle } from './DeviceNode';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
 export type WireDefaults = Pick<WireEdgeData, 'color' | 'sizeSq' | 'wireType'>;
@@ -11,11 +15,16 @@ interface Props {
   node?: DeviceFlowNode;
   edge?: WireFlowEdge;
   edges: WireFlowEdge[];
+  nodes: DeviceFlowNode[];
+  /** 機器ID → 装着で決まる値を加えたパラメータ */
+  params: Map<string, ParamValues | undefined>;
+  bus: BusLayout;
   issues: CheckIssue[];
   wireDefaults: WireDefaults;
   onWireDefaultsChange: (d: WireDefaults) => void;
   onRenameDevice: (oldId: string, newId: string) => string | null;
   onParamChange: (id: string, key: string, value: number | string) => void;
+  onMountChange: (id: string, mount: Mount | undefined) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -106,11 +115,123 @@ function RenameField({ id, onRename }: { id: string; onRename: Props['onRenameDe
   );
 }
 
+function safetyText(s: SafetyRating): string {
+  return [
+    s.pl && `PL ${s.pl}`,
+    s.category && `カテゴリ ${s.category}`,
+    s.sil && `SIL ${s.sil}`,
+    s.esType && `タイプ ${s.esType}`,
+  ]
+    .filter(Boolean)
+    .join(' / ');
+}
+
+/** 増設ユニットの装着先と位置 */
+function MountField({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefinition; props: Props }) {
+  const hosts = props.nodes.filter((n) => {
+    const d = getDeviceDefinition(n.data.deviceType);
+    return n.id !== node.id && !n.data.mount && d && busAccepts(d, def);
+  });
+  const mount = node.data.mount;
+  const nextSlot = (host: string) =>
+    Math.max(0, ...props.nodes.filter((n) => n.data.mount?.device === host && n.id !== node.id).map((n) => n.data.mount!.slot)) + 1;
+  return (
+    <div className="field">
+      <span>装着先</span>
+      <div className="mount-row">
+        <select
+          value={mount?.device ?? ''}
+          onChange={(e) => props.onMountChange(node.id, e.target.value ? { device: e.target.value, slot: nextSlot(e.target.value) } : undefined)}
+        >
+          <option value="">なし（単独で配置）</option>
+          {hosts.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.id}（{getDeviceDefinition(h.data.deviceType)?.model}）
+            </option>
+          ))}
+        </select>
+        {mount && (
+          <label className="mount-slot" title="装着する位置（親に近い順に 1, 2, …）">
+            位置
+            <input
+              type="number"
+              min={1}
+              value={mount.slot}
+              onChange={(e) => {
+                const slot = Math.max(1, Math.round(Number(e.target.value) || 1));
+                props.onMountChange(node.id, { ...mount, slot });
+              }}
+            />
+          </label>
+        )}
+      </div>
+      {!hosts.length && !mount && <small className="muted">装着できる機器（CPU・ベースユニットなど）が図面にありません</small>}
+    </div>
+  );
+}
+
+/** 入出力の先頭番号。装着していれば自動、していなければ手で指定する */
+function IoHeadField({ node, def, params, props }: { node: DeviceFlowNode; def: DeviceDefinition; params: ParamValues; props: Props }) {
+  const io = def.bus!.io!;
+  const rows = [
+    ...(io.inputs ? [{ key: 'ioIn', dir: 'in' as const, label: '入力', count: io.inputs }] : []),
+    ...(io.outputs ? [{ key: 'ioOut', dir: 'out' as const, label: '出力', count: io.outputs }] : []),
+  ];
+  return (
+    <div className="field">
+      <span>先頭番号{node.data.mount ? '（装着位置から自動）' : ''}</span>
+      {rows.map((r) => {
+        const head = Number(params[r.key] ?? 0);
+        const range = `${ioName(io.format, r.dir, head)}〜${ioName(io.format, r.dir, head + r.count - 1)}`;
+        return node.data.mount ? (
+          <div key={r.key} className="muted small">
+            {r.label} {range}
+          </div>
+        ) : (
+          <label key={r.key} className="io-head">
+            {r.label}
+            <input
+              key={`${node.id}-${head}`}
+              defaultValue={ioName(io.format, r.dir, head)}
+              onBlur={(e) => {
+                const n = parseIoName(io.format, e.target.value);
+                if (n === undefined) e.target.value = ioName(io.format, r.dir, head);
+                else props.onParamChange(node.id, r.key, n);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+            <small className="muted">{range}</small>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 装着しているユニットと内部電源の収支（親の機器） */
+function BusHostInfo({ id, bus }: { id: string; bus: BusLayout }) {
+  const g = bus.groups.get(id);
+  if (!g) return <p className="muted small">増設ユニットを装着できます（ユニット側の「装着先」で選びます）</p>;
+  return (
+    <div className="field">
+      <span>装着ユニット</span>
+      <div className="muted small">{g.members.map((m) => `${m.mount!.slot}: ${m.id}`).join('、')}</div>
+      {g.rails.map((r) => (
+        <div key={r.rail} className={`small${r.load > r.supply ? ' error-text' : ' muted'}`}>
+          内部電源 {r.rail}: 消費 {Math.round(r.load * 1000) / 1000}A / 供給 {Math.round(r.supply * 1000) / 1000}A
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Inspector(props: Props) {
   const { node, edge } = props;
 
   if (node) {
     const def = getDeviceDefinition(node.data.deviceType);
+    const params = props.params.get(node.id) ?? node.data.params;
+    const resolved = def ? resolveDevice(def, params) : undefined;
     const connected = new Set(
       props.edges.flatMap((e) => [
         e.source === node.id ? e.sourceHandle : null,
@@ -130,8 +251,12 @@ export function Inspector(props: Props) {
                 {def.maker ? `${def.maker} ` : ''}
                 {def.model}
               </div>
+              {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
+            {def.bus && !def.bus.host && <MountField node={node} def={def} props={props} />}
+            {def.bus?.host && <BusHostInfo id={node.id} bus={props.bus} />}
+            {def.bus?.io && resolved && <IoHeadField node={node} def={def} params={resolved.params} props={props} />}
             {def.params?.map((p) => (
               <label key={p.key} className="field">
                 <span>{p.label}</span>
@@ -153,8 +278,8 @@ export function Inspector(props: Props) {
             <div className="field">
               <span>端子</span>
               <div className="terminal-list">
-                {def.terminals.map((t) => (
-                  <span key={t.id} className={`terminal-chip${connected.has(t.id) ? ' is-connected' : ''}`} title={t.role}>
+                {resolved!.terminals.map((t) => (
+                  <span key={t.id} className={`terminal-chip${connected.has(t.id) ? ' is-connected' : ''}`} title={terminalTitle(t)}>
                     {t.label ?? t.id}
                   </span>
                 ))}

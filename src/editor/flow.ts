@@ -3,11 +3,13 @@
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { ParamValues } from '../devices/types';
-import type { Diagram } from '../model/diagram';
+import type { Diagram, Mount } from '../model/diagram';
 
 export interface DeviceNodeData extends Record<string, unknown> {
   deviceType: string;
   params?: ParamValues;
+  /** 増設ユニットの連結・ベースユニットへの装着 */
+  mount?: Mount;
 }
 
 export interface WireEdgeData extends Record<string, unknown> {
@@ -27,7 +29,9 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
       id: d.id,
       type: 'device',
       position: { x: d.x, y: d.y },
-      data: { deviceType: d.type, ...(d.params ? { params: d.params } : {}) },
+      data: { deviceType: d.type, ...(d.params ? { params: d.params } : {}), ...(d.mount ? { mount: d.mount } : {}) },
+      // 装着したユニットは親と一緒に動く（単独では動かさない）
+      ...(d.mount ? { draggable: false } : {}),
     })),
     edges: diagram.wires.map((w) => ({
       id: w.id,
@@ -55,6 +59,7 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[]): D
       x: n.position.x,
       y: n.position.y,
       ...(n.data.params ? { params: n.data.params } : {}),
+      ...(n.data.mount ? { mount: n.data.mount } : {}),
     })),
     wires: edges.map((e) => ({
       id: e.id,

@@ -5,13 +5,15 @@
  *
  * --param でパラメータを指定して描画できる（svg が関数の機器の確認用）。
  * 端子位置には赤い丸と端子IDを重ねて描く（--no-terminals で非表示）。
- * あわせて定義の基本的な整合性（端子IDの重複、範囲外の端子、{{uid}} の付け忘れ）を検査する。
+ * あわせて定義の整合性（端子IDの重複、範囲外の端子、存在しない端子への参照、{{uid}} の付け忘れなど）を検査する。
  */
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
+import { resolveDevice } from '../src/devices/resolve';
 import { paramsWithDefaults, type DeviceDefinition, type ParamValues } from '../src/devices/types';
+import { validateDefinition } from '../src/devices/validate';
 
 const rawArgs = process.argv.slice(2);
 const paramArgs: string[] = [];
@@ -38,38 +40,12 @@ for (const a of paramArgs) {
 }
 const svgSource = typeof def.svg === 'function' ? def.svg(paramsWithDefaults(def, params)) : def.svg;
 
-const problems: string[] = [];
-const ids = new Set<string>();
-for (const t of def.terminals) {
-  if (ids.has(t.id)) problems.push(`端子IDが重複: ${t.id}`);
-  ids.add(t.id);
-  if (t.x < 0 || t.x > def.width || t.y < 0 || t.y > def.height) problems.push(`端子が範囲外: ${t.id}`);
-  if (t.role === 'supply' && !t.supply) problems.push(`supply 端子に supply 指定がない: ${t.id}`);
-  if (t.role === 'input' && !t.accepts) problems.push(`input 端子に accepts 指定がない: ${t.id}`);
-  if (t.role === 'connector' && !t.connector) problems.push(`connector 端子に connector 指定がない: ${t.id}`);
-}
-const pinIds = new Set<string>();
-for (const p of def.pins ?? []) {
-  const [cn, no] = p.id.split('#');
-  const conn = def.terminals.find((t) => t.id === cn)?.connector;
-  if (!conn || !(Number(no) >= 1 && Number(no) <= conn.pins)) problems.push(`ピンIDが不正（'<コネクタ端子ID>#<1〜ピン数>'）: ${p.id}`);
-  if (pinIds.has(p.id)) problems.push(`ピンIDが重複: ${p.id}`);
-  pinIds.add(p.id);
-}
-for (const id of pinIds) ids.add(id);
-for (const l of def.links ?? []) {
-  if (!ids.has(l.from) || !ids.has(l.to)) problems.push(`links に存在しない端子: ${l.from} -> ${l.to}`);
-}
-for (const g of def.distinctGroups ?? []) {
-  for (const id of g) if (!ids.has(id)) problems.push(`distinctGroups に存在しない端子: ${id}`);
-}
-const idAttrs = [...svgSource.matchAll(/\bid="([^"]*)"/g)].map((m) => m[1]);
-for (const id of idAttrs) if (!id.includes('{{uid}}')) problems.push(`SVGのidに {{uid}} がない: ${id}`);
-if (/<script|<image|<foreignObject|href="http/i.test(svgSource)) problems.push('SVGに使用禁止の要素/外部参照がある');
+const problems = validateDefinition(def, params);
+const resolved = resolveDevice(def, params);
 
 const svgBody = svgSource.split('{{uid}}').join('preview');
 const markers = showTerminals
-  ? def.terminals
+  ? resolved.terminals
       .map(
         (t) =>
           (t.connector

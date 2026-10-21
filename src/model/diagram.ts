@@ -22,6 +22,13 @@ export interface DiagramDevice {
   x: number;
   y: number;
   params?: ParamValues;
+  /** 増設ユニットの連結・ベースユニットへの装着（装着先の機器名と位置。位置は 1 から） */
+  mount?: Mount;
+}
+
+export interface Mount {
+  device: string;
+  slot: number;
 }
 
 export interface TerminalRef {
@@ -45,9 +52,16 @@ export interface DiagramWire {
   bend?: number;
 }
 
+/** 図面全体の設定 */
+export interface DiagramSettings {
+  /** 安全機能に要求するパフォーマンスレベル（ISO 13849-1）。指定すると、それを下回る安全機器を警告する */
+  requiredPL?: 'a' | 'b' | 'c' | 'd' | 'e';
+}
+
 export interface Diagram {
   devices: DiagramDevice[];
   wires: DiagramWire[];
+  settings?: DiagramSettings;
 }
 
 export interface DiagramFile extends Diagram {
@@ -66,12 +80,14 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
     format: DIAGRAM_FORMAT,
     version: DIAGRAM_VERSION,
     ...(title ? { title } : {}),
+    ...(diagram.settings && Object.keys(diagram.settings).length ? { settings: diagram.settings } : {}),
     devices: diagram.devices.map((d) => ({
       id: d.id,
       type: d.type,
       x: Math.round(d.x),
       y: Math.round(d.y),
       ...(d.params && Object.keys(d.params).length ? { params: d.params } : {}),
+      ...(d.mount ? { mount: d.mount } : {}),
     })),
     wires: diagram.wires.map((w) => ({
       id: w.id,
@@ -137,6 +153,7 @@ export function parseDiagram(input: string | unknown): Diagram {
       x: typeof d.x === 'number' ? d.x : i * 200,
       y: typeof d.y === 'number' ? d.y : 0,
       ...(isObj(d.params) ? { params: d.params as ParamValues } : {}),
+      ...(parseMount(d.mount) ?? {}),
     };
   });
   const ids = new Set<string>();
@@ -162,7 +179,24 @@ export function parseDiagram(input: string | unknown): Diagram {
       ...(typeof w.bend === 'number' ? { bend: w.bend } : {}),
     };
   });
-  return { devices, wires };
+  const settings: DiagramSettings = {};
+  if (isObj(raw.settings) && typeof raw.settings.requiredPL === 'string' && /^[a-e]$/.test(raw.settings.requiredPL)) {
+    settings.requiredPL = raw.settings.requiredPL as DiagramSettings['requiredPL'];
+  }
+  return { devices, wires, ...(Object.keys(settings).length ? { settings } : {}) };
+}
+
+/** mount は { "device": "PLC1", "slot": 1 } のほか "PLC1" や "PLC1#2" の文字列も受け付ける */
+function parseMount(v: unknown): { mount: Mount } | undefined {
+  if (isObj(v) && typeof v.device === 'string' && v.device) {
+    const slot = Number(v.slot);
+    return { mount: { device: v.device, slot: Number.isFinite(slot) && slot > 0 ? Math.round(slot) : 1 } };
+  }
+  if (typeof v === 'string' && v) {
+    const [device, slot] = v.split('#');
+    return { mount: { device, slot: Number(slot) > 0 ? Math.round(Number(slot)) : 1 } };
+  }
+  return undefined;
 }
 
 /** 未使用の電線ID（W1, W2, …）を返す */

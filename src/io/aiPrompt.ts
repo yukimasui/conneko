@@ -4,6 +4,7 @@
 import type { CheckIssue } from '../check/checkDiagram';
 import { CIRCUIT_COLOR_RULES, WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
+import { resolveDevice, type ResolvedAccept } from '../devices/resolve';
 import { resolveNum, type DeviceDefinition, type TerminalDef } from '../devices/types';
 import { toDiagramFile, type Diagram } from '../model/diagram';
 
@@ -18,11 +19,11 @@ const ROLE_TEXT: Record<TerminalDef['role'], string> = {
   connector: 'コネクタ',
 };
 
-function terminalLine(t: TerminalDef): string {
+function terminalLine(t: TerminalDef, accepts: ResolvedAccept[]): string {
   const parts = [`${t.id}`, ROLE_TEXT[t.role]];
   if (t.supply) parts.push(`${t.supply.system} ${typeof t.supply.voltage === 'number' ? t.supply.voltage + 'V' : ''} 導体=${t.supply.conductor}`);
-  if (t.accepts) {
-    parts.push(`${t.accepts.system}${t.accepts.minVoltage}〜${t.accepts.maxVoltage}V${t.accepts.conductors ? ` 接続可能な導体=${t.accepts.conductors.join('/')}` : ''}`);
+  for (const a of accepts) {
+    parts.push(`${a.system}${a.minVoltage}〜${a.maxVoltage}V${a.conductors ? ` 接続可能な導体=${a.conductors.join('/')}` : ''}`);
   }
   if (t.connector) parts.push(`${t.connector.kind}${t.connector.pins ? ` ${t.connector.pins}ピン` : ''}`);
   if (t.optional) parts.push('未使用可');
@@ -36,14 +37,15 @@ function deviceSection(id: string, def: DeviceDefinition, params: Diagram['devic
   if (prot !== undefined) lines.push(`  保護電流: ${prot}A`);
   const load = resolveNum(def.loadCurrent, def, params);
   if (load !== undefined) lines.push(`  負荷電流: ${load}A`);
+  const r = resolveDevice(def, params);
   lines.push('  端子:');
-  lines.push(...def.terminals.map(terminalLine));
-  for (const t of def.terminals.filter((x) => x.connector)) {
-    const pins = (def.pins ?? []).filter((p) => p.id.startsWith(`${t.id}#`));
+  lines.push(...r.terminals.map((t) => terminalLine(t, r.accepts.get(t.id) ?? [])));
+  for (const t of r.terminals.filter((x) => x.connector)) {
+    const pins = r.pins.filter((p) => p.id.startsWith(`${t.id}#`));
     if (pins.length) lines.push(`  コネクタ ${t.id} のピン: ${pins.map((p) => `${p.id.split('#')[1]}=${p.label ?? p.role}`).join(', ')}`);
   }
-  const links = (def.links ?? []).filter((l) => !l.from.includes('#') && !l.to.includes('#'));
-  if (def.links?.some((l) => l.from.includes('#') || l.to.includes('#'))) {
+  const links = r.links.filter((l) => !l.from.includes('#') && !l.to.includes('#'));
+  if (r.links.some((l) => l.from.includes('#') || l.to.includes('#'))) {
     lines.push('  コネクタのピン n はネジ端子 n（または同名の端子）と導通しています');
   }
   if (links.length) {

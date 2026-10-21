@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { checkDiagram } from '../../check/checkDiagram';
 import type { Diagram, DiagramWire } from '../../model/diagram';
 import { deviceDefinitions, getDeviceDefinition } from '../registry';
+import { resolveDevice } from '../resolve';
 import { paramsWithDefaults } from '../types';
 
 const keyence = deviceDefinitions.filter((d) => d.maker === 'KEYENCE');
@@ -16,7 +17,9 @@ describe('KEYENCE 機器定義', () => {
     for (const t of types) expect(t.startsWith('keyence.')).toBe(true);
   });
 
-  it.each(keyence.map((d) => [d.type, d] as const))('%s: 端子・ピン・links が整合している', (_, d) => {
+  it.each(keyence.map((d) => [d.type, d] as const))('%s: 端子・ピン・links が整合している', (_, def) => {
+    const r = resolveDevice(def);
+    const d = { ...def, terminals: r.terminals, pins: r.pins, links: r.links };
     const ids = new Set<string>();
     for (const t of d.terminals) {
       expect(ids.has(t.id), `端子ID重複 ${t.id}`).toBe(false);
@@ -25,7 +28,7 @@ describe('KEYENCE 機器定義', () => {
       if (t.role === 'input') expect(t.accepts, `accepts なし ${t.id}`).toBeDefined();
       if (t.role === 'connector') expect(t.connector, `connector なし ${t.id}`).toBeDefined();
     }
-    for (const p of d.pins ?? []) {
+    for (const p of d.pins) {
       const [cn, no] = p.id.split('#');
       const conn = d.terminals.find((t) => t.id === cn)?.connector;
       expect(conn && Number(no) >= 1 && Number(no) <= conn.pins, `ピンID不正 ${p.id}`).toBe(true);
@@ -35,11 +38,11 @@ describe('KEYENCE 機器定義', () => {
     // MIL コネクタは全ピンを定義する
     for (const t of d.terminals) {
       if (t.connector && t.connector.pins > 0) {
-        const n = (d.pins ?? []).filter((p) => p.id.startsWith(`${t.id}#`)).length;
+        const n = d.pins.filter((p) => p.id.startsWith(`${t.id}#`)).length;
         expect(n, `${t.id} のピン数`).toBe(t.connector.pins);
       }
     }
-    for (const l of d.links ?? []) expect(ids.has(l.from) && ids.has(l.to), `links ${l.from}->${l.to}`).toBe(true);
+    for (const l of d.links) expect(ids.has(l.from) && ids.has(l.to), `links ${l.from}->${l.to}`).toBe(true);
     // SVG の id に {{uid}} が付いている（パラメータの全選択肢で確認）
     const variants = [paramsWithDefaults(d, {})];
     for (const p of d.params ?? []) for (const o of p.options) variants.push(paramsWithDefaults(d, { [p.key]: o.value }));

@@ -120,6 +120,15 @@ textarea {
   border-left: 1px solid var(--border);
 }
 
+.toolbar__setting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* --- パレット --- */
 .palette {
   grid-area: palette;
@@ -311,6 +320,14 @@ textarea {
 .device-node__label span {
   color: var(--muted);
   font-size: 11px;
+}
+/* 装着したユニットは横に詰めて並ぶため、ラベルは機器名だけにする */
+.device-node.is-mounted .device-node__label {
+  font-size: 11px;
+  padding: 1px 4px;
+}
+.device-node.is-mounted .device-node__label span {
+  display: none;
 }
 .device-node.is-selected .device-node__svg {
   filter: drop-shadow(0 0 0 2px var(--accent)) drop-shadow(0 0 6px rgba(37, 99, 235, 0.7));
@@ -626,4 +643,49 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* --- 装着・先頭番号・安全性能 --- */
+.mount-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.mount-row select {
+  flex: 1;
+  min-width: 0;
+}
+.mount-slot {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mount-slot input {
+  width: 48px;
+}
+.io-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.io-head input {
+  min-width: 0;
+}
+.io-head small {
+  grid-column: 2;
+}
+.safety-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid #fde047;
 }

@@ -7,10 +7,11 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  applyNodeChanges,
   useEdgesState,
-  useNodesState,
   useReactFlow,
   type Connection,
+  type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
@@ -18,7 +19,8 @@ import iconUrl from './assets/conneko-icon.svg?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
-import type { TerminalSide } from './devices/types';
+import { connectorsMate, resolveDevice } from './devices/resolve';
+import type { ParamValues, TerminalSide } from './devices/types';
 import { DeviceNode } from './editor/DeviceNode';
 import { FAN_LENGTH } from './editor/CableGraphics';
 import { EditorContext, type WireGeometry } from './editor/EditorContext';
@@ -29,7 +31,17 @@ import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { assignLanes, stubLength, type LaneInput } from './editor/routing';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
-import { CABLE_WIRE_TYPE, nextDeviceId, nextWireId, parseDiagram, toDiagramFile, type Diagram } from './model/diagram';
+import { computeBus, effectiveParams, mountedPositions } from './model/bus';
+import {
+  CABLE_WIRE_TYPE,
+  nextDeviceId,
+  nextWireId,
+  parseDiagram,
+  toDiagramFile,
+  type Diagram,
+  type DiagramSettings,
+  type Mount,
+} from './model/diagram';
 import { sampleDiagram } from './model/sample';
 
 const nodeTypes = { device: DeviceNode };
@@ -43,13 +55,46 @@ function worst(map: Map<string, Severity>, id: string, s: Severity) {
 
 /** 位置を除いた図面の内容（チェック結果の再計算を、機器の移動中に行わないためのキー） */
 function topologyKey(d: Diagram) {
-  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params]), d.wires.map((w) => ({ ...w, bend: undefined }))]);
+  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount]), d.wires.map((w) => ({ ...w, bend: undefined })), d.settings]);
+}
+
+/**
+ * 装着したユニットを親の位置に合わせて並べる。装着先がなくなったユニットは装着を解除する。
+ * 変更がなければ同じ配列を返す。
+ */
+function arrangeMounted(ns: DeviceFlowNode[]): DeviceFlowNode[] {
+  if (!ns.some((n) => n.data.mount)) return ns;
+  const ids = new Set(ns.map((n) => n.id));
+  let changed = false;
+  let out = ns.map((n) => {
+    if (!n.data.mount || ids.has(n.data.mount.device)) return n;
+    changed = true;
+    const { mount: _, ...data } = n.data;
+    return { ...n, data, draggable: true, zIndex: undefined };
+  });
+  const pos = mountedPositions(flowToDiagram(out, []).devices, getDeviceDefinition);
+  out = out.map((n) => {
+    const p = pos.get(n.id);
+    if (!p || (p.x === n.position.x && p.y === n.position.y && n.zIndex === 1)) return n;
+    changed = true;
+    return { ...n, position: p, zIndex: 1 };
+  });
+  return changed ? out : ns;
 }
 
 function Editor() {
   const initial = useMemo(() => diagramToFlow(sampleDiagram), []);
-  const [nodes, setNodes, onNodesChange] = useNodesState<DeviceFlowNode>(initial.nodes);
+  const [nodes, setNodesRaw] = useState<DeviceFlowNode[]>(() => arrangeMounted(initial.nodes));
   const [edges, setEdges, onEdgesChange] = useEdgesState<WireFlowEdge>(initial.edges);
+  const [settings, setSettings] = useState<DiagramSettings>(sampleDiagram.settings ?? {});
+  // 機器の変更のたびに、装着したユニットを親に合わせて並べ直す
+  const setNodes = useCallback((update: DeviceFlowNode[] | ((ns: DeviceFlowNode[]) => DeviceFlowNode[])) => {
+    setNodesRaw((ns) => arrangeMounted(typeof update === 'function' ? update(ns) : update));
+  }, []);
+  const onNodesChange = useCallback(
+    (changes: NodeChange<DeviceFlowNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
+    [setNodes],
+  );
   const [wireDefaults, setWireDefaults] = useState<WireDefaults>({ ...DEFAULT_WIRE });
   const [modal, setModal] = useState<null | { kind: 'paste' } | { kind: 'prompt'; text: string }>(null);
   const [pasteText, setPasteText] = useState('');
@@ -64,10 +109,22 @@ function Editor() {
   }, []);
 
   // --- チェック ---
-  const diagram = useMemo(() => flowToDiagram(nodes, edges), [nodes, edges]);
+  const diagram = useMemo(() => ({ ...flowToDiagram(nodes, edges), settings }), [nodes, edges, settings]);
   const topo = topologyKey(diagram);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const issues = useMemo(() => checkDiagram(diagram, getDeviceDefinition), [topo]);
+  // 装着で決まる入出力の先頭番号などを加えたパラメータ
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const bus = useMemo(() => computeBus(diagram.devices, getDeviceDefinition), [topo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const params = useMemo(() => new Map(diagram.devices.map((d) => [d.id, effectiveParams(d, bus)])), [bus, topo]);
+  const resolvedOf = useCallback(
+    (nodeId: string, type?: string) => {
+      const def = type ? getDeviceDefinition(type) : undefined;
+      return def ? resolveDevice(def, params.get(nodeId)) : undefined;
+    },
+    [params],
+  );
 
   // --- 配線のスタブ長とレーン（重なり回避） ---
   const { lanes, geometry } = useMemo(() => {
@@ -78,7 +135,7 @@ function Editor() {
       const end = (nodeId: string, handle?: string | null) => {
         const n = byId.get(nodeId);
         const def = n && getDeviceDefinition(n.data.deviceType);
-        const t = def?.terminals.find((x) => x.id === handle);
+        const t = n && handle ? resolvedOf(n.id, n.data.deviceType)?.terminal(handle) : undefined;
         if (!n || !def || !t) return null;
         const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[t.side];
         // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
@@ -92,7 +149,7 @@ function Editor() {
       inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend });
     }
     return { lanes: assignLanes(inputs), geometry };
-  }, [nodes, edges]);
+  }, [nodes, edges, resolvedOf]);
 
   const context = useMemo(() => {
     const deviceSeverity = new Map<string, Severity>();
@@ -101,8 +158,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues };
-  }, [issues, lanes, geometry]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params };
+  }, [issues, lanes, geometry, params]);
 
   // --- 機器の追加 ---
   const addDevice = useCallback(
@@ -146,9 +203,9 @@ function Editor() {
   const terminalOf = useCallback(
     (nodeId: string, handle?: string | null) => {
       const n = nodes.find((x) => x.id === nodeId);
-      return n ? getDeviceDefinition(n.data.deviceType)?.terminals.find((t) => t.id === handle) : undefined;
+      return n && handle ? resolvedOf(n.id, n.data.deviceType)?.terminal(handle) : undefined;
     },
-    [nodes],
+    [nodes, resolvedOf],
   );
 
   const onConnect = useCallback(
@@ -170,13 +227,13 @@ function Editor() {
     [setEdges, wireDefaults, terminalOf],
   );
 
-  // コネクタは同じ種類のコネクタとだけ（ケーブルで）つなげる
+  // コネクタは同じ種類（または変換ケーブルのある種類）のコネクタとだけ（ケーブルで）つなげる
   const isValidConnection = useCallback(
     (c: Connection | WireFlowEdge) => {
       if (c.source === c.target && c.sourceHandle === c.targetHandle) return false;
       const a = terminalOf(c.source, c.sourceHandle)?.connector;
       const b = terminalOf(c.target, c.targetHandle)?.connector;
-      return a || b ? !!a && !!b && a.kind === b.kind : true;
+      return a || b ? !!a && !!b && connectorsMate(a, b) : true;
     },
     [terminalOf],
   );
@@ -190,7 +247,12 @@ function Editor() {
       if (!newId) return '機器名を入力してください';
       if (/[\s.]/.test(newId)) return '空白と「.」は使えません';
       if (nodes.some((n) => n.id === newId)) return `「${newId}」はすでに使われています`;
-      setNodes((ns) => ns.map((n) => (n.id === oldId ? { ...n, id: newId } : n)));
+      setNodes((ns) =>
+        ns.map((n) => {
+          const renamed = n.id === oldId ? { ...n, id: newId } : n;
+          return renamed.data.mount?.device === oldId ? { ...renamed, data: { ...renamed.data, mount: { ...renamed.data.mount, device: newId } } } : renamed;
+        }),
+      );
       setEdges((es) =>
         es.map((e) => ({ ...e, source: e.source === oldId ? newId : e.source, target: e.target === oldId ? newId : e.target })),
       );
@@ -202,6 +264,24 @@ function Editor() {
   const changeParam = useCallback(
     (id: string, key: string, value: number | string) => {
       setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, [key]: value } } } : n)));
+    },
+    [setNodes],
+  );
+
+  // 装着先を変える（undefined で解除）。装着したユニットの先頭番号は自動で決まるため、手で入れた値は消す
+  const changeMount = useCallback(
+    (id: string, mount: Mount | undefined) => {
+      setNodes((ns) =>
+        ns.map((n) => {
+          if (n.id !== id) return n;
+          const { mount: _, ...rest } = n.data;
+          const { ioIn: _i, ioOut: _o, ...params } = (n.data.params ?? {}) as ParamValues;
+          const data = { ...rest, ...(Object.keys(params).length ? { params } : { params: undefined }), ...(mount ? { mount } : {}) };
+          return mount
+            ? { ...n, data, draggable: false }
+            : { ...n, data, draggable: true, zIndex: undefined, position: { x: n.position.x, y: n.position.y + 60 } };
+        }),
+      );
     },
     [setNodes],
   );
@@ -240,6 +320,7 @@ function Editor() {
       const flow = diagramToFlow(d);
       setNodes(flow.nodes);
       setEdges(flow.edges);
+      setSettings(d.settings ?? {});
       window.setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
     },
     [setNodes, setEdges, fitView],
@@ -310,6 +391,20 @@ function Editor() {
             <button type="button" onClick={copyAiPrompt} title="現在の図面と指示文をコピーします">AI用にコピー</button>
             <button type="button" onClick={() => setModal({ kind: 'paste' })} title="AIが返したJSONを貼り付けて読み込みます">JSONを貼り付け</button>
           </div>
+          <label className="toolbar__setting" title="安全機能に要求するパフォーマンスレベル（ISO 13849-1）。これを下回る安全機器を警告します">
+            要求PL
+            <select
+              value={settings.requiredPL ?? ''}
+              onChange={(e) => setSettings((s) => ({ ...s, requiredPL: (e.target.value || undefined) as DiagramSettings['requiredPL'] }))}
+            >
+              <option value="">指定なし</option>
+              {(['a', 'b', 'c', 'd', 'e'] as const).map((pl) => (
+                <option key={pl} value={pl}>
+                  PL {pl}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             ref={fileInput}
             type="file"
@@ -335,6 +430,8 @@ function Editor() {
             isValidConnection={isValidConnection}
             connectionMode={ConnectionMode.Loose}
             defaultEdgeOptions={{ zIndex: 1001 }}
+            // 装着したユニットをベースユニットの上に描くため、選択しても重なり順を変えない
+            elevateNodesOnSelect={false}
             connectionLineStyle={{ stroke: '#2563eb', strokeWidth: 2, strokeDasharray: '6 4' }}
             deleteKeyCode={['Delete', 'Backspace']}
             snapToGrid
@@ -355,11 +452,15 @@ function Editor() {
           node={selectedNode}
           edge={selectedEdge}
           edges={edges}
+          nodes={nodes}
+          params={params}
+          bus={bus}
           issues={issues}
           wireDefaults={wireDefaults}
           onWireDefaultsChange={setWireDefaults}
           onRenameDevice={renameDevice}
           onParamChange={changeParam}
+          onMountChange={changeMount}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />

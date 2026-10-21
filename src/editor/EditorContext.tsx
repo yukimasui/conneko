@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { CheckIssue, Severity } from '../check/checkDiagram';
-import type { ConnectorSpec } from '../devices/types';
+import type { ConnectorSpec, ParamValues } from '../devices/types';
 
 /** 電線の両端の形状情報 */
 export interface WireGeometry {
@@ -21,6 +21,8 @@ export interface EditorContextValue {
   /** 電線ID → 両端の形状情報 */
   geometry: Map<string, WireGeometry>;
   issues: CheckIssue[];
+  /** 機器ID → 装着で決まる値を加えたパラメータ */
+  params: Map<string, ParamValues | undefined>;
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -29,6 +31,7 @@ export const EditorContext = createContext<EditorContextValue>({
   lanes: new Map(),
   geometry: new Map(),
   issues: [],
+  params: new Map(),
 });
 
 export const useEditorContext = () => useContext(EditorContext);

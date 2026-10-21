@@ -44,13 +44,21 @@ export interface SupplySpec {
   conductor: Conductor;
   /** 出力の電流制限[A]（電源ユニットの定格出力電流など）。電線太さチェックの保護電流として扱う */
   limitCurrent?: NumOrParam;
+  /**
+   * 出力の性質。省略時は 'power'。
+   * - power: 電源（電源ユニットの出力など）
+   * - ossd: 安全出力（OSSD。ライトカーテンや安全コントローラーの半導体出力）。OSSD どうしや電源と同じ電位になると短絡として扱う
+   * - test: テスト出力（テストパルス。安全入力へ接点を通して戻す）
+   */
+  kind?: 'power' | 'ossd' | 'test';
 }
 
 /** 受電できる電源の条件（role: 'input' の端子に指定） */
 export interface AcceptSpec {
   system: PowerSystem;
-  minVoltage: number;
-  maxVoltage: number;
+  /** 下限・上限電圧[V]。入力モードの切換などで変わる場合は { param } で参照する */
+  minVoltage: NumOrParam;
+  maxVoltage: NumOrParam;
   /** 接続してよい導体。省略時は system に応じて PE 以外すべて */
   conductors?: Conductor[];
 }
@@ -66,29 +74,121 @@ export interface ConnectorSpec {
   pins: number;
   /** コネクタの幅[px]（side に直交する方向）。ケーブルの芯線をこの幅に広げて描く */
   width: number;
+  /**
+   * ケーブルでつなげる別の種類のコネクタ（変換ケーブルがあるもの）。
+   * 例: 三菱の FCN 40ピン（'FCN40'）に mates: ['MIL40'] と書くと MIL 40極の変換端子台へつなげる。ピンは同じ番号どうしが導通する
+   */
+  mates?: string[];
+  /**
+   * 通信プロトコル（例: ['ethernet', 'ethernet-ip']、['ethercat']）。
+   * ケーブルでつないだ両端に指定があり、共通のプロトコルがなければ警告する
+   */
+  protocols?: string[];
+  /**
+   * ケーブルの描き方。省略時はピン数 0 なら 'lan'、それ以外は 'multicore'。
+   * - multicore: 色付きの芯線が広がって黒いシースにまとまる多芯ケーブル（MIL など）
+   * - lan: LAN ケーブル
+   * - round: 丸形コネクタ（M8 / M12 など）付きのセンサーケーブル
+   */
+  style?: 'multicore' | 'lan' | 'round';
+  /** ピン番号ごとの芯線の色ID（src/data/wires.ts の WIRE_COLORS）。ケーブルの芯線をこの色で描く */
+  pinColors?: Record<number, string>;
+  /**
+   * 機器の正面に差すコネクタ（MIL・RJ-45 など）の場合 'front'。
+   * プラグを正面から見た形（width × length）で端子位置を中心に描き、ケーブルはプラグの side 側の端から出す。
+   * 省略時は side の向きに差し込む形で描く
+   */
+  facing?: 'front';
+  /** facing: 'front' のときのプラグの長さ[px]（side 方向）。省略時は 12 */
+  length?: number;
 }
 
-export interface TerminalDef {
-  /** 機器内で一意な端子ID（例: 'L1', 'T1', 'A1', '+V'） */
-  id: string;
+/**
+ * 信号の種類（role: 'signal' の端子・ピンに指定すると、つないだ相手との相性をチェックする）。
+ * - npn: NPN オープンコレクタ出力（ON で 0V へ引き込む。プラスコモンの入力に使う）
+ * - pnp: PNP 出力（ON で +V を出す。マイナスコモンの入力に使う）
+ * - contact: 無電圧接点の出力（どの入力にも使える）
+ * - 2wire: 2線式センサー（電源線がなく、入力回路と電源の間に直列に入る）
+ * - dc: DC 入力（シンク/ソースはコモンの配線で決まる）
+ * - dry: 無電圧接点入力（機器内部の電源で検出する。外部から電圧をかけない）
+ * - analog-v / analog-i: アナログ電圧 / 電流
+ * - line-driver: ラインドライバ（差動）出力・入力
+ */
+export type SignalKind = 'npn' | 'pnp' | 'contact' | '2wire' | 'dc' | 'dry' | 'analog-v' | 'analog-i' | 'line-driver';
+
+export interface SignalSpec {
+  /** 'out': 信号を出す（センサーの出力線など）、'in': 信号を受ける（PLC の入力点など） */
+  dir: 'out' | 'in';
+  kind: SignalKind;
+  /** 入力点（kind: 'dc'）のコモン端子のID。コモンが +V ならプラスコモン（NPN 用）、0V ならマイナスコモン（PNP 用）と判定する */
+  common?: string;
+  /** コモン端子がなく極性が決まっている入力の場合のコモンの極性（'+' はプラスコモン） */
+  commonPolarity?: '+' | '-';
+}
+
+/**
+ * 端子の機能（安全回路のチェックに使う。role とは独立）。
+ * - safety-input: 安全入力（Si0、T12 など）
+ * - test-output: テスト出力（テストパルス。T0、T11 など）
+ * - ossd: 安全出力（半導体出力）
+ * - safety-contact: 安全出力のリレー接点（13-14 など）
+ * - aux-output: 補助出力（非安全）
+ * - edm: 外部機器監視（EDM）入力・フィードバックループ
+ * - reset / start / muting: リセット・スタート・ミューティング入力
+ * - unlock-solenoid: 通電で解錠するソレノイド（スプリングロック式の電磁ロック）
+ * - lock-solenoid: 通電で施錠するソレノイド（ソレノイドロック式の電磁ロック）
+ */
+export type TerminalFunction =
+  | 'safety-input'
+  | 'test-output'
+  | 'ossd'
+  | 'safety-contact'
+  | 'aux-output'
+  | 'edm'
+  | 'reset'
+  | 'start'
+  | 'muting'
+  | 'unlock-solenoid'
+  | 'lock-solenoid';
+
+/** 端子とコネクタのピンに共通の項目 */
+interface TerminalBase {
   /** 端子の印字（表示用。省略時は id） */
   label?: string;
+  /** 端子の機能・用途の説明（例: 'COM0'、'安全入力 CH1'）。label は印字、note は意味を書く */
+  note?: string;
+  role: TerminalRole;
+  supply?: SupplySpec;
+  /** 受電できる電源の条件。AC と DC のどちらも受けられる端子（リレー出力のコモンなど）は配列で書き、いずれかを満たせばよい */
+  accepts?: AcceptSpec | AcceptSpec[];
+  /** 信号の種類（role: 'signal' の端子） */
+  signal?: SignalSpec;
+  /** 安全回路での機能 */
+  function?: TerminalFunction;
+  /** 2 チャンネル構成の安全回路でのチャンネル番号 */
+  channel?: 1 | 2;
+  /** true の場合、未接続でも警告しない（予備端子・補助接点など） */
+  optional?: boolean;
+}
+
+export interface TerminalDef extends TerminalBase {
+  /** 機器内で一意な端子ID（例: 'L1', 'T1', 'A1', '+V'） */
+  id: string;
   /** 端子位置（SVG座標。ネジの中心付近） */
   x: number;
   y: number;
   /** 電線が出ていく向き */
   side: TerminalSide;
-  role: TerminalRole;
-  supply?: SupplySpec;
-  accepts?: AcceptSpec;
   connector?: ConnectorSpec;
-  /** true の場合、未接続でも警告しない（予備端子・補助接点など） */
-  optional?: boolean;
 }
 
 /**
- * 機器内部の導通経路（ブレーカーの極、端子台の上下など）。
- * 電圧の伝搬と保護電流の計算に使う。接点は「閉」とみなす。
+ * 機器内部の導通経路（ブレーカーの極、端子台の上下、接点、出力など）。
+ * 電圧の伝搬と保護電流の計算に使う。
+ *
+ * switch を指定した経路は開閉する。チェックでは、
+ * - 電源が届くか・電圧が合うかは、すべての接点と出力が閉じた状態（動作中）で確認する
+ * - 短絡は、常時の状態・通常時（b 接点だけが閉）・機器ごとに 1 台ずつ動作させた状態（その機器の a 接点・出力が閉、b 接点が開）で確認する
  */
 export interface InternalLink {
   from: string;
@@ -97,6 +197,109 @@ export interface InternalLink {
   directed?: boolean;
   /** true の場合、この経路を通った先は機器の protectionCurrent で保護されているとみなす */
   protects?: boolean;
+  /**
+   * 開閉する経路の種類。省略時は常に導通（ブレーカーの極、端子台など）。
+   * - NO: a 接点（通常は開、動作で閉）
+   * - NC: b 接点（通常は閉、動作で開）
+   * - output: PLC・センサーなどの出力（ON で導通）。from に出力点、to にコモン（または出力素子の基準側）を書く
+   */
+  switch?: 'NO' | 'NC' | 'output';
+  /** 直接開路動作（IEC 60947-5-1 附属書 K、⊕ マーク）の b 接点 */
+  directOpening?: boolean;
+  /** 強制ガイド接点（IEC 61810-3）・ミラー接点（IEC 60947-4-1 附属書 F） */
+  linked?: 'force-guided' | 'mirror';
+  /** 出力・接点 1 点の定格電流[A]。switch: 'output' の経路では、出力点につないだ負荷の定格電流の合計と比較する */
+  ratedCurrent?: NumOrParam;
+}
+
+/** コモンあたりの電流の上限（出力ユニットの「8A/コモン」など） */
+export interface CommonLimit {
+  /** コモン端子のID。switch: 'output' の経路のうち to がこの端子のものを合計する */
+  common: string;
+  /** 上限電流[A] */
+  current: NumOrParam;
+}
+
+/**
+ * 安全回路のチャンネルの組（2 チャンネル入力、OSSD1/OSSD2 など）。
+ * 入力は、テスト出力（source）から接点を通って入力（input）へ戻る組を書く。
+ */
+export interface SafetyChannelGroup {
+  /** 機器内で一意な名前（例: 'IN'、'Si0-1'、'OSSD'） */
+  id: string;
+  label?: string;
+  kind: 'input' | 'output';
+  /**
+   * 入力の想定（kind: 'input'）。省略時は 'nc-nc'。
+   * - nc-nc: 2 つの b 接点（等価入力。非常停止など）
+   * - nc-no: b 接点と a 接点（非等価入力）。channels[0] が b 接点、channels[1] が a 接点
+   * - ossd: OSSD 出力機器（ライトカーテンなど）を直接つなぐ入力
+   */
+  mode?: 'nc-nc' | 'nc-no' | 'ossd';
+  channels: {
+    /** 安全入力の端子ID（kind: 'input'） */
+    input?: string;
+    /** その入力へ戻すテスト出力（または入力用電源）の端子ID */
+    source?: string;
+    /** 安全出力の端子ID（kind: 'output'）。接点出力は負荷側・電源側のどちらの端子でもよい */
+    output?: string;
+  }[];
+}
+
+/** 機器の安全性能 */
+export interface SafetyRating {
+  /** ISO 13849-1 のパフォーマンスレベル（最大） */
+  pl?: 'a' | 'b' | 'c' | 'd' | 'e';
+  /** ISO 13849-1 のカテゴリ（最大） */
+  category?: 'B' | '1' | '2' | '3' | '4';
+  /** IEC 62061 / IEC 61508 の SIL（SIL CL） */
+  sil?: 1 | 2 | 3;
+  /** IEC 61496 のタイプ（ライトカーテン・レーザスキャナなど人を検出する保護装置） */
+  esType?: 2 | 3 | 4;
+  /** 準拠規格（表示用） */
+  standards?: string[];
+}
+
+/**
+ * 入出力番号の表し方（先頭番号の表示と、ラベル作成の補助に使う）。
+ * - kv: KEYENCE のリレー番号（16点 = 1チャネル。例: R000、R1015）
+ * - hex: 16進（三菱 iQ-R・Q。例: X00、Y1F）
+ * - octal: 8進（三菱 FX。例: X0、Y17）
+ */
+export type IoFormat = 'kv' | 'hex' | 'octal';
+
+/**
+ * 増設ユニットの連結・ベースユニットへの装着（バス）。
+ * 図面の機器に mount（装着先と位置）を書くと、親の横（または中）に並べて描き、
+ * 内部電源の収支チェックと入出力の先頭番号の自動割付けを行う。
+ */
+export interface BusSpec {
+  /** バスの種類。同じ種類の親にだけ装着できる（例: 'kv-8000'、'kv-nano'、'melsec-iq-r'、'melsec-fx5'） */
+  kind: string;
+  /** 他のユニットを装着できる親（CPU・ベースユニット・KV-EC01 など）の場合に指定 */
+  host?: {
+    /** 装着できるユニットのバスの種類。省略時は kind と同じもの（例: KV-X の CPU に KV-8000 用の増設ユニットも装着できるなら ['kv-x', 'kv-8000']） */
+    accepts?: string[];
+    /** 装着できるユニット数 */
+    slots?: number;
+    /** 装着したユニットを並べる位置（親の左上からの座標）。省略時は親の右隣 */
+    origin?: { x: number; y: number };
+    /** 入出力番号の割付け */
+    numbering?: {
+      /** 'shared': 入力と出力で同じ番号の並び（KV・iQ-R）、'separate': 入力と出力を別々に数える（FX5） */
+      mode: 'shared' | 'separate';
+      /** 1 ユニットが占有する点数の単位（KV・iQ-R は 16、FX5 は 8） */
+      unit: number;
+      /** 最初のユニットの先頭番号（点数）。省略時は親の io の点数の後ろから */
+      start?: { input?: number; output?: number };
+    };
+  };
+  /** バスへ供給する内部電源の容量[A]（例: { '5V': 6.5 }） */
+  supply?: Record<string, NumOrParam>;
+  /** バスから消費する内部電源の電流[A]（例: { '5V': 0.12 }） */
+  load?: Record<string, NumOrParam>;
+  /** 入出力の点数と番号の表し方。装着すると params の ioIn / ioOut（先頭番号の点数）が自動で決まる */
+  io?: { inputs?: number; outputs?: number; format: IoFormat };
 }
 
 export interface ParamOption {
@@ -129,14 +332,9 @@ export type DeviceCategory =
  * コネクタのピン（画面上の端子としては表示しない）。
  * id は '<コネクタ端子ID>#<ピン番号>'（例: 'CN1#1'）。links から参照できる。
  */
-export interface PinDef {
+export interface PinDef extends TerminalBase {
   id: string;
-  /** ピンの名称（例: 'X000', 'COM', '+24V'） */
-  label?: string;
   role: Exclude<TerminalRole, 'connector'>;
-  supply?: SupplySpec;
-  accepts?: AcceptSpec;
-  optional?: boolean;
 }
 
 export interface DeviceDefinition {
@@ -162,10 +360,15 @@ export interface DeviceDefinition {
    * パラメータで見た目を変える場合（定格電流の表示など）は関数にする。引数は既定値を補完済みのパラメータ。
    */
   svg: string | ((params: ParamValues) => string);
-  terminals: TerminalDef[];
+  /**
+   * 端子・ピン・内部経路は、パラメータで変わる場合（先頭入出力番号でラベルが変わる、NPN/PNP で信号の種類が変わるなど）は
+   * パラメータを受け取って配列を返す関数にする。引数は既定値を補完済みのパラメータ（装着で決まる ioIn / ioOut を含む）。
+   * 利用側は resolve.ts の resolveDevice() を通して読む。
+   */
+  terminals: ParamDependent<TerminalDef[]>;
   /** コネクタのピン定義（ピンごとの名称・電気的仕様） */
-  pins?: PinDef[];
-  links?: InternalLink[];
+  pins?: ParamDependent<PinDef[]>;
+  links?: ParamDependent<InternalLink[]>;
   params?: ParamDef[];
   /** 保護機器の定格（遮断）電流[A]。protects: true の経路に適用 */
   protectionCurrent?: NumOrParam;
@@ -176,9 +379,20 @@ export interface DeviceDefinition {
    * 例: 三相モーター [['U','V','W']]、単相入力 [['L','N']]
    */
   distinctGroups?: string[][];
+  /** コモンあたりの電流の上限 */
+  commonLimits?: CommonLimit[];
+  /** 安全回路のチャンネルの組 */
+  safetyChannels?: SafetyChannelGroup[];
+  /** 安全性能 */
+  safety?: SafetyRating;
+  /** 増設ユニットの連結・ベースユニットへの装着 */
+  bus?: BusSpec;
 }
 
 export type ParamValues = Record<string, number | string>;
+
+/** 固定値か、パラメータから求める関数 */
+export type ParamDependent<T> = T | ((params: ParamValues) => T);
 
 /** NumOrParam を実際の値に解決する */
 export function resolveNum(

@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
+import { resolveDevice } from '../devices/resolve';
 import { paramsWithDefaults, type DeviceDefinition } from '../devices/types';
 import type { Diagram, DiagramWire } from '../model/diagram';
 import { checkDiagram } from './checkDiagram';
@@ -55,7 +56,9 @@ describe('安全機器の定義', () => {
   });
 
   it.each(SAFETY_TYPES)('%s の端子・内部導通・SVG が整合している', (type) => {
-    const def = getDeviceDefinition(type)!;
+    const raw = getDeviceDefinition(type)!;
+    const r = resolveDevice(raw);
+    const def = { ...raw, terminals: r.terminals, links: r.links };
     const ids = def.terminals.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const t of def.terminals) {
@@ -66,7 +69,7 @@ describe('安全機器の定義', () => {
       if (t.role === 'input') expect(t.accepts, `${type} ${t.id}`).toBeDefined();
       if (t.role === 'supply') expect(t.supply, `${type} ${t.id}`).toBeDefined();
     }
-    for (const l of def.links ?? []) {
+    for (const l of def.links) {
       expect(ids).toContain(l.from);
       expect(ids).toContain(l.to);
     }
@@ -85,12 +88,13 @@ describe('安全機器の定義', () => {
   it('安全コントローラー・セーフティリレーの電源端子は DC24V の +/- を受ける', () => {
     // 交流操作コイルの電磁接触器は対象外
     for (const type of SAFETY_TYPES.filter((t) => !t.endsWith('.ac200v'))) {
-      const def = getDeviceDefinition(type)!;
-      for (const t of def.terminals.filter((x) => x.role === 'input')) {
-        expect(t.accepts!.system).toBe('DC');
-        expect(t.accepts!.minVoltage).toBeLessThanOrEqual(24);
-        expect(t.accepts!.maxVoltage).toBeGreaterThanOrEqual(24);
-        expect(t.accepts!.conductors?.length).toBe(1);
+      const r = resolveDevice(getDeviceDefinition(type)!);
+      for (const t of r.terminals.filter((x) => x.role === 'input')) {
+        const [a] = r.accepts.get(t.id)!;
+        expect(a.system).toBe('DC');
+        expect(a.minVoltage).toBeLessThanOrEqual(24);
+        expect(a.maxVoltage).toBeGreaterThanOrEqual(24);
+        expect(a.conductors?.length).toBe(1);
       }
     }
   });

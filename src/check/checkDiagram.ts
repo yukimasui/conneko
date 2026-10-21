@@ -9,6 +9,7 @@
  */
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
+import { resolveDevice, connectorsMate, type ResolvedAccept, type ResolvedDevice } from '../devices/resolve';
 import {
   resolveNum,
   type Conductor,
@@ -84,6 +85,7 @@ interface TerminalInfo {
   device: DiagramDevice;
   def: DeviceDefinition;
   terminal: TerminalDef;
+  accepts: ResolvedAccept[];
 }
 
 function supplyLabel(s: Supply): string {
@@ -99,18 +101,19 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
 
   // --- 機器と端子の解決 ---
   const terminals = new Map<string, TerminalInfo>();
-  const devices = new Map<string, { device: DiagramDevice; def: DeviceDefinition }>();
+  const devices = new Map<string, { device: DiagramDevice; def: DeviceDefinition; r: ResolvedDevice }>();
   for (const device of diagram.devices) {
     const def = lookup(device.type);
     if (!def) {
       push({ severity: 'error', rule: 'unknown-device', message: `${device.id}: 機器種別 "${device.type}" が見つかりません`, devices: [device.id], wires: [] });
       continue;
     }
-    devices.set(device.id, { device, def });
-    for (const t of def.terminals) terminals.set(key(device.id, t.id), { device, def, terminal: t });
+    const r = resolveDevice(def, device.params);
+    devices.set(device.id, { device, def, r });
+    for (const t of r.terminals) terminals.set(key(device.id, t.id), { device, def, terminal: t, accepts: r.accepts.get(t.id) ?? [] });
     // コネクタのピンも端子として扱う（画面上には表示しない）
-    for (const p of def.pins ?? []) {
-      terminals.set(key(device.id, p.id), { device, def, terminal: { ...p, x: 0, y: 0, side: 'top' } });
+    for (const p of r.pins) {
+      terminals.set(key(device.id, p.id), { device, def, terminal: { ...p, x: 0, y: 0, side: 'top' }, accepts: r.accepts.get(p.id) ?? [] });
     }
   }
 
@@ -133,7 +136,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
     const a = terminals.get(key(w.from.device, w.from.terminal))!.terminal.connector;
     const b = terminals.get(key(w.to.device, w.to.terminal))!.terminal.connector;
     if (a || b) {
-      if (a && b && a.kind === b.kind) {
+      if (a && b && connectorsMate(a, b)) {
         // ケーブル: 両端の同じ番号のピンどうしが導通する
         for (let i = 1; i <= Math.min(a.pins, b.pins); i++) {
           cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${i}`)]);
@@ -178,8 +181,8 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   const uf = new UnionFind();
   for (const w of validWires) uf.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
   for (const [a, b] of cablePairs) uf.union(a, b);
-  for (const { device, def } of devices.values()) {
-    for (const l of def.links ?? []) uf.union(key(device.id, l.from), key(device.id, l.to));
+  for (const { device, r } of devices.values()) {
+    for (const l of r.links) uf.union(key(device.id, l.from), key(device.id, l.to));
   }
   const groups = new Map<string, string[]>();
   for (const k of terminals.keys()) {
@@ -245,8 +248,8 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
       }
       continue;
     }
-    if (t.role !== 'input' || !t.accepts) continue;
-    const a = t.accepts;
+    if (t.role !== 'input' || !info.accepts.length) continue;
+    const a = info.accepts[0];
     const where = `${device.id} の端子 ${t.label ?? t.id}`;
     const wires = (wiresAt.get(k) ?? []).map((w) => w.id);
     if (p.kind === 'none') {
@@ -307,8 +310,8 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   }
 
   // 負荷電流と保護
-  for (const { device, def } of devices.values()) {
-    const inputs = def.terminals.filter((t) => t.role === 'input');
+  for (const { device, def, r } of devices.values()) {
+    const inputs = r.terminals.filter((t) => t.role === 'input');
     const powered = inputs.filter((t) => potentialOf(key(device.id, t.id)).kind === 'ok');
     if (!powered.length) continue;
     const prots = powered.map((t) => protection.get(key(device.id, t.id)) ?? Infinity);
@@ -354,7 +357,7 @@ function groupHasOtherConnection(k: string, groups: Map<string, string[]>, uf: U
  * 保護機器を通っていない端子は Infinity。複数経路がある場合は大きい方（安全側）を採用する。
  */
 function computeProtection(
-  devices: Map<string, { device: DiagramDevice; def: DeviceDefinition }>,
+  devices: Map<string, { device: DiagramDevice; def: DeviceDefinition; r: ResolvedDevice }>,
   terminals: Map<string, TerminalInfo>,
   wires: DiagramWire[],
   cablePairs: [string, string][],
@@ -373,9 +376,9 @@ function computeProtection(
     add(a, { to: b });
     add(b, { to: a });
   }
-  for (const { device, def } of devices.values()) {
+  for (const { device, def, r } of devices.values()) {
     const rating = resolveNum(def.protectionCurrent, def, device.params);
-    for (const l of def.links ?? []) {
+    for (const l of r.links) {
       const a = key(device.id, l.from);
       const b = key(device.id, l.to);
       const e: Edge = { to: b, ...(l.protects && rating !== undefined ? { protects: rating } : {}) };
