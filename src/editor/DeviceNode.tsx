@@ -83,10 +83,13 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const terminals = useMemo(() => (def ? resolveDevice(def, params).terminals : []), [def, params]);
   // パラメータで端子が変わる機器があるため、端子の位置を React Flow に知らせ直す
   // （初回の描画では不要。初回にも呼ぶと全体表示（fitView）が計測前に走ってしまう）
+  // 元の端子に戻った場合も知らせ直すため、直前の端子と比べる
   const updateNodeInternals = useUpdateNodeInternals();
-  const firstTerminals = useRef(terminals);
+  const prevTerminals = useRef(terminals);
   useEffect(() => {
-    if (terminals !== firstTerminals.current) updateNodeInternals(id);
+    if (terminals === prevTerminals.current) return;
+    prevTerminals.current = terminals;
+    updateNodeInternals(id);
   }, [terminals, id, updateNodeInternals]);
 
   if (!def) {
