@@ -6,6 +6,7 @@
 import { getWireColor } from '../data/wires';
 import { cableStyle } from '../devices/resolve';
 import type { ConnectorSpec, TerminalSide } from '../devices/types';
+import { HANDLE_DEPTH } from './DeviceNode';
 import { DIR, polylineLength, slicePolyline, toRoundedPath, type Point } from './routing';
 
 /** 芯線の色（JIS の識別色の並びに近い順） */
@@ -23,8 +24,9 @@ interface End {
 /** プラグの奥行き（side 方向の長さ）と、ケーブルが出る位置（端子からの距離） */
 function plugDepth(c: ConnectorSpec): { depth: number; exit: number } {
   if (c.facing === 'front') {
+    // 端点は Handle の side 側の端（コネクタ中心から HANDLE_DEPTH / 2 の位置）
     const depth = c.length ?? 12;
-    return { depth, exit: depth / 2 };
+    return { depth, exit: depth / 2 - HANDLE_DEPTH / 2 };
   }
   const depth = cableStyle(c) === 'multicore' ? 12 : cableStyle(c) === 'round' ? 14 : 9;
   return { depth, exit: depth };
@@ -37,7 +39,7 @@ function plug(end: End, key: string) {
   const w = style === 'round' ? Math.min(end.connector.width, 14) : end.connector.width;
   const { depth } = plugDepth(end.connector);
   // 正面向きのコネクタは端子位置を中心に、それ以外は端子から side の向きに描く
-  const offset = end.connector.facing === 'front' ? 0 : depth / 2;
+  const offset = end.connector.facing === 'front' ? -HANDLE_DEPTH / 2 : depth / 2;
   const c = { x: end.point.x + d.x * offset, y: end.point.y + d.y * offset };
   const horizontal = n.x !== 0;
   const rw = horizontal ? w : depth;

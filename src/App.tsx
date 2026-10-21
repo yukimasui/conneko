@@ -21,7 +21,7 @@ import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import type { ParamValues, TerminalSide } from './devices/types';
-import { DeviceNode } from './editor/DeviceNode';
+import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
 import { FAN_LENGTH } from './editor/CableGraphics';
 import { EditorContext, type WireGeometry } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
@@ -140,7 +140,7 @@ function Editor() {
         const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[t.side];
         // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
         // 正面向きのコネクタは、プラグの端からケーブルが出る
-        const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 : 12;
+        const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 - HANDLE_DEPTH / 2 : 12;
         const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 8 + exit) : stubLength(toEdge);
         return { x: n.position.x + t.x, y: n.position.y + t.y, side: t.side as TerminalSide, stub, connector: t.connector };
       };
@@ -160,8 +160,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params };
-  }, [issues, lanes, geometry, params]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params, hosts: new Set(bus.groups.keys()) };
+  }, [issues, lanes, geometry, params, bus]);
 
   // --- 機器の追加 ---
   const addDevice = useCallback(

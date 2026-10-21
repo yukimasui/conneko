@@ -322,6 +322,10 @@ textarea {
   color: var(--muted);
   font-size: 11px;
 }
+/* ユニットを装着した親のラベルは、ユニットのラベルの上に出す */
+.device-node.has-mounted .device-node__label {
+  margin-bottom: 26px;
+}
 /* 装着したユニットは横に詰めて並ぶため、ラベルは機器名だけにする */
 .device-node.is-mounted .device-node__label {
   font-size: 11px;

@@ -24,6 +24,9 @@ const ROLE_NAMES: Record<string, string> = {
   connector: 'コネクタ',
 };
 
+/** コネクタの接続点（Handle）の厚み。ケーブルの始点は Handle の side 側の端になる */
+export const HANDLE_DEPTH = 10;
+
 export const SIGNAL_NAMES: Record<string, string> = {
   npn: 'NPN出力',
   pnp: 'PNP出力',
@@ -44,7 +47,7 @@ export function terminalTitle(t: TerminalDef): string {
 
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
-  const { deviceSeverity, params: effective } = useEditorContext();
+  const { deviceSeverity, params: effective, hosts } = useEditorContext();
   const severity = deviceSeverity.get(id);
   const params = effective.get(id) ?? data.params;
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
@@ -68,7 +71,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
 
   return (
     <div
-      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}`}
+      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}`}
       style={{ width: def.width, height: def.height }}
     >
       <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
@@ -98,8 +101,8 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
             // コネクタは差込口の幅いっぱいを接続点にする
             ...(t.connector &&
               (t.side === 'top' || t.side === 'bottom'
-                ? { width: t.connector.width, height: t.connector.facing === 'front' ? (t.connector.length ?? 12) : 10, borderRadius: 3 }
-                : { width: t.connector.facing === 'front' ? (t.connector.length ?? 12) : 10, height: t.connector.width, borderRadius: 3 })),
+                ? { width: t.connector.width, height: HANDLE_DEPTH, borderRadius: 3 }
+                : { width: HANDLE_DEPTH, height: t.connector.width, borderRadius: 3 })),
           }}
           title={terminalTitle(t)}
         />

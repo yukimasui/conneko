@@ -23,6 +23,8 @@ export interface EditorContextValue {
   issues: CheckIssue[];
   /** 機器ID → 装着で決まる値を加えたパラメータ */
   params: Map<string, ParamValues | undefined>;
+  /** ユニットを装着している親の機器ID */
+  hosts: Set<string>;
 }
 
 export const EditorContext = createContext<EditorContextValue>({
@@ -32,6 +34,7 @@ export const EditorContext = createContext<EditorContextValue>({
   geometry: new Map(),
   issues: [],
   params: new Map(),
+  hosts: new Set(),
 });
 
 export const useEditorContext = () => useContext(EditorContext);
