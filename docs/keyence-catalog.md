@@ -214,14 +214,57 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 | `keyence.ev` | EV-108M/112M/118M/130M（近接 DC2線） | 茶/青（2線とも signal 扱い） | [io-circuit](https://www.keyence.co.jp/products/sensor/proximity/ev/models/ev-112m/io-circuit/) |
 | `keyence.em-030` | EM-030（近接 アンプ内蔵 ø3） | 茶/黒（出力 NPN 200mA）/青 | [io-circuit](https://www.keyence.co.jp/products/sensor/proximity/em/models/em-030/io-circuit/) |
 | `keyence.fs-n41` | FS-N41N/P（ファイバアンプ 1出力） | 茶/青/黒 | [外形図（3芯 茶/青/黒）](https://www.keyence.co.jp/products/sensor/fiber-optic/fs-n40/models/fs-n41n/dimensions/) |
-| `keyence.fs-n43` | FS-N43N/P（ファイバアンプ 2出力+外部入力） | 茶/青/黒/白/桃（黒・白・桃の機能は**推定**） | 同上（5芯 茶/青/黒/白/桃） |
-| `keyence.lv-n11` | LV-N11N/P（レーザアンプ 2出力+外部入力） | 茶/青/黒/白/桃（黒・白・桃の機能は**推定**） | [外形図](https://www.keyence.co.jp/products/sensor/laser/lv-n/models/lv-n11n/dimensions/) |
+| `keyence.fs-n43` | FS-N43N/P（ファイバアンプ 2出力+外部入力） | 茶/青/黒 出力1/白 出力2/桃 外部入力 | 同上（5芯）、[FS-N40 ユーザーズマニュアル p.3（転載）](https://www.autodev.com/uploads/resources/220779_8830-sensor-instructions.pdf) |
+| `keyence.lv-n11` | LV-N11N/P（レーザアンプ 2出力+外部入力） | 茶/青/黒 出力1/白 出力2/桃 外部入力 | [外形図](https://www.keyence.co.jp/products/sensor/laser/lv-n/models/lv-n11n/dimensions/)、[LV-N10 取扱説明書 p.7〜8（転載）](https://www.manualsdir.com/manuals/657909/keyence-lv-n10-series.html) |
 | `keyence.il-1000` | IL-1000（変位アンプ） | 茶/青/黒 HIGH/白 LOW/灰 GO/緑 ALM/橙・シールド アナログ/桃・黄・桃紫・紫 外部入力 | [io-circuit](https://www.keyence.co.jp/products/sensor/laser/il/models/il-1000/io-circuit/) |
 | `keyence.gt2-71` | GT2-71N/P（接触式アンプ） | 茶/青/橙 HH/黒 HI/灰 GO/白 LO/緑 LL/桃・紫・桃紫・黄・赤 入力 | [io-circuit](https://www.keyence.co.jp/products/sensor/contact/gt2/models/gt2-71n/io-circuit/) |
 | `keyence.gp-m` | GP-M001〜M400（圧力） | M12 4ピン: 茶/白 出力2・アナログ/青/黒 出力1（ピン割り当ては M12 標準による**推定**） | [仕様](https://www.keyence.co.jp/products/process/pressure/gp-m/models/gp-m010/) |
 | `keyence.fd-q` | FD-Q10C〜Q50C（クランプオン流量） | M12 4ピン: 茶/白 ch.2/青/黒 ch.1（**推定**） | [仕様](https://www.keyence.co.jp/products/process/flow/fd-q/models/fd-q20c/) |
-| `keyence.lr-zb250c` | LR-ZB250CN/CP（CMOS レーザ） | M8 4ピン: 茶/白 外部入力/青/黒 出力（**推定**） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-z/models/lr-zb250cn/) |
+| `keyence.lr-zb250c` | LR-ZB250CN/CP（CMOS レーザ） | M8 4ピン: 茶/白 外部入力/青/黒 出力 | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-z/models/lr-zb250cn/)、[LR-ZB 取扱説明書 96M11812（転載）](https://www.manualsdir.com/manuals/657872/keyence-lr-zbxn_p-series.html) |
 | `keyence.gp-m.m12` / `keyence.fd-q.m12` / `keyence.lr-zb250c.m8` | 上の 3 機種のセンサー単体 | コネクタ `CN`（M12 / M8 4ピン、ピン 1〜4）が端子。センサーケーブルとつなぐ | 同上 |
+
+### 光電センサ（2026-10 追加）
+
+シリーズごとに 1 つの組み立て関数（`src/devices/keyence/` の pz-g.ts / pr-g.ts / pz-vm.ts / pr-mf.ts / lr-z.ts / lr-wtx.ts / amp-series.ts）で作り、
+種類（検出方式・検出距離）は `params.model`、NPN / PNP は `params.output` で選ぶ。見た目がほぼ同じものはパラメータにまとめ、
+次のものは別の機器にした。
+
+- 透過型の**投光器と受光器**（向かい合わせに置き、それぞれ配線するため）。投光器は電源（と投光停止入力）だけで出力を持たない。
+- **接続形態**（ケーブル / M8 / M12 / ケーブル付 M12・M8）。端子 ID が変わる（ケーブルは芯線の色、コネクタは `CN` とピン `CN#1〜4`）ため。
+  コネクタタイプは汎用のセンサーケーブル（`generic.m8-4p-cable` / `generic.m12-4p-cable`）とつなぐ。
+- アンプの**親機と子機**。子機は `mount` で親機に装着する（`bus.kind` はシリーズごと: `fs-n40` / `ps-n` / `lv-n` / `lr-xn` / `cz-v20`）。
+
+共通部品: `photo.ts`（`buildPhoto`: 本体の絵にケーブル・コネクタを付け、芯線の信号の種類から出力の内部経路を作る）、
+`din-amp.ts`（DIN レール取付アンプ）、`sensor-parts.ts` に本体のオスコネクタ（`roundMale`）・ケーブル付コネクタ（`pigtailMale`）、
+未使用ピン（`role: 'nc'`）、+V / 0V のどちらかにつなぐ線（`role: 'select'`）を追加。
+
+| type | 型式（params） | 配線（ケーブルの芯線 / コネクタのピン） | 出典 |
+|---|---|---|---|
+| `keyence.pz-g.reflective` / `.m8` / `.m12` | PZ-G41/42/101/102/61/62 角型 N/P（ケーブル / CN・CP / EN・EP） | 茶 +V・青 0V・黒 出力（ピン 1/3/4、2 未使用） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/specs/)、[io-circuit（CN）](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g41cn/io-circuit/)、各 dimensions |
+| `keyence.pz-g.emitter` / `.m8` / `.m12` | PZ-G51/52 角型 投光器 | 茶・青（ピン 1/3） | [io-circuit](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g51cn/io-circuit/) |
+| `keyence.pz-g.receiver` / `.m8` / `.m12` | PZ-G51/52 角型 受光器 N/P | 反射型と同じ | 同上 |
+| `keyence.pz-g.nut.reflective` / `.m12` | PZ-G□B / □CB ナット型（Bipolar） | 茶・青・黒 PNP 出力（ピン 4）・白 NPN 出力（ピン 2） | [io-circuit（B）](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g41b/io-circuit/)、[dimensions（CB）](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g41cb/dimensions/) |
+| `keyence.pz-g.nut.emitter` / `.m12`、`keyence.pz-g.nut.receiver` / `.m12` | PZ-G51B/52B・CB の投光器 / 受光器 | 投光器 茶・青、受光器は Bipolar | [dimensions（PZ-G51B）](https://www.keyence.co.jp/products/sensor/photoelectric/pz-g/models/pz-g51b/dimensions/) |
+| `keyence.pr-g.reflective` / `.m8` | PR-G41/42/61 N/P（ステンレス、背面に 7 セグ） | 茶 +V・黒 出力1・白 出力2・青 0V（ピン 1/4/2/3） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/pr-g/specs/)、[取扱説明書 96M17817（転載）](https://ventionavatars.s3.amazonaws.com/uploads/part_document/file/760/PR-G_Instruction_Manual.pdf) |
+| `keyence.pr-g.emitter` / `.m8`、`keyence.pr-g.receiver` / `.m8` | PR-G51/56 投光器 / 受光器 | 投光器 茶・青・黒 投光停止入力（0V と短絡で停止） | 同上 |
+| `keyence.pz-m.reflective` / `.m12` / `.m8` | PZ-M11/M31/M71/M61、PZ-V11/V31/V71（N/P、ケーブル / ケーブル付 M12 0.3m / M8 0.13m） | 茶 +V・黒 出力・桃 出力動作の切換（+V で遮光時 ON、0V で入光時 ON）・青 0V（ピン 1/4/2/3） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/pz-v_m/specs/)、[io-circuit（P）](https://www.keyence.co.jp/products/sensor/photoelectric/pz-v_m/models/pz-m11p/io-circuit/) |
+| `keyence.pz-m.emitter` / `.m12` / `.m8`、`keyence.pz-m.receiver` / `.m12` / `.m8` | PZ-M51（52/53）投光器 / 受光器 | 投光器 茶・青 | [io-circuit](https://www.keyence.co.jp/products/sensor/photoelectric/pz-v_m/models/pz-m51/io-circuit/) |
+| `keyence.pr-mf.reflective` / `.m8` | PR-MB15/MB30/FB15/FB30（BGS 反射、N/P） | 茶 +V・黒 出力1・白 出力2・青 0V、出力 50mA | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/pr-m_f/specs/)、[カタログ（転載）](https://www.plc-sensors.com/wp-content/uploads/2020/08/Keyence-Photoelectric-Sensor-PR-M-Datasheet.pdf) |
+| `keyence.pr-mf.emitter` / `.m8`、`keyence.pr-mf.receiver` / `.m8` | PR-M51 / PR-F51 投光器 / 受光器 | 投光器 茶・青（投光停止入力なし） | 同上 |
+| `keyence.lr-z` / `keyence.lr-z.m8` | LR-ZB100/ZB250(A)/ZH500 N/P | 茶 +V・白 外部入力・青 0V・黒 出力（ピン 1/2/3/4） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-z/specs/)、[取扱説明書 96M11812（転載）](https://www.manualsdir.com/manuals/657872/keyence-lr-zbxn_p-series.html) |
+| `keyence.lr-w` / `keyence.lr-w.m12` | LR-W500/W70/WF10（C）、NPN/PNP は初期設定 | 茶 +V・黒 出力・白 外部入力・青 0V | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-w/specs/)、[LR-W70 取扱説明書（転載）](https://www.afmeng.com/PDFFiles/AS_77442_LR-W70_IM_96M13827_GB_WW_1125-1.pdf) |
+| `keyence.lr-t` / `keyence.lr-t.m12` | LR-TB2000/TB5000（C）、params io・analog | 茶 +V（20〜30V）・青 0V・黒/白は初期設定（出力1+出力2 / 入力+出力1 / 白 アナログ） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-t/specs/)、[LR-TB2000 取扱説明書（転載）](https://www.nexinstrument.com/assets/images/pdf/LR-TB2000%20Series_All-Purpose%20Laser%20Sensor.pdf) |
+| `keyence.lr-x` / `keyence.lr-x.m8` | LR-X50/X100/X250（C）、params pin2 | 茶 +V（16〜30V）・黒 出力1・白 出力2 / 外部入力・青 0V | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/lr-x/specs/)、[LR-X カタログ（転載）](https://5.imimg.com/data5/SELLER/Doc/2022/9/EF/PO/AN/29295296/laser-sensor-lr-x100.pdf) |
+| `keyence.lr-xn11` / `keyence.lr-xn12` / `keyence.lr-xn11.m8` | LR-XN11（親機）/ LR-XN12（子機、最大 8 台）/ LR-XN11C | 親機 茶・青・黒・白・桃、子機 黒・白・桃 | 同上 |
+| `keyence.fs-n42` / `keyence.fs-n44` | FS-N42 / FS-N44（ファイバアンプ子機） | 黒（FS-N42）、黒・白・桃（FS-N44） | [仕様](https://www.keyence.co.jp/products/sensor/fiber-optic/fs-n40/specs/)、[dimensions](https://www.keyence.co.jp/products/sensor/fiber-optic/fs-n40/models/fs-n42n/dimensions/) |
+| `keyence.ps-n11` / `.m8`、`keyence.ps-n12` / `.m8` | PS-N11 / PS-N12（アンプ分離型光電の親機 / 子機） | 親機 茶・青・黒 出力・桃 外部入力、子機 黒だけ。M8 はピン 4 出力・2 外部入力（**推定**） | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/ps-n/specs/)、[PS-N10 取扱説明書（転載）](https://www.manualsdir.com/manuals/657880/keyence-ps-n10-series.html) |
+| `keyence.lv-n12` / `keyence.lv-n11.m8` | LV-N12（子機）/ LV-N11C（M8 親機） | 子機 黒・白・桃。M8 はピン 4 出力・2 外部入力（**推定**） | [LV-N10 取扱説明書（転載）](https://www.manualsdir.com/manuals/657909/keyence-lv-n10-series.html) |
+| `keyence.px-10` | PX-10 / PX-10P（耐油・防水型 PX のアンプ） | 茶 +V・青 0V・黒 検出出力・白 アラーム出力・桃 外部入力 | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/px/specs/)、[取扱説明書（転載）](https://www.manualsdir.com/manuals/657881/keyence-px-10.html) |
+| `keyence.cz-v21a` / `keyence.cz-v22a` | CZ-V21A(P) 親機 / CZ-V22A(P) 子機（RGB、4 出力） | 親機 茶・青・黒/白/灰/橙 出力1〜4・桃 チューニング・紫 バンク切換、子機は茶・青・桃なし | [仕様](https://www.keyence.co.jp/products/sensor/photoelectric/cz-v20/specs/)、[取扱説明書（転載）](https://www.manualsdir.com/manuals/657886/keyence-cz-v22ap-cz-v21ap.html) |
+
+既存機器の変更: `keyence.fs-n41` / `keyence.fs-n43` / `keyence.lv-n11` に子機の連結（`bus.host`）を追加。PZ-G41/61 のヘッドの 3 行目を「受光器」から種類名に変更。
+外部入力の極性はどのシリーズも「NPN タイプは 0V、PNP タイプは +V と短絡で ON」（`signal: { dir: 'in', kind: 'dc', commonPolarity }`）。
+「転載」は KEYENCE の取扱説明書・カタログを第三者のサイトで参照したもの（KEYENCE のサイトの入出力回路図が非公開のシリーズ）。
 
 ### センサーケーブル（汎用品）
 
@@ -243,7 +286,12 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 | XC-H34 / XC-H40 などの MIL - MIL ハーネスケーブル | ケーブルはアプリのケーブル描画で表現するので機器定義は不要（片側バラ線の XC-H34D / XC-H40D は実装済み） |
 | VT5-W07M（モノクロ） | VT5-W07 と外形・端子が同じ。必要なら VT5-W07 にパラメータを追加 |
 | SR-X / SR-1000 / SR-2000（コードリーダ）、IV3 / IV4（画像判別センサ） | 電源・I/O ケーブルの芯線割り当てが公開ページになく未確認 |
-| PR-G（光電センサ）、LR-X、LR-T、LV-N のヘッド、AP-V80 など | 調査済みの一部（PR-G51 は受光器 4芯 茶/青/黒/白、投光器 3芯 茶/青/黒）。出力の割り当てが未確認のものは後回し |
+| LV-N・LR-X・PS・PX のセンサヘッド、FU / CZ-H シリーズのファイバユニット | 電気配線がない（アンプに差し込むだけ）ため機器にしない。アンプの左端にヘッド・ファイバを小さく描いている |
+| PR-G のネジ型（PR-G51CBD など、M12 Bipolar）、PR-G の M8 3ピン（…C3PD）、PR-M/F の M8 3ピン（…C3PL/PD） | 日本の仕様表に載っていない・出力が 1 点だけの派生品。必要なら既存の機器にパラメータを足す |
+| PX-10C / PX-10CP（PX アンプのコネクタタイプ） | コネクタの形状を確認できなかった（ピンの機能は 1 茶・2 白 アラーム・3 青・4 黒 検出、外部入力なし） |
+| FS-N41C、ゼロライン子機（FS-N40 / PS-N10 / LV-N10 / LR-XN10） | ゼロライン子機は配線がない（通信ユニット経由）。FS-N41C は未実装 |
+| LR-ZH…B（IO-Link M12 タイプ） | NPN/PNP でピン 2・4 の役割が入れ替わる別仕様。未実装 |
+| PZ-101、PQ、PG、AI、MU-N、PZ2、AP-V80、旧シリーズ（PK・PM・PS・PS-T・PW・PZ、生産終了） | 現行の主力シリーズを優先。PJ-V（エリアセンサ）は生産終了で、現行の非安全エリアセンサは見つからなかった |
 | セーフティライトカーテン（GL-R / GL-S / GL-V）、セーフティレーザスキャナ（SZ-V）、セーフティコントローラ（GC）、安全ドアスイッチ・非常停止 | **安全機器担当に移管** |
 
 ## 機器定義では表せていないこと
@@ -254,6 +302,12 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
   インスペクタの先頭番号の表示は ioOut 未指定を 0 として扱う。
 - 入力モード（DC24V / DC5V）で COM の電圧範囲を変えるのに `{ param }` では最小・最大の 2 つの値を出せないため、端子・ピンを返す関数の中で受電条件を選んでいる。
 - コモンあたりの上限（`commonLimits`）はパラメータで変えられないため、NPN / PNP で基準側が変わるセンサーの「2 出力合計 100mA」は書いていない。
+- アンプの子機（FS-N42/N44、PS-N12、LV-N12、LR-XN12、CZ-V22A）は電源を親機から連結部でもらうが、その導通は表せない。子機には電源線がないので出力の内部経路（`switch: 'output'`）を書けず、子機の出力に負荷（リレーなど）を直接つないでも電源の経路はチェックされない（PLC の入力につなぐ場合の NPN/PNP の相性はチェックされる）。
+- 子機の台数の上限は `bus.host.slots`（台数）で表しているため、「2 出力タイプは 2 台分」（FS-N40）の数え方はできない。親機の消費電流に子機の分は含まない。
+- 初期設定で決まる入出力（LR-W/LR-X/LR-T の NPN/PNP、白線の機能など）はパラメータで表している。図面の値と実機の設定が一致しているかは確認できない。
+- PZ-M の桃（出力動作の切換）は「+V か 0V のどちらかにつなぐ」端子として `role: 'input'`（極性 '+' / '-' 両方可）にした。未接続は電源なしとして指摘される。
+- 透過型の投光器と受光器の組（向かい合わせて使うこと）は機器定義では表せない（別々の機器として置き、説明文で案内している）。
+- 種類（model）と出力形式・接続形態の組み合わせには実在しない型式もある（例: PR-G の NPN M8 は PR-G51CN だけ）。組み合わせの制約はパラメータで表せない。
 - 2 線式センサーのもれ電流・残留電圧と、入力ユニットごとの 2 線式センサーの可否（KV-C64XC は EV シリーズ不可）は表せない。
 - アナログの + 端子と GND（−）端子の組（同じ ch の − へ戻すこと）は表せない。
 - 特殊ユニットの占有リレー（KV-XH04ML の 576 点など）は `io.inputs` として数えているため、インスペクタには入力の範囲として表示される。
@@ -266,4 +320,5 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 - 各型式の外形寸法図: `https://www.keyence.co.jp/products/controls/plc-building/kv-8000/models/<型式>/dimensions/`
 - XC シリーズ（変換端子台）: https://www.keyence.co.jp/products/controls/other-controls/xc/
 - VT5 シリーズ: https://www.keyence.co.jp/products/controls/hmi/vt5/specs/
-- センサー各シリーズ: `https://www.keyence.co.jp/products/sensor/<分類>/<シリーズ>/models/<型式>/`（io-circuit / dimensions）
+- センサー各シリーズ: `https://www.keyence.co.jp/products/sensor/<分類>/<シリーズ>/models/<型式>/`（io-circuit / dimensions）、`…/<シリーズ>/specs/`（全型式の仕様表）
+- 光電センサの取扱説明書・カタログ（KEYENCE の入出力回路図が非公開のもの）は「光電センサ」の表の出典欄を参照

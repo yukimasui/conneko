@@ -154,7 +154,7 @@ const def = (type: string): DeviceDefinition => {
 const dev = (id: string, type: string, mount?: { device: string; slot: number }): DiagramDevice => ({ id, type, x: 0, y: 0, ...(mount ? { mount } : {}) });
 
 describe('KEYENCE PLC の装着（bus）', () => {
-  const kvUnits = keyence.filter((d) => d.bus && !d.bus.host);
+  const kvUnits = keyence.filter((d) => d.category === 'plc' && d.bus && !d.bus.host);
 
   it('拡張ユニットはすべて内部消費電流（DC24V）を持つ', () => {
     expect(kvUnits.length).toBeGreaterThan(30);
