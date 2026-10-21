@@ -2,256 +2,128 @@
  * 配線の電気的なルールチェック。
  *
  * 考え方:
- * - 電線と機器内部の導通経路（links。接点は閉とみなす）でつながった端子の集まりを「同電位グループ」とし、
- *   グループ内の電源出力（supply）から、そのグループの電源種別・相を決める。
+ * - 電線・ケーブル・機器内部の導通経路（links）でつながった端子の集まりを「同電位グループ」とし、
+ *   グループ内の電源出力（supply）から、そのグループの電源種別・相を決める（model.ts）。
+ *   電源が届くか・電圧が合うかは、接点と出力をすべて閉じた状態（動作中）で確認する。
+ * - 短絡は、常時の状態に加え、通常時と、機器を 1 台ずつ動作させた状態でも確認する（states.ts）。
  * - 電源から links の向きに沿ってたどり、保護機器（protects）を通過した先の「保護電流」を求め、
  *   電線の許容電流や負荷電流と比較する。
+ * - 信号の種類の相性（signals.ts）と、安全回路のルール（safety.ts）も確認する。
  */
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
-import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
-import { resolveDevice, connectorsMate, type ResolvedAccept, type ResolvedDevice } from '../devices/resolve';
+import type { Diagram } from '../model/diagram';
+import { resolveNum, type Conductor, type PowerSystem } from '../devices/types';
 import {
-  resolveNum,
-  type Conductor,
-  type DeviceDefinition,
-  type PowerSystem,
-  type TerminalDef,
-} from '../devices/types';
+  buildModel,
+  classifySupplies,
+  CONDUCTOR_NAMES,
+  key,
+  supplyLabel,
+  terminalName,
+  type CheckIssue,
+  type DefLookup,
+  type IssueInput,
+  type Model,
+  type Push,
+  type Severity,
+} from './model';
+import { checkSafety } from './safety';
+import { checkSignals } from './signals';
+import { checkSwitchStates } from './states';
 
-export type Severity = 'error' | 'warning' | 'info';
-
-export interface CheckIssue {
-  /** 同じ指摘を識別するキー */
-  key: string;
-  severity: Severity;
-  /** ルールの種類 */
-  rule: string;
-  message: string;
-  devices: string[];
-  wires: string[];
-}
-
-type DefLookup = (type: string) => DeviceDefinition | undefined;
-
-interface Supply {
-  system: PowerSystem;
-  voltage: number;
-  conductor: Conductor;
-  device: string;
-}
-
-/** グループの電源状態 */
-type Potential =
-  | { kind: 'none' }
-  | { kind: 'ok'; supply: Supply }
-  | { kind: 'conflict' };
-
-const CONDUCTOR_NAMES: Record<Conductor, string> = {
-  R: 'R相',
-  S: 'S相',
-  T: 'T相',
-  L: 'L（電圧側）',
-  N: 'N（中性線）',
-  '+': '+（プラス）',
-  '-': '-（マイナス）',
-  PE: '接地(PE)',
-};
+export type { CheckIssue, Severity } from './model';
 
 const DEFAULT_CONDUCTORS: Record<PowerSystem, Conductor[]> = {
   AC: ['R', 'S', 'T', 'L', 'N'],
   DC: ['+', '-'],
 };
 
-const key = (device: string, terminal: string) => `${device}:${terminal}`;
-
-class UnionFind {
-  private parent = new Map<string, string>();
-  find(a: string): string {
-    let p = this.parent.get(a) ?? a;
-    if (p !== a) {
-      p = this.find(p);
-      this.parent.set(a, p);
-    }
-    return p;
-  }
-  union(a: string, b: string) {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra !== rb) this.parent.set(ra, rb);
-  }
-}
-
-interface TerminalInfo {
-  device: DiagramDevice;
-  def: DeviceDefinition;
-  terminal: TerminalDef;
-  accepts: ResolvedAccept[];
-}
-
-function supplyLabel(s: Supply): string {
-  if (s.conductor === 'PE') return CONDUCTOR_NAMES.PE;
-  return `${s.system}${s.voltage}V ${CONDUCTOR_NAMES[s.conductor]}`;
-}
-
 export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] {
   const issues: CheckIssue[] = [];
-  const push = (issue: Omit<CheckIssue, 'key'> & { key?: string }) => {
-    issues.push({ key: issue.key ?? `${issue.rule}:${issue.devices.join(',')}:${issue.wires.join(',')}`, ...issue });
+  const seen = new Set<string>();
+  const push: Push = (issue: IssueInput) => {
+    const k = issue.key ?? `${issue.rule}:${issue.devices.join(',')}:${issue.wires.join(',')}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    issues.push({ ...issue, key: k });
   };
 
-  // --- 機器と端子の解決 ---
-  const terminals = new Map<string, TerminalInfo>();
-  const devices = new Map<string, { device: DiagramDevice; def: DeviceDefinition; r: ResolvedDevice }>();
-  for (const device of diagram.devices) {
-    const def = lookup(device.type);
-    if (!def) {
-      push({ severity: 'error', rule: 'unknown-device', message: `${device.id}: 機器種別 "${device.type}" が見つかりません`, devices: [device.id], wires: [] });
-      continue;
-    }
-    const r = resolveDevice(def, device.params);
-    devices.set(device.id, { device, def, r });
-    for (const t of r.terminals) terminals.set(key(device.id, t.id), { device, def, terminal: t, accepts: r.accepts.get(t.id) ?? [] });
-    // コネクタのピンも端子として扱う（画面上には表示しない）
-    for (const p of r.pins) {
-      terminals.set(key(device.id, p.id), { device, def, terminal: { ...p, x: 0, y: 0, side: 'top' }, accepts: r.accepts.get(p.id) ?? [] });
-    }
-  }
+  const m = buildModel(diagram, lookup, push);
 
-  const validWires: DiagramWire[] = [];
-  /** ケーブルで導通するピンの組 */
-  const cablePairs: [string, string][] = [];
-  for (const w of diagram.wires) {
-    const bad = [w.from, w.to].filter((r) => !terminals.has(key(r.device, r.terminal)));
-    if (bad.length) {
-      push({
-        severity: 'error',
-        rule: 'unknown-terminal',
-        message: `電線 ${w.id}: 接続先 ${bad.map((r) => `${r.device}.${r.terminal}`).join(', ')} が存在しません`,
-        devices: bad.map((r) => r.device).filter((d) => devices.has(d)),
-        wires: [w.id],
-      });
-      continue;
-    }
-    if (w.from.device === w.to.device && w.from.terminal === w.to.terminal) continue;
-    const a = terminals.get(key(w.from.device, w.from.terminal))!.terminal.connector;
-    const b = terminals.get(key(w.to.device, w.to.terminal))!.terminal.connector;
-    if (a || b) {
-      if (a && b && connectorsMate(a, b)) {
-        // ケーブル: 両端の同じ番号のピンどうしが導通する
-        for (let i = 1; i <= Math.min(a.pins, b.pins); i++) {
-          cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${i}`)]);
-        }
-      } else {
-        push({
-          severity: 'error',
-          rule: 'connector-mismatch',
-          message: a && b
-            ? `ケーブル ${w.id}: コネクタの種類が違います（${a.kind} と ${b.kind}）`
-            : `電線 ${w.id}: コネクタ（${(a ?? b)!.kind}）には同じ種類のコネクタからケーブルでつなぎます`,
-          devices: [w.from.device, w.to.device],
-          wires: [w.id],
-        });
-      }
-      continue;
-    }
-    validWires.push(w);
-  }
+  for (const p of m.bus.problems) push({ ...p, wires: [], key: `${p.rule}:${p.devices.join(',')}` });
 
-  const wiresAt = new Map<string, DiagramWire[]>();
-  for (const w of validWires) {
-    for (const r of [w.from, w.to]) {
-      const k = key(r.device, r.terminal);
-      wiresAt.set(k, [...(wiresAt.get(k) ?? []), w]);
-    }
-  }
+  checkUnconnected(m, push);
+  const conflictRoots = checkSupplyConflicts(m, push);
+  checkInputs(m, push);
+  checkDistinctGroups(m, push);
+  checkSwitchStates(m, push, conflictRoots);
+  const protection = computeProtection(m);
+  checkWireCurrents(m, push, protection);
+  checkLoadProtection(m, push, protection);
+  checkOutputCurrents(m, push);
+  checkSignals(m, push);
+  checkSafety(m, push);
+  checkWireColors(m, push);
+  checkWireNumbers(m, push);
 
-  // --- 未接続 ---
-  for (const [k, info] of terminals) {
+  const order: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+  return issues.sort((a, b) => order[a.severity] - order[b.severity]);
+}
+
+/** 未接続の端子 */
+function checkUnconnected(m: Model, push: Push) {
+  for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
     if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector') continue;
-    if (wiresAt.has(k)) continue;
+    if (m.wiresAt.has(k)) continue;
     if (t.role === 'ground') {
       push({ severity: 'warning', rule: 'ground-missing', message: `${device.id}: 接地端子 ${t.id} が接地されていません`, devices: [device.id], wires: [], key: `unconnected:${k}` });
     } else {
       push({ severity: 'warning', rule: 'unconnected', message: `${device.id}: 端子 ${t.label ?? t.id} が未接続です`, devices: [device.id], wires: [], key: `unconnected:${k}` });
     }
   }
+}
 
-  // --- 同電位グループ ---
-  const uf = new UnionFind();
-  for (const w of validWires) uf.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
-  for (const [a, b] of cablePairs) uf.union(a, b);
-  for (const { device, r } of devices.values()) {
-    for (const l of r.links) uf.union(key(device.id, l.from), key(device.id, l.to));
-  }
-  const groups = new Map<string, string[]>();
-  for (const k of terminals.keys()) {
-    const g = uf.find(k);
-    groups.set(g, [...(groups.get(g) ?? []), k]);
-  }
-
-  const potentials = new Map<string, Potential>();
-  for (const [g, members] of groups) {
-    const supplies: Supply[] = [];
-    for (const k of members) {
-      const { terminal: t, device, def } = terminals.get(k)!;
-      if (t.role === 'supply' && t.supply) {
-        supplies.push({
-          system: t.supply.system,
-          voltage: resolveNum(t.supply.voltage, def, device.params) ?? 0,
-          conductor: t.supply.conductor,
-          device: device.id,
-        });
-      }
-    }
-    if (supplies.length === 0) {
-      potentials.set(g, { kind: 'none' });
-      continue;
-    }
-    const wiresInGroup = validWires.filter((w) => uf.find(key(w.from.device, w.from.terminal)) === g).map((w) => w.id);
-    const involved = [...new Set(supplies.map((s) => s.device))];
-    const conflict = (rule: string, message: string) => {
-      push({ severity: 'error', rule, message, devices: involved, wires: wiresInGroup, key: `${rule}:${g}` });
-      potentials.set(g, { kind: 'conflict' });
-    };
-    const first = supplies[0];
-    const hasPE = supplies.some((s) => s.conductor === 'PE');
-    const nonPE = supplies.filter((s) => s.conductor !== 'PE');
-    if (hasPE && nonPE.length) {
-      conflict('ground-fault', `地絡: 接地(PE)と ${supplyLabel(nonPE[0])} がつながっています`);
-    } else if (supplies.some((s) => s.system !== first.system)) {
-      conflict('mixed-system', `混触: 交流(AC)と直流(DC)の電源がつながっています`);
-    } else if (supplies.some((s) => s.conductor !== first.conductor)) {
-      const names = [...new Set(supplies.map((s) => CONDUCTOR_NAMES[s.conductor]))].join(' と ');
-      conflict('short-circuit', `短絡: ${names} がつながっています`);
-    } else if (supplies.some((s) => s.voltage !== first.voltage) && !hasPE) {
-      conflict('voltage-conflict', `電圧の異なる電源（${[...new Set(supplies.map((s) => s.voltage + 'V'))].join('/')}）がつながっています`);
-    } else {
-      if (involved.length > 1 && !hasPE) {
-        push({ severity: 'warning', rule: 'parallel-source', message: `複数の電源（${involved.join(', ')}）の出力が並列につながっています`, devices: involved, wires: wiresInGroup, key: `parallel-source:${g}` });
-      }
-      potentials.set(g, { kind: 'ok', supply: first });
+/**
+ * 常時の状態（電線と常時導通の経路だけ）でつながった電源出力どうしの短絡・混触など。
+ * 矛盾のあったグループ（fixed）を返す（接点の状態ごとの検査で同じ指摘を重ねないため）。
+ */
+function checkSupplyConflicts(m: Model, push: Push): Set<string> {
+  const conflictRoots = new Set<string>();
+  const name = (k: string) => terminalName(m, k);
+  for (const [g, members] of m.fixedMembers) {
+    const supplies = members.flatMap((k) => m.supplies.get(k) ?? []);
+    if (!supplies.length) continue;
+    const c = classifySupplies(supplies, name);
+    const wires = [...new Set(members.flatMap((k) => (m.wiresAt.get(k) ?? []).map((w) => w.id)))];
+    if (c.kind === 'conflict') {
+      conflictRoots.add(g);
+      push({ severity: 'error', rule: c.rule, message: c.message, devices: c.devices, wires, key: `${c.rule}:${g}` });
+    } else if (c.kind === 'ok' && c.parallel.length > 1) {
+      push({ severity: 'warning', rule: 'parallel-source', message: `複数の電源（${c.parallel.join(', ')}）の出力が並列につながっています`, devices: c.parallel, wires, key: `parallel-source:${g}` });
     }
   }
-  const potentialOf = (k: string): Potential => potentials.get(uf.find(k)) ?? { kind: 'none' };
+  return conflictRoots;
+}
 
-  // --- 受電端子の電源条件 ---
-  for (const [k, info] of terminals) {
+/** 受電端子・接地端子の電源条件 */
+function checkInputs(m: Model, push: Push) {
+  for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
-    if (!wiresAt.has(k) && !groupHasOtherConnection(k, groups, uf, wiresAt)) continue;
-    const p = potentialOf(k);
+    const connected = (m.allMembers.get(m.all.find(k)) ?? []).some((x) => m.wiresAt.has(x));
+    if (!connected) continue;
+    const p = m.potentialOf(k);
+    const wires = (m.wiresAt.get(k) ?? []).map((w) => w.id);
     if (t.role === 'ground') {
       if (p.kind === 'ok' && p.supply.conductor !== 'PE') {
-        push({ severity: 'error', rule: 'ground-fault', message: `地絡: ${device.id} の接地端子 ${t.id} が ${supplyLabel(p.supply)} につながっています`, devices: [device.id], wires: (wiresAt.get(k) ?? []).map((w) => w.id), key: `ground-live:${k}` });
+        push({ severity: 'error', rule: 'ground-fault', message: `地絡: ${device.id} の接地端子 ${t.id} が ${supplyLabel(p.supply)} につながっています`, devices: [device.id], wires, key: `ground-live:${k}` });
       } else if (p.kind === 'none') {
-        push({ severity: 'warning', rule: 'ground-floating', message: `${device.id}: 接地端子 ${t.id} が電源の接地(PE)までつながっていません`, devices: [device.id], wires: (wiresAt.get(k) ?? []).map((w) => w.id), key: `ground-floating:${k}` });
+        push({ severity: 'warning', rule: 'ground-floating', message: `${device.id}: 接地端子 ${t.id} が電源の接地(PE)までつながっていません`, devices: [device.id], wires, key: `ground-floating:${k}` });
       }
       continue;
     }
     if (t.role !== 'input' || !info.accepts.length) continue;
-    const a = info.accepts[0];
     const where = `${device.id} の端子 ${t.label ?? t.id}`;
-    const wires = (wiresAt.get(k) ?? []).map((w) => w.id);
     if (p.kind === 'none') {
       push({ severity: 'warning', rule: 'no-power', message: `${where} に電源が来ていません`, devices: [device.id], wires, key: `no-power:${k}` });
       continue;
@@ -260,11 +132,19 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
     const s = p.supply;
     if (s.conductor === 'PE') {
       push({ severity: 'error', rule: 'ground-fault', message: `${where} が接地(PE)につながっています`, devices: [device.id], wires, key: `input-pe:${k}` });
-    } else if (s.system !== a.system) {
-      push({ severity: 'error', rule: 'system-mismatch', message: `${where} は ${a.system} 用ですが ${s.system} が来ています`, devices: [device.id], wires, key: `system:${k}` });
+      continue;
+    }
+    // 複数の受電条件（AC/DC 両用など）は、いずれかを満たせばよい。満たさない場合は種別の合うものとの違いを示す
+    const fits = (a: (typeof info.accepts)[number]) =>
+      a.system === s.system && s.voltage >= a.minVoltage && s.voltage <= a.maxVoltage && (a.conductors ?? DEFAULT_CONDUCTORS[a.system]).includes(s.conductor);
+    if (info.accepts.some(fits)) continue;
+    const a = info.accepts.find((x) => x.system === s.system);
+    const range = (x: (typeof info.accepts)[number]) => `${x.system}${x.minVoltage}〜${x.maxVoltage}V`;
+    if (!a) {
+      push({ severity: 'error', rule: 'system-mismatch', message: `${where} は ${info.accepts.map((x) => x.system).join('/')} 用ですが ${s.system} が来ています`, devices: [device.id], wires, key: `system:${k}` });
     } else if (s.voltage < a.minVoltage || s.voltage > a.maxVoltage) {
-      push({ severity: 'error', rule: 'voltage-mismatch', message: `${where} の定格は ${a.system}${a.minVoltage}〜${a.maxVoltage}V ですが ${s.voltage}V が来ています`, devices: [device.id], wires, key: `voltage:${k}` });
-    } else if (!(a.conductors ?? DEFAULT_CONDUCTORS[a.system]).includes(s.conductor)) {
+      push({ severity: 'error', rule: 'voltage-mismatch', message: `${where} の定格は ${range(a)} ですが ${s.voltage}V が来ています`, devices: [device.id], wires, key: `voltage:${k}` });
+    } else {
       const msg =
         a.system === 'DC'
           ? `極性が逆です: ${where} には ${(a.conductors ?? []).map((c) => CONDUCTOR_NAMES[c]).join('/')} をつなぎます（${CONDUCTOR_NAMES[s.conductor]} が来ています）`
@@ -272,13 +152,15 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
       push({ severity: 'error', rule: 'conductor-mismatch', message: msg, devices: [device.id], wires, key: `conductor:${k}` });
     }
   }
+}
 
-  // --- 異相であるべき端子 ---
-  for (const { device, def } of devices.values()) {
+/** 異相であるべき端子 */
+function checkDistinctGroups(m: Model, push: Push) {
+  for (const { device, def } of m.devices.values()) {
     for (const group of def.distinctGroups ?? []) {
       const seen = new Map<Conductor, string[]>();
       for (const tid of group) {
-        const p = potentialOf(key(device.id, tid));
+        const p = m.potentialOf(key(device.id, tid));
         if (p.kind !== 'ok' || p.supply.conductor === 'PE') continue;
         seen.set(p.supply.conductor, [...(seen.get(p.supply.conductor) ?? []), tid]);
       }
@@ -289,94 +171,27 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
       }
     }
   }
-
-  // --- 保護電流の伝搬 ---
-  const protection = computeProtection(devices, terminals, validWires, cablePairs, potentialOf);
-
-  // 電線の許容電流
-  for (const w of validWires) {
-    const kf = key(w.from.device, w.from.terminal);
-    const kt = key(w.to.device, w.to.terminal);
-    const p = potentialOf(kf);
-    if (p.kind !== 'ok' || p.supply.conductor === 'PE') continue;
-    const prot = Math.max(protection.get(kf) ?? -1, protection.get(kt) ?? -1);
-    if (!Number.isFinite(prot) || prot < 0) continue;
-    const allowable = allowableCurrent(w.wireType, w.sizeSq);
-    if (allowable === undefined) {
-      push({ severity: 'info', rule: 'wire-unknown', message: `電線 ${w.id}: ${w.wireType} ${w.sizeSq}sq の許容電流データがないため太さを確認できません`, devices: [], wires: [w.id], key: `wire-unknown:${w.id}` });
-    } else if (allowable < prot) {
-      push({ severity: 'warning', rule: 'wire-too-thin', message: `電線 ${w.id}${w.wireNo ? `（${w.wireNo}）` : ''}: ${w.wireType} ${w.sizeSq}sq の許容電流 ${allowable}A が保護電流 ${prot}A を下回っています（太い電線にするか、保護機器の定格を下げてください）`, devices: [], wires: [w.id], key: `wire-too-thin:${w.id}` });
-    }
-  }
-
-  // 負荷電流と保護
-  for (const { device, def, r } of devices.values()) {
-    const inputs = r.terminals.filter((t) => t.role === 'input');
-    const powered = inputs.filter((t) => potentialOf(key(device.id, t.id)).kind === 'ok');
-    if (!powered.length) continue;
-    const prots = powered.map((t) => protection.get(key(device.id, t.id)) ?? Infinity);
-    const worst = Math.max(...prots);
-    if (!Number.isFinite(worst)) {
-      push({ severity: 'warning', rule: 'no-protection', message: `${device.id}: 上流に保護機器（ブレーカー・サーキットプロテクタなど）がありません`, devices: [device.id], wires: [], key: `no-protection:${device.id}` });
-      continue;
-    }
-    const load = resolveNum(def.loadCurrent, def, device.params);
-    if (load !== undefined && load > worst) {
-      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流 ${load}A が上流の保護電流 ${worst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
-    }
-  }
-
-  // --- 電線色 ---
-  checkWireColors(validWires, terminals, potentialOf, push);
-
-  // --- 線番 ---
-  const byNo = new Map<string, Set<string>>();
-  const wiresByNo = new Map<string, string[]>();
-  for (const w of validWires) {
-    if (!w.wireNo) continue;
-    byNo.set(w.wireNo, (byNo.get(w.wireNo) ?? new Set()).add(uf.find(key(w.from.device, w.from.terminal))));
-    wiresByNo.set(w.wireNo, [...(wiresByNo.get(w.wireNo) ?? []), w.id]);
-  }
-  for (const [no, gs] of byNo) {
-    if (gs.size > 1) {
-      push({ severity: 'warning', rule: 'wire-no-duplicate', message: `線番 ${no} が電位の異なる電線に使われています`, devices: [], wires: wiresByNo.get(no)!, key: `wire-no:${no}` });
-    }
-  }
-
-  const order: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
-  return issues.sort((a, b) => order[a.severity] - order[b.severity]);
-}
-
-/** 端子が電線につながっていなくても、機器内部の経路で何かにつながっていれば true */
-function groupHasOtherConnection(k: string, groups: Map<string, string[]>, uf: UnionFind, wiresAt: Map<string, DiagramWire[]>) {
-  return (groups.get(uf.find(k)) ?? []).some((m) => wiresAt.has(m));
 }
 
 /**
- * 電源から links の向きに沿ってたどり、各端子の保護電流[A]を求める。
+ * 電源から links の向きに沿ってたどり、各端子の保護電流[A]を求める（接点・出力は閉とみなす）。
  * 保護機器を通っていない端子は Infinity。複数経路がある場合は大きい方（安全側）を採用する。
  */
-function computeProtection(
-  devices: Map<string, { device: DiagramDevice; def: DeviceDefinition; r: ResolvedDevice }>,
-  terminals: Map<string, TerminalInfo>,
-  wires: DiagramWire[],
-  cablePairs: [string, string][],
-  potentialOf: (k: string) => Potential,
-): Map<string, number> {
+function computeProtection(m: Model): Map<string, number> {
   type Edge = { to: string; protects?: number };
   const adj = new Map<string, Edge[]>();
   const add = (a: string, e: Edge) => adj.set(a, [...(adj.get(a) ?? []), e]);
-  for (const w of wires) {
+  for (const w of m.wires) {
     const a = key(w.from.device, w.from.terminal);
     const b = key(w.to.device, w.to.terminal);
     add(a, { to: b });
     add(b, { to: a });
   }
-  for (const [a, b] of cablePairs) {
+  for (const [a, b] of m.cablePairs) {
     add(a, { to: b });
     add(b, { to: a });
   }
-  for (const { device, def, r } of devices.values()) {
+  for (const { device, def, r } of m.devices.values()) {
     const rating = resolveNum(def.protectionCurrent, def, device.params);
     for (const l of r.links) {
       const a = key(device.id, l.from);
@@ -389,11 +204,10 @@ function computeProtection(
 
   const result = new Map<string, number>();
   const queue: [string, number][] = [];
-  for (const [k, info] of terminals) {
-    const t = info.terminal;
-    if (t.role !== 'supply' || !t.supply || t.supply.conductor === 'PE') continue;
-    if (potentialOf(k).kind !== 'ok') continue;
-    const limit = resolveNum(t.supply.limitCurrent, info.def, info.device.params) ?? Infinity;
+  for (const [k, s] of m.supplies) {
+    if (s.conductor === 'PE' || m.potentialOf(k).kind !== 'ok') continue;
+    const info = m.terminals.get(k)!;
+    const limit = resolveNum(info.terminal.supply!.limitCurrent, info.def, info.device.params) ?? Infinity;
     queue.push([k, limit]);
   }
   while (queue.length) {
@@ -401,44 +215,140 @@ function computeProtection(
     const prev = result.get(k);
     if (prev !== undefined && prev >= prot) continue;
     result.set(k, prot);
-    for (const e of adj.get(k) ?? []) {
-      queue.push([e.to, e.protects !== undefined ? Math.min(prot, e.protects) : prot]);
-    }
+    for (const e of adj.get(k) ?? []) queue.push([e.to, e.protects !== undefined ? Math.min(prot, e.protects) : prot]);
   }
   return result;
 }
 
-function checkWireColors(
-  wires: DiagramWire[],
-  terminals: Map<string, TerminalInfo>,
-  potentialOf: (k: string) => Potential,
-  push: (issue: Omit<CheckIssue, 'key'> & { key?: string }) => void,
-) {
+/** 電線の許容電流 */
+function checkWireCurrents(m: Model, push: Push, protection: Map<string, number>) {
+  for (const w of m.wires) {
+    const kf = key(w.from.device, w.from.terminal);
+    const kt = key(w.to.device, w.to.terminal);
+    const p = m.potentialOf(kf);
+    if (p.kind !== 'ok' || p.supply.conductor === 'PE') continue;
+    const prot = Math.max(protection.get(kf) ?? -1, protection.get(kt) ?? -1);
+    if (!Number.isFinite(prot) || prot < 0) continue;
+    const allowable = allowableCurrent(w.wireType, w.sizeSq);
+    if (allowable === undefined) {
+      push({ severity: 'info', rule: 'wire-unknown', message: `電線 ${w.id}: ${w.wireType} ${w.sizeSq}sq の許容電流データがないため太さを確認できません`, devices: [], wires: [w.id], key: `wire-unknown:${w.id}` });
+    } else if (allowable < prot) {
+      push({ severity: 'warning', rule: 'wire-too-thin', message: `電線 ${w.id}${w.wireNo ? `（${w.wireNo}）` : ''}: ${w.wireType} ${w.sizeSq}sq の許容電流 ${allowable}A が保護電流 ${prot}A を下回っています（太い電線にするか、保護機器の定格を下げてください）`, devices: [], wires: [w.id], key: `wire-too-thin:${w.id}` });
+    }
+  }
+}
+
+/** 負荷電流と保護 */
+function checkLoadProtection(m: Model, push: Push, protection: Map<string, number>) {
+  for (const { device, def, r } of m.devices.values()) {
+    const powered = r.terminals.filter((t) => t.role === 'input' && m.potentialOf(key(device.id, t.id)).kind === 'ok');
+    if (!powered.length) continue;
+    const worst = Math.max(...powered.map((t) => protection.get(key(device.id, t.id)) ?? Infinity));
+    if (!Number.isFinite(worst)) {
+      push({ severity: 'warning', rule: 'no-protection', message: `${device.id}: 上流に保護機器（ブレーカー・サーキットプロテクタなど）がありません`, devices: [device.id], wires: [], key: `no-protection:${device.id}` });
+      continue;
+    }
+    const load = resolveNum(def.loadCurrent, def, device.params);
+    if (load !== undefined && load > worst) {
+      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流 ${load}A が上流の保護電流 ${worst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
+    }
+  }
+}
+
+/** 出力点につないだ負荷（受電端子が同じネットにある他の機器）の定格電流の合計 */
+function outputLoad(m: Model, owner: string, point: string): { current: number; devices: string[] } {
+  const ids = new Set<string>();
+  for (const k of m.fixedMembers.get(m.fixed.find(point)) ?? []) {
+    const info = m.terminals.get(k)!;
+    if (info.device.id !== owner && info.terminal.role === 'input') ids.add(info.device.id);
+  }
+  let current = 0;
+  for (const id of ids) {
+    const d = m.devices.get(id)!;
+    current += resolveNum(d.def.loadCurrent, d.def, d.device.params) ?? 0;
+  }
+  return { current, devices: [...ids] };
+}
+
+const amp = (n: number) => `${Math.round(n * 1000) / 1000}A`;
+
+/** 出力 1 点の定格とコモンあたりの上限 */
+function checkOutputCurrents(m: Model, push: Push) {
+  for (const { device, def } of m.devices.values()) {
+    const outputs = m.switchLinks.filter((s) => s.device === device.id && s.link.switch === 'output');
+    if (!outputs.length) continue;
+    const loads = new Map(outputs.map((s) => [s, outputLoad(m, device.id, s.a)]));
+    for (const s of outputs) {
+      const rated = resolveNum(s.link.ratedCurrent, def, device.params);
+      const load = loads.get(s)!;
+      if (rated !== undefined && load.current > rated + 1e-9) {
+        push({
+          severity: 'warning',
+          rule: 'output-overload',
+          message: `${terminalName(m, s.a)}: つないだ負荷（${load.devices.join(', ')}）の定格電流の合計 ${amp(load.current)} が出力の定格 ${amp(rated)} を超えています`,
+          devices: [device.id, ...load.devices],
+          wires: [],
+          key: `output-overload:${s.a}`,
+        });
+      }
+    }
+    for (const c of def.commonLimits ?? []) {
+      const limit = resolveNum(c.current, def, device.params);
+      if (limit === undefined) continue;
+      const members = outputs.filter((s) => s.link.to === c.common);
+      const total = members.reduce((sum, s) => sum + loads.get(s)!.current, 0);
+      if (total > limit + 1e-9) {
+        push({
+          severity: 'warning',
+          rule: 'common-overload',
+          message: `${terminalName(m, key(device.id, c.common))}: このコモンの出力につないだ負荷の合計 ${amp(total)} がコモンあたりの上限 ${amp(limit)} を超えています`,
+          devices: [device.id, ...new Set(members.flatMap((s) => loads.get(s)!.devices))],
+          wires: [],
+          key: `common-overload:${device.id}:${c.common}`,
+        });
+      }
+    }
+  }
+}
+
+/** 電線色（回路の種類ごとの慣例） */
+function checkWireColors(m: Model, push: Push) {
   // 電線だけでつながった端子の集まり（ネット）単位で、制御回路かどうかを判定する
-  const uf = new UnionFind();
-  for (const w of wires) uf.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
+  const nets = new Map<string, string>();
+  const find = (k: string): string => {
+    const p = nets.get(k) ?? k;
+    if (p === k) return k;
+    const r = find(p);
+    nets.set(k, r);
+    return r;
+  };
+  for (const w of m.wires) {
+    const a = find(key(w.from.device, w.from.terminal));
+    const b = find(key(w.to.device, w.to.terminal));
+    if (a !== b) nets.set(a, b);
+  }
   const controlNets = new Set<string>();
-  for (const w of wires) {
+  for (const w of m.wires) {
     for (const r of [w.from, w.to]) {
-      const info = terminals.get(key(r.device, r.terminal))!;
+      const info = m.terminals.get(key(r.device, r.terminal))!;
       const cat = info.def.category;
       const isControl =
         (info.terminal.role === 'input' && (cat === 'contactor' || cat === 'control' || cat === 'plc' || cat === 'sensor' || cat === 'safety')) ||
         info.terminal.role === 'signal';
-      if (isControl) controlNets.add(uf.find(key(r.device, r.terminal)));
+      if (isControl) controlNets.add(find(key(r.device, r.terminal)));
     }
   }
 
-  for (const w of wires) {
+  for (const w of m.wires) {
     const k = key(w.from.device, w.from.terminal);
-    const p = potentialOf(k);
+    const p = m.potentialOf(k);
     let circuit: CircuitKind | undefined;
     if (p.kind === 'ok') {
       if (p.supply.conductor === 'PE') circuit = 'ground';
       else if (p.supply.system === 'DC') circuit = 'dc-control';
-      else circuit = controlNets.has(uf.find(k)) ? 'ac-control' : 'ac-main';
+      else circuit = controlNets.has(find(k)) ? 'ac-control' : 'ac-main';
     } else {
-      const toGround = [w.from, w.to].some((r) => terminals.get(key(r.device, r.terminal))?.terminal.role === 'ground');
+      const toGround = [w.from, w.to].some((r) => m.terminals.get(key(r.device, r.terminal))?.terminal.role === 'ground');
       if (toGround) circuit = 'ground';
     }
     if (!circuit) continue;
@@ -454,5 +364,21 @@ function checkWireColors(
       wires: [w.id],
       key: `wire-color:${w.id}`,
     });
+  }
+}
+
+/** 線番の重複（常時導通の範囲が違う電線に同じ線番） */
+function checkWireNumbers(m: Model, push: Push) {
+  const byNo = new Map<string, Set<string>>();
+  const wiresByNo = new Map<string, string[]>();
+  for (const w of m.wires) {
+    if (!w.wireNo) continue;
+    byNo.set(w.wireNo, (byNo.get(w.wireNo) ?? new Set()).add(m.fixed.find(key(w.from.device, w.from.terminal))));
+    wiresByNo.set(w.wireNo, [...(wiresByNo.get(w.wireNo) ?? []), w.id]);
+  }
+  for (const [no, gs] of byNo) {
+    if (gs.size > 1) {
+      push({ severity: 'warning', rule: 'wire-no-duplicate', message: `線番 ${no} が電位の異なる電線に使われています`, devices: [], wires: wiresByNo.get(no)!, key: `wire-no:${no}` });
+    }
   }
 }
