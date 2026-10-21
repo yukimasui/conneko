@@ -102,7 +102,7 @@ const def: DeviceDefinition = {
   category: 'contactor',
   description:
     'IDEC RF1V フォースガイドリレー（EN 50205 タイプA）2a2b、LED 表示付き、コイル DC24V（約 17mA、極性あり: 1 が +）。DIN レール用ソケット SF1V-4-07L に挿した状態。接点は AC250V/DC30V 6A（DC13 24V 1A）。' +
-    '端子番号は通し番号で、コイル 1(+)・2(−)、b 接点 3-4・5-6、a 接点 7-8・9-10。安全リレー・安全コントローラーの出力増設に使い、b 接点（3-4 など）を EDM（フィードバックループ）に直列に入れて溶着を検出する。図では接点を閉とみなす。',
+    '端子番号は通し番号で、コイル 1(+)・2(−)、b 接点 3-4・5-6、a 接点 7-8・9-10。安全リレー・安全コントローラーの出力増設に使い、b 接点（3-4 など）を EDM（フィードバックループ）に直列に入れて溶着を検出する。',
   labelPrefix: 'CR',
   width: W,
   height: H,
@@ -124,12 +124,14 @@ const def: DeviceDefinition = {
     { id: '2', label: '2（コイル −）', x: COL[1], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['-'] } },
     { id: '1', label: '1（コイル +）', x: COL[2], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['+'] } },
   ],
+  // b 接点 3-4・5-6 と a 接点 7-8・9-10 はすべて強制ガイド（a 接点が溶着すると b 接点は開いたままになる）
   links: [
-    { from: '3', to: '4' },
-    { from: '5', to: '6' },
-    { from: '7', to: '8' },
-    { from: '9', to: '10' },
+    { from: '3', to: '4', switch: 'NC', linked: 'force-guided' },
+    { from: '5', to: '6', switch: 'NC', linked: 'force-guided' },
+    { from: '7', to: '8', switch: 'NO', linked: 'force-guided' },
+    { from: '9', to: '10', switch: 'NO', linked: 'force-guided' },
   ],
+  safety: { standards: ['EN 50205 タイプA'] },
   // コイル 15mA ＋ LED 約 2mA
   loadCurrent: 0.017,
 };

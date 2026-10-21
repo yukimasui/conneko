@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン 非接触ドアスイッチコントローラ G9SX-NS202-RT（D40A/D40Z 専用、半導体安全出力 2 点、ネジ端子）。
@@ -105,11 +105,31 @@ const LABELS: Record<string, string> = {
   X2: 'X2（補助エラー出力・非安全）',
 };
 
+/** ドアスイッチの入力信号（D1 から D40A の白 → 黒 → … → D2 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 安全出力（PNP 各 0.8A） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.8 };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  D1: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  D2: { function: 'safety-input', channel: 1 },
+  S14: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
+  S24: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
+  // T31 から 接触器の b 接点（フィードバックループ）・リセットスイッチを通って T32（手動）/ T33（自動）へ戻す
+  T31: { function: 'edm' },
+  T32: { function: 'reset' },
+  T33: { function: 'reset' },
+  X1: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+  X2: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
+
 const row = (ids: string[], y: number, side: 'top' | 'bottom'): TerminalDef[] =>
   ids.map((id, i) => {
     if (id === 'A1') return { id, label: 'A1（+24V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
     if (id === 'A2') return { id, label: 'A2（0V）', x: XS[i], y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true };
+    return { id, label: LABELS[id], x: XS[i], y, side, role: 'signal', optional: true, ...SPEC[id] };
   });
 
 const def: DeviceDefinition = {
@@ -132,6 +152,13 @@ const def: DeviceDefinition = {
     { from: 'A1', to: 'D3' },
     { from: 'A2', to: 'D4' },
   ],
+  safetyChannels: [
+    // D40A はコントローラーからの信号を次段へ渡す（直列接続の全台を 1 つのループとして監視する）
+    { id: 'IN', label: 'ドアスイッチ入力（D1 → D40A → D2）', kind: 'input', channels: [{ source: 'D1', input: 'D2' }] },
+    { id: 'OUT', label: '安全出力 S14・S24', kind: 'output', channels: [{ output: 'S14' }, { output: 'S24' }] },
+  ],
+  // D40Z と組み合わせて PL e / カテゴリ4、D40A と組み合わせて PL d / カテゴリ3
+  safety: { pl: 'e', category: '4', standards: ['ISO 13849-1', 'ISO 14119'] },
   // 消費電力 3W / 24V（出力負荷は別途）
   loadCurrent: 0.13,
 };

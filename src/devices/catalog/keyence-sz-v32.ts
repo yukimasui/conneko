@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * KEYENCE セーフティレーザスキャナ SZ-V32（マルチバンクタイプ）＋ 電源ケーブル SZ-VP□（18 芯）。
@@ -139,6 +139,18 @@ const svg = `
 `;
 
 const power = { system: 'DC' as const, minVoltage: 21.6, maxVoltage: 26.4 };
+/** 安全出力（各 500mA。PNP に設定した場合） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.5 };
+
+/** 電源以外の芯線の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  OSSD1: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
+  OSSD2: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
+  AUX1: { function: 'aux-output' },
+  AUX2: { function: 'aux-output' },
+  IN1: { function: 'reset' },
+  IN2: { function: 'edm' },
+};
 
 const def: DeviceDefinition = {
   type: 'keyence.sz-v32',
@@ -158,8 +170,12 @@ const def: DeviceDefinition = {
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
     if (w.id === '+24V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } };
     if (w.id === '0V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
-    return { ...base, role: 'signal' as const, optional: true };
+    return { ...base, role: 'signal' as const, optional: true, ...SPEC[w.id] };
   }),
+  safetyChannels: [
+    { id: 'OSSD', label: '安全出力 OSSD1/OSSD2', kind: 'output', channels: [{ output: 'OSSD1' }, { output: 'OSSD2' }] },
+  ],
+  safety: { esType: 3, pl: 'd', category: '3', sil: 2, standards: ['IEC 61496-1', 'IEC 61496-3', 'ISO 13849-1', 'IEC 61508'] },
   // 無負荷時 11.8W / 24V（OSSD・AUX の負荷電流は別途）
   loadCurrent: 0.5,
 };

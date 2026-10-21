@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SafetyChannelGroup, SupplySpec, TerminalDef } from '../types';
 
 /**
  * KEYENCE セーフティコントローラ GC シリーズ 安全入出力増設ユニット GC-S84（安全入力 8・テスト出力 2・安全出力 4）。
@@ -79,8 +79,19 @@ const svg = `
 
 const power = { system: 'DC' as const, minVoltage: 16.8, maxVoltage: 28.8 };
 
-const labelOf = (id: string) =>
-  id.startsWith('Si') ? `${id}（安全入力）` : id.startsWith('To') ? `${id}（テスト出力）` : `${id}（安全出力 OSSD）`;
+/** テスト出力（最大 100mA） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test', limitCurrent: 0.1 };
+/** 安全出力（PNP・OSSD、最大 500mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.5 };
+
+/** 入出力端子（偶数番号が CH1、奇数番号が CH2） */
+const ioTerminal = (id: string, x: number, y: number, side: 'left' | 'right'): TerminalDef => {
+  const channel = Number(id.slice(2)) % 2 === 0 ? 1 : 2;
+  const base = { id, x, y, side, optional: true };
+  if (id.startsWith('Si')) return { ...base, label: `${id}（安全入力）`, role: 'signal', function: 'safety-input', channel };
+  if (id.startsWith('To')) return { ...base, label: `${id}（テスト出力）`, role: 'supply', supply: TEST, function: 'test-output', channel };
+  return { ...base, label: `${id}（安全出力 OSSD）`, role: 'supply', supply: OSSD, function: 'ossd', channel };
+};
 
 const terminals: TerminalDef[] = ROWS.flatMap(([l, r], i): TerminalDef[] => {
   if (l === '+24V') {
@@ -90,8 +101,8 @@ const terminals: TerminalDef[] = ROWS.flatMap(([l, r], i): TerminalDef[] => {
     ];
   }
   return [
-    { id: l, label: labelOf(l), x: HOLE_L, y: rowY(i), side: 'left', role: 'signal', optional: true },
-    { id: r, label: labelOf(r), x: HOLE_R, y: rowY(i), side: 'right', role: 'signal', optional: true },
+    ioTerminal(l, HOLE_L, rowY(i), 'left'),
+    ioTerminal(r, HOLE_R, rowY(i), 'right'),
   ];
 });
 
@@ -109,6 +120,19 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals,
+  // 安全入力の組（既定の配線として偶数の Si に To0、奇数の Si に To1 を戻す）と安全出力の組
+  safetyChannels: [
+    ...[0, 2, 4, 6].map((n): SafetyChannelGroup => ({
+      id: `Si${n}-Si${n + 1}`,
+      label: `安全入力 Si${n}/Si${n + 1}（To0→Si${n}、To1→Si${n + 1}）`,
+      kind: 'input',
+      mode: 'nc-nc',
+      channels: [{ source: 'To0', input: `Si${n}` }, { source: 'To1', input: `Si${n + 1}` }],
+    })),
+    { id: 'So0-So1', label: '安全出力 So0/So1', kind: 'output', channels: [{ output: 'So0' }, { output: 'So1' }] },
+    { id: 'So2-So3', label: '安全出力 So2/So3', kind: 'output', channels: [{ output: 'So2' }, { output: 'So3' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 60mA（出力負荷は別途）
   loadCurrent: 0.06,
 };

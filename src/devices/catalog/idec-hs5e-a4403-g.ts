@@ -41,8 +41,8 @@ const COLORS: Record<string, string> = {
 const WIRES: { id: string; base: string; stripe?: string; text: string; label: string }[] = [
   { id: 'A2', base: 'white', text: '白 A2(+)', label: 'A2(+)（ソレノイド +24V、白）' },
   { id: 'A1', base: 'black', text: '黒 A1(−)', label: 'A1(−)（ソレノイド 0V、黒）' },
-  { id: '11', base: 'blue', text: '青 11', label: '11（主回路 b 接点、青）' },
-  { id: '42', base: 'blue', stripe: 'white', text: '青白 42', label: '42（主回路 b 接点、青/白）' },
+  { id: '11', base: 'blue', text: '青 11', label: '11（主回路 b 接点・直接開路、青）' },
+  { id: '42', base: 'blue', stripe: 'white', text: '青白 42', label: '42（主回路 b 接点・直接開路、青/白）' },
   { id: '23', base: 'orange', text: '橙 23', label: '23（扉モニタ a 接点、橙）' },
   { id: '24', base: 'orange', stripe: 'white', text: '橙白 24', label: '24（扉モニタ a 接点、橙/白）' },
   { id: '53', base: 'brown', text: '茶 53', label: '53（ロックモニタ a 接点、茶）' },
@@ -134,22 +134,25 @@ const def: DeviceDefinition = {
   description:
     'IDEC HS5E シリーズの電磁ロック式セーフティインタロックスイッチ（スプリングロック: ソレノイド通電で解錠、停電時は施錠を保持。保持力 1400N 以上。表示灯付き、ケーブル 3m）。' +
     'ソレノイド A2(+)/A1(−) は DC24V 266mA（初期値）。主回路 11-42 は扉監視とロック監視の b 接点（直接開路）を内部で直列にしたもので、扉が閉じて施錠されているときだけ閉じる（DC-13 30V 1A）。23-24 は扉モニタ、53-54 はロックモニタの a 接点（PLC への状態入力用）。' +
-    '安全回路では 11-42 を安全リレー・安全コントローラーの入力に、ソレノイドは解錠許可（停止確認後）の出力で駆動する。2 チャンネルが必要な場合は主回路 2 系統の機種（HS5E-DD など）を使う。図では施錠状態として接点を閉とみなす。',
+    '安全回路では 11-42 を安全リレー・安全コントローラーの入力に、ソレノイドは解錠許可（停止確認後）の出力で駆動する。2 チャンネルが必要な場合は主回路 2 系統の機種（HS5E-DD など）を使う。',
   labelPrefix: 'DS',
   width: W,
   height: H,
   svg,
   terminals: WIRES.map((w, i) => {
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
-    if (w.id === 'A2') return { ...base, role: 'input' as const, accepts: { ...solenoid, conductors: ['+' as const] } };
+    // スプリングロック式: 通電で解錠する。施錠の電源チェックのため、機能は + 側（A2）に付ける
+    if (w.id === 'A2') return { ...base, role: 'input' as const, accepts: { ...solenoid, conductors: ['+' as const] }, function: 'unlock-solenoid' as const };
     if (w.id === 'A1') return { ...base, role: 'input' as const, accepts: { ...solenoid, conductors: ['-' as const] } };
     return { ...base, role: 'signal' as const, optional: true };
   }),
+  // 扉閉・施錠状態で主回路 11-42（b 接点・直接開路）が閉、モニタの a 接点 23-24・53-54 が開
   links: [
-    { from: '11', to: '42' },
-    { from: '23', to: '24' },
-    { from: '53', to: '54' },
+    { from: '11', to: '42', switch: 'NC', directOpening: true },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '53', to: '54', switch: 'NO' },
   ],
+  safety: { standards: ['IEC 60947-5-1', 'ISO 14119'] },
   // ソレノイド 266mA（初期値）＋表示灯 10mA
   loadCurrent: 0.28,
 };

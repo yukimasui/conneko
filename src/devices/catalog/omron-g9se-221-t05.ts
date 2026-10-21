@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン セーフティリレーユニット G9SE-221-T05
@@ -140,10 +140,28 @@ const LABELS: Record<string, string> = {
   '48': '48（オフディレー安全出力 2）',
 };
 
+/** テスト出力（テストパルス。T11/T21 から接点を通って T12/T22 へ戻す） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+
+/** 電源以外の端子の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  T11: { role: 'supply', supply: TEST, function: 'test-output', channel: 1 },
+  T12: { function: 'safety-input', channel: 1 },
+  T21: { role: 'supply', supply: TEST, function: 'test-output', channel: 2 },
+  T22: { function: 'safety-input', channel: 2 },
+  // T31 から リセットスイッチ・接触器の b 接点（フィードバックループ）を通って T32（手動）/ T33（自動）へ戻す
+  T31: { function: 'edm' },
+  T32: { function: 'reset' },
+  T33: { function: 'reset' },
+  X1: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
+
 const terminal = (id: string, x: number, y: number, side: 'left' | 'right'): TerminalDef => {
   if (id === 'A1') return { id, label: 'A1（+24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
   if (id === 'A2') return { id, label: 'A2（0V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-  return { id, label: LABELS[id], x, y, side, role: 'signal', optional: true };
+  // 数字の端子は安全出力のリレー接点
+  const spec = /^\d+$/.test(id) ? { function: 'safety-contact' as const } : SPEC[id];
+  return { id, label: LABELS[id], x, y, side, role: 'signal', optional: true, ...spec };
 };
 
 const def: DeviceDefinition = {
@@ -156,18 +174,25 @@ const def: DeviceDefinition = {
     'オムロン G9SE シリーズのオフディレー付きセーフティリレーユニット（幅22.5mm、Push-In Plus 端子）。電源 A1(+)/A2(−) は DC24V（−15%/+10%）。' +
     '安全出力はリレー接点で、瞬時 2a（13-14、23-24）とオフディレー 2a（37-38、47-48。入力が OFF してから設定時間 0〜5 秒後に開く。停止カテゴリ1 用）、AC250V/DC30V 5A。補助出力 X1（PNP）。PL e / カテゴリ4、SIL3。' +
     'オフディレー時間は正面と側面のロータリスイッチ（両方を同じ値に設定）で選び、params の offDelay で表示に反映する。' +
-    '入力・リセットの配線は G9SE-201 と同じ（非常停止 b 接点を T11-T12 と T21-T22、手動リセットは T31 → リセットスイッチ → 接触器 b 接点 → T32、T33 を +24V）。図では接点を閉とみなす。',
+    '入力・リセットの配線は G9SE-201 と同じ（非常停止 b 接点を T11-T12 と T21-T22、手動リセットは T31 → リセットスイッチ → 接触器 b 接点 → T32、T33 を +24V）。',
   labelPrefix: 'SR',
   width: W,
   height: H,
   svg: (p) => svg(Number(p.offDelay)),
   terminals: ROWS.flatMap(([l, r], i) => [terminal(l, COL_L, leftY(i), 'left'), terminal(r, COL_R, rightY(i), 'right')]),
+  // 安全出力のリレー接点（a 接点）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '37', to: '38' },
-    { from: '47', to: '48' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '37', to: '38', switch: 'NO' },
+    { from: '47', to: '48', switch: 'NO' },
   ],
+  safetyChannels: [
+    { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
+    { id: 'OUT', label: '瞬時安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
+    { id: 'OUT-DELAY', label: 'オフディレー安全出力 37-38・47-48', kind: 'output', channels: [{ output: '37' }, { output: '47' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   params: [
     {
       key: 'offDelay',

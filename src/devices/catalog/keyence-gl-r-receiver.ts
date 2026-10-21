@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * KEYENCE セーフティライトカーテン GL-R シリーズ 受光器（GL-R□F/H/L）＋ 11 芯ケーブル GL-RP□PM（PNP）。
@@ -113,6 +113,17 @@ const svg = `
 `;
 
 const power = { system: 'DC' as const, minVoltage: 19.2, maxVoltage: 28.8 };
+/** 安全出力（PNP、各 500mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.5 };
+
+/** 電源・FE 以外の芯線の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  OSSD1: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
+  OSSD2: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
+  RESET: { function: 'reset' },
+  EDM: { function: 'edm' },
+  AUX: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
 
 const def: DeviceDefinition = {
   type: 'keyence.gl-r.receiver',
@@ -134,8 +145,12 @@ const def: DeviceDefinition = {
     if (w.id === '+24V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } };
     if (w.id === '0V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
     if (w.id === 'FE') return { ...base, role: 'ground' as const, optional: true };
-    return { ...base, role: 'signal' as const, optional: true };
+    return { ...base, role: 'signal' as const, optional: true, ...SPEC[w.id] };
   }),
+  safetyChannels: [
+    { id: 'OSSD', label: '安全出力 OSSD1/OSSD2', kind: 'output', channels: [{ output: 'OSSD1' }, { output: 'OSSD2' }] },
+  ],
+  safety: { esType: 4, pl: 'e', category: '4', sil: 3, standards: ['IEC 61496-1', 'IEC 61496-2', 'ISO 13849-1', 'IEC 61508'] },
   // 受光器の消費電流（機種により 66〜111mA。OSSD の負荷電流は別途）
   loadCurrent: 0.111,
 };

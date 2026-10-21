@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SafetyChannelGroup, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン セーフティコントローラ G9SP-N10S（スタンドアロン形、安全入力 10・テスト出力 4・安全出力 4・標準出力 4）。
@@ -142,6 +142,11 @@ const KIND_LABEL: Record<string, string> = {
   O: '標準出力（非安全）',
 };
 const power = { system: 'DC' as const, minVoltage: 20.4, maxVoltage: 26.4 };
+/** テスト出力（PNP）。T3 はムーティングランプ用で 300mA まで、T0〜T2 は小さい */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+const TEST_CURRENT = [0.06, 0.06, 0.03, 0.3];
+/** 安全出力（PNP、各 0.8A） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.8 };
 const POWER_LABEL: Record<string, string> = {
   V1: 'V1（内部・入力回路用 +24V）',
   G1: 'G1（内部・入力回路用 0V）',
@@ -163,8 +168,29 @@ const terminal = (id: string, x: number, y: number, side: 'top' | 'bottom'): Ter
     };
   }
   const kind = id.replace(/\d+$/, '');
-  return { id, label: `${id}（${KIND_LABEL[kind]}）`, x, y, side, role: 'signal', optional: true };
+  const n = Number(id.slice(kind.length));
+  const channel = n % 2 === 0 ? 1 : 2;
+  const base = { id, label: `${id}（${KIND_LABEL[kind]}）`, x, y, side, optional: true };
+  if (kind === 'Si') return { ...base, role: 'signal', function: 'safety-input', channel };
+  if (kind === 'T') return { ...base, role: 'supply', supply: { ...TEST, limitCurrent: TEST_CURRENT[n] }, function: 'test-output', channel };
+  if (kind === 'So') return { ...base, role: 'supply', supply: OSSD, function: 'ossd', channel };
+  return { ...base, role: 'signal', function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } };
 };
+
+/**
+ * 安全入力の組と戻すテスト出力（データシートの配線例: 非常停止 T0→Si0・T1→Si1。
+ * 以降の組は T2/T3 と T0/T1 を交互に割り当てた既定の配線。入力の種類は設定ツールで組ごとに選ぶ）
+ */
+const INPUT_GROUPS: SafetyChannelGroup[] = [0, 2, 4, 6, 8].map((a, k) => {
+  const [ta, tb] = k % 2 === 0 ? ['T0', 'T1'] : ['T2', 'T3'];
+  return {
+    id: `Si${a}-Si${a + 1}`,
+    label: `安全入力 Si${a}/Si${a + 1}（${ta}→Si${a}、${tb}→Si${a + 1}）`,
+    kind: 'input',
+    mode: 'nc-nc',
+    channels: [{ source: ta, input: `Si${a}` }, { source: tb, input: `Si${a + 1}` }],
+  };
+});
 
 const row = (names: string[], x0: number, y: number, side: 'top' | 'bottom') =>
   names.map((n, i) => terminal(n, xs(x0, names.length)[i], y, side)).filter((t): t is TerminalDef => !!t);
@@ -189,6 +215,12 @@ const def: DeviceDefinition = {
     ...row(BOT_IN, BOT_IN_X0, BOT_IN_Y, 'bottom'),
     ...row(BOT_OUT, BOT_OUT_X0, BOT_OUT_Y, 'bottom'),
   ],
+  safetyChannels: [
+    ...INPUT_GROUPS,
+    { id: 'So0-So1', label: '安全出力 So0/So1', kind: 'output', channels: [{ output: 'So0' }, { output: 'So1' }] },
+    { id: 'So2-So3', label: '安全出力 So2/So3', kind: 'output', channels: [{ output: 'So2' }, { output: 'So3' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // N10S の消費電流 400mA（V1 300mA、V2 100mA。出力負荷電流は別途）
   loadCurrent: 0.4,
 };

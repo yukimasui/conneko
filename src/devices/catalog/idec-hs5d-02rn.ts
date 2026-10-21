@@ -105,7 +105,7 @@ const def: DeviceDefinition = {
   description:
     'IDEC HS5D シリーズの小形セーフティインタロックスイッチ（安全ドアスイッチ、樹脂ヘッド、G1/2、M3 ネジ端子）。扉側にアクチュエータ（HS9Z-A51 など）を付け、扉を開けてアクチュエータが抜けると b 接点が強制的に開く。' +
     '主回路 11-12・モニタ回路 21-22 はいずれも直接開路動作（IEC 60947-5-1）の b 接点（DC-13 30V 4A）。ヘッドを外すと 11-12 が開く。' +
-    '2 チャンネルで使う場合は 11-12 と 21-22 を安全リレーの CH1（例: T11-T12）・CH2（T21-T22）に 1 回路ずつ接続する。図ではアクチュエータ挿入（扉閉）状態として接点を閉とみなす。',
+    '2 チャンネルで使う場合は 11-12 と 21-22 を安全リレーの CH1（例: T11-T12）・CH2（T21-T22）に 1 回路ずつ接続する。',
   labelPrefix: 'DS',
   width: W,
   height: H,
@@ -118,10 +118,12 @@ const def: DeviceDefinition = {
     side: 'bottom' as const,
     role: 'signal' as const,
   })),
+  // アクチュエータ挿入（扉閉）で閉じている b 接点（直接開路動作）
   links: [
-    { from: '11', to: '12' },
-    { from: '21', to: '22' },
+    { from: '11', to: '12', switch: 'NC', directOpening: true },
+    { from: '21', to: '22', switch: 'NC', directOpening: true },
   ],
+  safety: { standards: ['IEC 60947-5-1', 'ISO 14119'] },
 };
 
 export default def;

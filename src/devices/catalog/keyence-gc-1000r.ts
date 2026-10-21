@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SafetyChannelGroup, SupplySpec, TerminalDef } from '../types';
 
 /**
  * KEYENCE セーフティコントローラ GC シリーズ メインコントローラ GC-1000R（安全リレー出力内蔵タイプ）。
@@ -177,18 +177,38 @@ const svg = `
 
 const sideOf = (col: 'L' | 'R') => (col === 'L' ? 'left' : 'right') as TerminalDef['side'];
 
+/** テスト出力（最大 100mA） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test', limitCurrent: 0.1 };
+/** 安全出力（PNP・OSSD、最大 500mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.5 };
+
 const ioTerminal = (id: string, x: number, y: number, col: 'L' | 'R'): TerminalDef => {
   const kind = id.slice(0, 2);
-  const label =
-    kind === 'Si'
-      ? `${id}（安全入力）`
-      : kind === 'To'
-        ? `${id}（テスト出力）`
-        : kind === 'So'
-          ? `${id}（安全出力 OSSD）`
-          : `${id}（AUX 出力・非安全）`;
-  return { id, label, x, y, side: sideOf(col), role: 'signal', optional: true };
+  // 偶数番号が CH1、奇数番号が CH2
+  const channel = Number(id.slice(2)) % 2 === 0 ? 1 : 2;
+  const base = { id, x, y, side: sideOf(col), optional: true };
+  if (kind === 'Si') return { ...base, label: `${id}（安全入力）`, role: 'signal', function: 'safety-input', channel };
+  if (kind === 'To') return { ...base, label: `${id}（テスト出力）`, role: 'supply', supply: TEST, function: 'test-output', channel };
+  if (kind === 'So') return { ...base, label: `${id}（安全出力 OSSD）`, role: 'supply', supply: OSSD, function: 'ossd', channel };
+  return { ...base, label: `${id}（AUX 出力・非安全）`, role: 'signal', function: 'aux-output' };
 };
+
+/**
+ * 安全入力の組（偶数・奇数の Si）と、戻すテスト出力（組ごとに To0/To1・To2/To3 を交互に割り当てた既定の配線）。
+ * 入力の種類（b 接点 2 回路・OSSD・非等価など）は設定ソフトで組ごとに選ぶが、ここでは b 接点 2 回路として書く。
+ */
+const inputGroups = (pairs: number, tests: [string, string][]): SafetyChannelGroup[] =>
+  Array.from({ length: pairs }, (_, k) => {
+    const [a, b] = [`Si${k * 2}`, `Si${k * 2 + 1}`];
+    const [ta, tb] = tests[k % tests.length];
+    return { id: `${a}-${b}`, label: `安全入力 ${a}/${b}（${ta}→${a}、${tb}→${b}）`, kind: 'input', mode: 'nc-nc', channels: [{ source: ta, input: a }, { source: tb, input: b }] };
+  });
+/** 安全出力の組（So0/So1 など） */
+const outputGroups = (pairs: number): SafetyChannelGroup[] =>
+  Array.from({ length: pairs }, (_, k) => {
+    const [a, b] = [`So${k * 2}`, `So${k * 2 + 1}`];
+    return { id: `${a}-${b}`, label: `安全出力 ${a}/${b}`, kind: 'output', channels: [{ output: a }, { output: b }] };
+  });
 
 const power = { system: 'DC' as const, minVoltage: 19.2, maxVoltage: 28.8 };
 
@@ -207,6 +227,7 @@ const terminals: TerminalDef[] = [
     side: 'right',
     role: 'signal',
     optional: true,
+    function: 'safety-contact',
   })),
 ];
 
@@ -219,17 +240,24 @@ const def: DeviceDefinition = {
   description:
     'KEYENCE GC シリーズのメインコントローラ（安全リレー出力内蔵タイプ）。安全入力 Si0〜Si13（14 点）、テスト出力 To0〜To3、安全出力 So0〜So3（PNP・OSSD、各 500mA）、AUX 出力 Ao0〜Ao3（非安全）、' +
     '安全リレー出力 SRo 3a（13-14、23-24、33-34、AC250V 6A。DC24V のコイルだけでなく AC200V の接触器も直接開閉できる）。電源は +24V / 0V（DC24V ±20%）。PL e / カテゴリ4、SIL3。' +
-    '2 チャンネル入力は隣り合う偶数・奇数の Si を組にする（例: 非常停止の b 接点 2 回路を To0→Si0、To1→Si1）。EDM は接触器の b 接点（ミラー接点）を直列にして任意の Si に入れ、設定ソフトで割り付ける。図ではリレー出力の接点を閉とみなす。',
+    '2 チャンネル入力は隣り合う偶数・奇数の Si を組にする（例: 非常停止の b 接点 2 回路を To0→Si0、To1→Si1）。EDM は接触器の b 接点（ミラー接点）を直列にして任意の Si に入れ、設定ソフトで割り付ける。',
   labelPrefix: 'SC',
   width: W,
   height: H,
   svg,
   terminals,
+  // 安全リレー出力 SRo（a 接点 3 回路）
   links: [
-    { from: '13', to: '14' },
-    { from: '23', to: '24' },
-    { from: '33', to: '34' },
+    { from: '13', to: '14', switch: 'NO' },
+    { from: '23', to: '24', switch: 'NO' },
+    { from: '33', to: '34', switch: 'NO' },
   ],
+  safetyChannels: [
+    ...inputGroups(7, [['To0', 'To1'], ['To2', 'To3']]),
+    ...outputGroups(2),
+    { id: 'SRo', label: '安全リレー出力 SRo 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 内部消費 200mA 以下（安全出力・テスト出力の負荷電流は別途）
   loadCurrent: 0.2,
 };

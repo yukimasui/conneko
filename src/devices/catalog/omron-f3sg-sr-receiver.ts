@@ -1,4 +1,4 @@
-import type { DeviceDefinition } from '../types';
+import type { DeviceDefinition, SupplySpec, TerminalDef } from '../types';
 
 /**
  * オムロン セーフティライトカーテン F3SG-SR シリーズ 受光器（F3SG-4SRA□-14 など）＋ ルートケーブル F39-JG□C-D（黒、8 芯）。
@@ -101,6 +101,19 @@ const svg = `
 `;
 
 const power = { system: 'DC' as const, minVoltage: 19.2, maxVoltage: 28.8 };
+/** 安全出力（PNP 使用時、各 300mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.3 };
+
+/** 電源以外の芯線の電気的な役割と安全回路での機能 */
+const SPEC: Record<string, Partial<TerminalDef>> = {
+  OSSD1: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
+  OSSD2: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
+  // RESET/EDM 兼用（リセットスイッチと接触器の b 接点を直列にして +24V へ）。EDM の配線チェックを優先して edm にする
+  RESET: { function: 'edm' },
+  MUTE_A: { function: 'muting' },
+  MUTE_B: { function: 'muting' },
+  AUX: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },
+};
 
 const def: DeviceDefinition = {
   type: 'omron.f3sg-sr.receiver',
@@ -120,8 +133,12 @@ const def: DeviceDefinition = {
     const base = { id: w.id, label: w.label, x: TIP_X, y: tipY(i), side: 'right' as const };
     if (w.id === '+24V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['+' as const] } };
     if (w.id === '0V') return { ...base, role: 'input' as const, accepts: { ...power, conductors: ['-' as const] } };
-    return { ...base, role: 'signal' as const, optional: true };
+    return { ...base, role: 'signal' as const, optional: true, ...SPEC[w.id] };
   }),
+  safetyChannels: [
+    { id: 'OSSD', label: '安全出力 OSSD1/OSSD2', kind: 'output', channels: [{ output: 'OSSD1' }, { output: 'OSSD2' }] },
+  ],
+  safety: { esType: 4, pl: 'e', category: '4', sil: 3, standards: ['IEC 61496-1', 'IEC 61496-2', 'ISO 13849-1', 'IEC 61508'] },
   // 受光器の消費電流（例: F3SG-4SRA0160-14 で 106mA。OSSD の負荷電流は別途）
   loadCurrent: 0.11,
 };
