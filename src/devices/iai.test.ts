@@ -190,7 +190,7 @@ describe('非常停止・STO', () => {
   });
 });
 
-describe('プログラムコントローラー（MSEL・XSEL）', () => {
+describe('プログラムコントローラー（MSEL・XSEL・PSEL）', () => {
   it('category は plc で、入出力点がポート番号のラベルを持つ', () => {
     const msel = resolveDevice(def('iai.msel'));
     expect(def('iai.msel').category).toBe('plc');
@@ -258,6 +258,30 @@ describe('プログラムコントローラー（MSEL・XSEL）', () => {
     });
     expect(rulesOf(d('NP'))).not.toContain('signal-polarity');
     expect(errorsOf(d('PN')).map((i) => i.rule)).toContain('signal-polarity');
+  });
+
+  it('PSEL の PIO（34 極）は CB-DS-PIO とつながり、出力ポート 300（13B）から KEYENCE の入力（プラスコモン）へは NPN でエラーなし、PNP だと極性エラー', () => {
+    const psel = resolveDevice(def('iai.psel'));
+    expect(connectorsMate(psel.terminal('I/O')!.connector!, resolveDevice(def('iai.cb-ds-pio')).terminal('CN')!.connector!)).toBe(true);
+    expect(psel.pin('I/O#2')?.label).toContain('IN016');
+    expect(psel.pin('I/O#26')?.label).toContain('OUT300');
+    const d = (io: string): Diagram => ({
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+        { id: 'PSEL1', type: 'iai.psel', x: 0, y: 0, params: { io } },
+        { id: 'CBL1', type: 'iai.cb-ds-pio', x: 0, y: 0 },
+        { id: 'IN1', type: 'keyence.kv-b16xc', x: 0, y: 0 },
+      ],
+      wires: [
+        cable('PSEL1.I/O', 'CBL1.CN'),
+        w('PSU1.+V1', 'CBL1.1A'),
+        w('PSU1.-V1', 'CBL1.17B'),
+        w('CBL1.13B', 'IN1.0'),
+        w('PSU1.+V2', 'IN1.C0'),
+      ],
+    });
+    expect(rulesOf(d('NPN'))).not.toContain('signal-polarity');
+    expect(errorsOf(d('PNP')).map((i) => i.rule)).toContain('signal-polarity');
   });
 });
 
