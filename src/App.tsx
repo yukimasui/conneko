@@ -30,6 +30,7 @@ import { EditorContext, type WireGeometry } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
 import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { assignLanes, stubLength, type LaneInput } from './editor/routing';
@@ -395,6 +396,43 @@ function Editor() {
     if (next !== diagram) applyDiagram(next, `リンク「${gone.join('・')}」がなくなったため、番号付きのリンクを元の名前に戻しました`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linkNameKey]);
+
+  // --- 元に戻す・やり直す ---
+  // 図面全体（位置・曲がり・シート・設定を含む）を文字列にしたものを記録する
+  const snapshot = useMemo(() => JSON.stringify(toDiagramFile(diagram)), [diagram]);
+  const restore = useCallback(
+    (json: string) => {
+      const d = parseDiagram(json);
+      // 戻した結果リンクの名前がなくなっても、番号付きのリンクの名前は変えない
+      skipPromote.current = true;
+      applyDiagram(d);
+      setSettings(d.settings ?? {});
+      const ss = sheetsOf(d);
+      setSheet((cur) => (ss.some((x) => x.id === cur) ? cur : ss[0].id));
+    },
+    [applyDiagram],
+  );
+  const history = useHistory(snapshot, restore);
+  const undo = useCallback(() => history.undo() && notify('元に戻しました'), [history, notify]);
+  const redo = useCallback(() => history.redo() && notify('やり直しました'), [history, notify]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // 文字の入力中はブラウザの文字の取り消しを使う
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
 
   // --- シートの編集 ---
   const addSheet = useCallback(() => {
@@ -770,6 +808,14 @@ function Editor() {
           <div className="brand">
             <img src={iconUrl} alt="" />
             <span>Conneko</span>
+          </div>
+          <div className="toolbar__group">
+            <button type="button" onClick={undo} disabled={!history.canUndo} title="元に戻す（Ctrl+Z）" aria-label="元に戻す">
+              ↶
+            </button>
+            <button type="button" onClick={redo} disabled={!history.canRedo} title="やり直す（Ctrl+Shift+Z / Ctrl+Y）" aria-label="やり直す">
+              ↷
+            </button>
           </div>
           <div className="toolbar__group">
             <button type="button" onClick={newDiagram}>新規</button>
