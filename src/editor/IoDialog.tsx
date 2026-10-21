@@ -233,8 +233,8 @@ function ConnectForm({ diagram, point, family, onConnect, onCancel }: { diagram:
   );
 }
 
-/** PLC の I/O 割付と、I/O と現場の機器の接続を編集するダイアログ */
-export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props) {
+/** PLC の I/O 割付と、I/O と現場の機器の接続の編集（PLC エディタの「I/O 割付」タブ） */
+export function IoEditor({ diagram, deviceId, onApply, onJump }: Omit<Props, 'onClose'>) {
   const system = useMemo(() => ioSystem(diagram, deviceId, getDeviceDefinition), [diagram, deviceId]);
   const [unitId, setUnitId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -246,19 +246,8 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
   const [dragging, setDragging] = useState<IoPoint | null>(null);
 
   if (!system || !system.units.length) {
-    return (
-      <div className="modal-backdrop" onClick={onClose}>
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <h2>I/O 割付</h2>
-          <p className="muted">この機器には入出力がありません。</p>
-          <div className="modal__actions">
-            <button type="button" className="primary" onClick={onClose}>閉じる</button>
-          </div>
-        </div>
-      </div>
-    );
+    return <p className="muted plc-empty">入出力のあるユニットがありません。「ユニット構成」タブでユニットを追加してください。</p>;
   }
-  const hostDef = getDeviceDefinition(system.host.type);
   const family = new Set([system.host.id, ...system.units.map((u) => u.device.id)]);
   const unit = system.units.find((u) => u.device.id === unitId) ?? system.units.find((u) => u.device.id === deviceId) ?? system.units[0];
   const words = filter.trim().toLowerCase();
@@ -282,17 +271,7 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal io-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="io-dialog__head">
-          <h2>
-            I/O 割付 — {system.host.id}
-            <span className="muted">（{hostDef?.model}）</span>
-          </h2>
-          <button type="button" className="io-dialog__close" onClick={onClose} aria-label="閉じる">
-            ✕
-          </button>
-        </div>
+    <>
         <div className="io-dialog__body">
           <nav className="io-units">
             {system.units.map((u) => {
@@ -447,7 +426,6 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
           接続すると、線番を入出力番号にした電線を引きます。別のシートの機器へは、入出力番号を名前にしたリンクを両方のシートに置いてつなぎます。
           番号をドラッグしてほかの番号の行に落とすと、接続先・コメントを入れ替えます。
         </p>
-      </div>
-    </div>
+    </>
   );
 }

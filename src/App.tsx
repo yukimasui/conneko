@@ -21,7 +21,7 @@ import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagr
 import { DEFAULT_WIRE } from './data/wires';
 import { getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
-import type { ParamValues, TerminalSide } from './devices/types';
+import type { TerminalSide } from './devices/types';
 import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode, HANDLE_DEPTH } from './editor/DeviceNode';
@@ -29,7 +29,7 @@ import { FAN_LENGTH } from './editor/CableGraphics';
 import { EditorContext, type WireGeometry } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
-import { IoDialog } from './editor/IoDialog';
+import { PlcEditor, type PlcTab } from './editor/PlcEditor';
 import { IssuePanel } from './editor/IssuePanel';
 import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { assignLanes, stubLength, type LaneInput } from './editor/routing';
@@ -49,7 +49,6 @@ import {
   toDiagramFile,
   type Diagram,
   type DiagramSettings,
-  type Mount,
   type Sheet,
 } from './model/diagram';
 import { sampleDiagram } from './model/sample';
@@ -117,7 +116,7 @@ function Editor() {
   const [sheets, setSheets] = useState<Sheet[]>(() => sheetsOf(sampleDiagram));
   const [sheet, setSheet] = useState<string>(() => sheetsOf(sampleDiagram)[0].id);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  const [ioDevice, setIoDevice] = useState<string | null>(null);
+  const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => loadToggle('conneko.markers'));
   const [showNotes, setShowNotes] = useState(() => loadToggle('conneko.notes'));
@@ -249,6 +248,12 @@ function Editor() {
   // I/O を持つ PLC（親と装着したユニット）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ioDevices = useMemo(() => new Set(ioHosts(diagram, getDeviceDefinition).flatMap((h) => mountFamily(diagram, h))), [topo]);
+  // ユニットを装着できる PLC（親と装着したユニット）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const plcDevices = useMemo(
+    () => new Set(diagram.devices.filter((d) => getDeviceDefinition(d.type)?.bus?.host).flatMap((d) => mountFamily(diagram, d.id))),
+    [topo],
+  );
 
   const context = useMemo(() => {
     const deviceSeverity = new Map<string, Severity>();
@@ -505,26 +510,6 @@ function Editor() {
     [setNodes],
   );
 
-  // 装着先を変える（undefined で解除）。装着したユニットの先頭番号は自動で決まるため、手で入れた値は消す
-  const changeMount = useCallback(
-    (id: string, mount: Mount | undefined) => {
-      setNodes((ns) =>
-        ns.map((n) => {
-          if (n.id !== id) return n;
-          const { mount: _, ...rest } = n.data;
-          const { ioIn: _i, ioOut: _o, ...params } = (n.data.params ?? {}) as ParamValues;
-          // 装着したユニットは親と同じシートに置く
-          const hostSheet = mount ? ns.find((x) => x.id === mount.device)?.data.sheet : undefined;
-          const data = { ...rest, ...(Object.keys(params).length ? { params } : { params: undefined }), ...(mount ? { mount } : {}), sheet: hostSheet ?? rest.sheet };
-          return mount
-            ? { ...n, data, draggable: false }
-            : { ...n, data, draggable: true, zIndex: undefined, position: { x: n.position.x, y: n.position.y + 60 } };
-        }),
-      );
-    },
-    [setNodes],
-  );
-
   const changeNote = useCallback(
     (id: string, note: string) => {
       setNodes((ns) =>
@@ -592,7 +577,8 @@ function Editor() {
       const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
       const peers = (linkPeers.get(name) ?? []).filter((p) => p.id !== node.id);
       const items: MenuItem[] = [
-        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setIoDevice(node.id) }] : []),
+        ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
+        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
         {
           label: node.data.mount ? '別のシートへ移動（親と一緒に）' : '別のシートへ移動',
@@ -605,7 +591,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements],
+    [sheets, linkPeers, ioDevices, plcDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -660,7 +646,7 @@ function Editor() {
       setEdges(flow.edges);
       setSettings(d.settings ?? {});
       setSheets(sheetsOf(d));
-      setIoDevice(null);
+      setPlcEditor(null);
       showSheet(sheetsOf(d)[0].id);
     },
     [setNodes, setEdges, showSheet],
@@ -841,11 +827,11 @@ function Editor() {
           onRenameDevice={renameDevice}
           onParamChange={changeParam}
           onNoteChange={changeNote}
-          onMountChange={changeMount}
           sheets={sheets}
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
           ioDevices={ioDevices}
-          onEditIo={setIoDevice}
+          plcDevices={plcDevices}
+          onOpenPlc={(id, tab) => setPlcEditor({ id, tab })}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
@@ -873,16 +859,18 @@ function Editor() {
           }}
         />
       )}
-      {ioDevice && (
-        <IoDialog
+      {plcEditor && (
+        <PlcEditor
           diagram={diagram}
-          deviceId={ioDevice}
+          deviceId={plcEditor.id}
+          tab={plcEditor.tab}
+          onTab={(tab) => setPlcEditor({ ...plcEditor, tab })}
           onApply={applyDiagram}
           onJump={(id) => {
-            setIoDevice(null);
+            setPlcEditor(null);
             focusDevice(id);
           }}
-          onClose={() => setIoDevice(null)}
+          onClose={() => setPlcEditor(null)}
         />
       )}
       {modal && (

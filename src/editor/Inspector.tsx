@@ -5,7 +5,7 @@ import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
-import { CABLE_WIRE_TYPE, type Mount, type Sheet } from '../model/diagram';
+import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { terminalTitle } from './DeviceNode';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
@@ -25,12 +25,13 @@ interface Props {
   onRenameDevice: (oldId: string, newId: string) => string | null;
   onParamChange: (id: string, key: string, value: number | string) => void;
   onNoteChange: (id: string, note: string) => void;
-  onMountChange: (id: string, mount: Mount | undefined) => void;
   sheets: Sheet[];
   onSheetChange: (id: string, sheet: string) => void;
   /** I/O を持つ PLC（親・ユニット）の機器ID */
   ioDevices: Set<string>;
-  onEditIo: (id: string) => void;
+  /** ユニットを装着できる PLC（親・ユニット）の機器ID */
+  plcDevices: Set<string>;
+  onOpenPlc: (id: string, tab: 'rack' | 'io') => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -132,46 +133,37 @@ function safetyText(s: SafetyRating): string {
     .join(' / ');
 }
 
-/** 増設ユニットの装着先と位置 */
-function MountField({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefinition; props: Props }) {
+/** 増設ユニットの装着先（変更は PLC エディタで行う） */
+function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefinition; props: Props }) {
+  const mount = node.data.mount;
   const hosts = props.nodes.filter((n) => {
     const d = getDeviceDefinition(n.data.deviceType);
     return n.id !== node.id && !n.data.mount && d && busAccepts(d, def);
   });
-  const mount = node.data.mount;
-  const nextSlot = (host: string) =>
-    Math.max(0, ...props.nodes.filter((n) => n.data.mount?.device === host && n.id !== node.id).map((n) => n.data.mount!.slot)) + 1;
   return (
     <div className="field">
       <span>装着先</span>
-      <div className="mount-row">
-        <select
-          value={mount?.device ?? ''}
-          onChange={(e) => props.onMountChange(node.id, e.target.value ? { device: e.target.value, slot: nextSlot(e.target.value) } : undefined)}
-        >
-          <option value="">なし（単独で配置）</option>
+      {mount ? (
+        <div className="mount-row">
+          <span>
+            {mount.device} の位置 {mount.slot}
+          </span>
+          <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
+            PLC エディタで変更…
+          </button>
+        </div>
+      ) : hosts.length ? (
+        <div className="mount-row">
+          <span className="muted small">未装着</span>
           {hosts.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.id}（{getDeviceDefinition(h.data.deviceType)?.model}）
-            </option>
+            <button key={h.id} type="button" onClick={() => props.onOpenPlc(h.id, 'rack')}>
+              {h.id} の PLC エディタ…
+            </button>
           ))}
-        </select>
-        {mount && (
-          <label className="mount-slot" title="装着する位置（親に近い順に 1, 2, …）">
-            位置
-            <input
-              type="number"
-              min={1}
-              value={mount.slot}
-              onChange={(e) => {
-                const slot = Math.max(1, Math.round(Number(e.target.value) || 1));
-                props.onMountChange(node.id, { ...mount, slot });
-              }}
-            />
-          </label>
-        )}
-      </div>
-      {!hosts.length && !mount && <small className="muted">装着できる機器（CPU・ベースユニットなど）が図面にありません</small>}
+        </div>
+      ) : (
+        <small className="muted">装着できる機器（CPU・ベースユニットなど）が図面にありません</small>
+      )}
     </div>
   );
 }
@@ -272,13 +264,22 @@ export function Inspector(props: Props) {
               {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
-            {def.bus && !def.bus.host && <MountField node={node} def={def} props={props} />}
+            {def.bus && !def.bus.host && <MountInfo node={node} def={def} props={props} />}
             {def.bus?.host && <BusHostInfo id={node.id} bus={props.bus} />}
             {def.bus?.io && resolved && <IoHeadField node={node} def={def} params={resolved.params} props={props} />}
-            {props.ioDevices.has(node.id) && (
-              <button type="button" className="primary" onClick={() => props.onEditIo(node.id)}>
-                I/O 割付・接続を編集…
-              </button>
+            {(props.plcDevices.has(node.id) || props.ioDevices.has(node.id)) && (
+              <div className="plc-buttons">
+                {props.plcDevices.has(node.id) && (
+                  <button type="button" onClick={() => props.onOpenPlc(node.id, 'rack')}>
+                    ユニット構成…
+                  </button>
+                )}
+                {props.ioDevices.has(node.id) && (
+                  <button type="button" className="primary" onClick={() => props.onOpenPlc(node.id, 'io')}>
+                    I/O 割付・接続…
+                  </button>
+                )}
+              </div>
             )}
             {def.params?.map((p) =>
               p.input === 'text' ? (
