@@ -212,12 +212,16 @@ export const toPins = (pts: IoPoint[]): PinDef[] =>
       return ca === cb ? Number(na) - Number(nb) : ca < cb ? -1 : 1;
     });
 
-/** KV のリレー番号（チャンネル ch、ビット bit → 'R' + ch + 2桁） */
-export const relay = (ch: number, bit: number) => `R${ch}${String(bit).padStart(2, '0')}`;
+/**
+ * 信号名（ユニットの先頭リレー番号からの相対番号。チャンネル ch、ビット bit → 'IN 000' / 'OUT 115' など）。
+ * 実際のリレー番号は KV STUDIO の割付（装着位置）で決まる（例: 先頭 R1000 なら IN 000 → R1000）。
+ */
+export const signalName = (kind: 'in' | 'out', ch: number, bit: number) =>
+  `${kind === 'in' ? 'IN' : 'OUT'} ${ch}${String(bit).padStart(2, '0')}`;
 
 /**
  * KEYENCE 34極 I/O コネクタ（左列 No.1〜16 = 16点 + No.17 = COM、右列 No.18〜33 = 16点 + No.34 = COM）のピン。
- * chL / chH: 左列・右列のリレー番号のチャンネル。kindL / kindH: 'in' か 'out'。comL / comH: COM の種類。
+ * left / right: 左列・右列のチャンネル（信号名の百の位）、入出力の種類、COM の種類と名前。
  */
 export function mil34IoPins(
   cn: string,
@@ -230,10 +234,14 @@ export function mil34IoPins(
     const side = k <= 17 ? left : right;
     const bit = k <= 17 ? k - 1 : k - 18;
     if (k === 17 || k === 34) pts.push({ id, label: `${side.comName} (No.${k})`, kind: side.com });
-    else pts.push({ id, label: `${relay(side.ch, bit)} (No.${k})`, kind: side.kind });
+    else pts.push({ id, label: `${signalName(side.kind, side.ch, bit)} (No.${k})`, kind: side.kind });
   }
   return pts;
 }
+
+/** 出力ピンと COM の導通（出力 ON / 接点「閉」とみなす）。sink は出力→COM、source は COM→出力 */
+export const outputLinks = (pts: IoPoint[], com: string) =>
+  pts.filter((p) => p.kind === 'out').map((p) => ({ from: p.id, to: com }));
 
 /* ------------------------------------------------------------------ */
 /* 脱着式ネジ端子台（KV-B16XC など 18 端子・2列千鳥）                    */
@@ -283,6 +291,68 @@ export function staggeredBlock(opts: {
         : text(p.x - r - 1.2, p.y + 1.3, label, 3.3, '#e6e7e9', 'end');
   }
   return { svg: s, pos, height: h };
+}
+
+/* ------------------------------------------------------------------ */
+/* MIL コネクタタイプのユニット（KV-C64XC / C32TD / SIR32XT など）       */
+/* ------------------------------------------------------------------ */
+
+export interface MilUnitSpec {
+  type: string;
+  model: string;
+  name: string;
+  description: string;
+  labelPrefix: string;
+  width: number;
+  height?: number;
+  connectors: { id: string; cx: number; cy: number; poles: number; label: string; tag?: string }[];
+  pins: IoPoint[];
+  links?: { from: string; to: string }[];
+  /** 本体の上に重ねて描く要素（スイッチ・LED など） */
+  extra?: string;
+  /** 型式の文字サイズ */
+  modelSize?: number;
+}
+
+export function buildMilUnit(s: MilUnitSpec): DeviceDefinition {
+  const W = s.width;
+  const H = s.height ?? KV_H;
+  const svg = `
+  ${kvDefs()}
+  ${kvBody(W, H, s.model, { modelSize: s.modelSize })}
+  ${s.extra ?? ''}
+  ${s.connectors
+    .map((c) => {
+      const h = milHeaderVHeight(c.poles);
+      return `${milHeaderV(c.cx, c.cy, c.poles)}${c.tag ? text(c.cx, +(c.cy - h / 2 - 1.5).toFixed(2), c.tag, 3.6, '#e6e7e9') : ''}`;
+    })
+    .join('')}`;
+  return {
+    type: s.type,
+    name: s.name,
+    model: s.model,
+    maker: 'KEYENCE',
+    category: 'plc',
+    description: s.description,
+    labelPrefix: s.labelPrefix,
+    width: W,
+    height: H,
+    svg,
+    terminals: s.connectors.map(
+      (c): TerminalDef => ({
+        id: c.id,
+        label: c.label,
+        x: c.cx,
+        y: c.cy,
+        side: 'bottom',
+        role: 'connector',
+        connector: { kind: `MIL${c.poles}`, pins: c.poles, width: 23 },
+        optional: true,
+      }),
+    ),
+    pins: toPins(s.pins),
+    links: s.links,
+  };
 }
 
 /* ------------------------------------------------------------------ */
