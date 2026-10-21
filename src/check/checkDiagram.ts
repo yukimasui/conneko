@@ -190,7 +190,7 @@ function computeProtection(m: Model): Map<string, number> {
     add(a, { to: b });
     add(b, { to: a });
   }
-  for (const [a, b] of m.cablePairs) {
+  for (const [a, b] of [...m.cablePairs, ...m.labelLinks]) {
     add(a, { to: b });
     add(b, { to: a });
   }

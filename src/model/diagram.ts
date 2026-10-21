@@ -24,6 +24,16 @@ export interface DiagramDevice {
   params?: ParamValues;
   /** 増設ユニットの連結・ベースユニットへの装着（装着先の機器名と位置。位置は 1 から） */
   mount?: Mount;
+  /** 配置するシートのID（省略時は最初のシート） */
+  sheet?: string;
+  /** 端子・ピンごとのコメント（PLC の入出力のコメントなど。キーは端子IDまたはピンID） */
+  comments?: Record<string, string>;
+}
+
+/** 図面のシート（回路の意味ごとに分けるタブ） */
+export interface Sheet {
+  id: string;
+  name: string;
 }
 
 export interface Mount {
@@ -62,6 +72,21 @@ export interface Diagram {
   devices: DiagramDevice[];
   wires: DiagramWire[];
   settings?: DiagramSettings;
+  /** シート。省略時は 1 枚（DEFAULT_SHEET） */
+  sheets?: Sheet[];
+}
+
+export const DEFAULT_SHEET: Sheet = { id: 'S1', name: 'シート1' };
+
+/** 図面のシート一覧（未指定なら既定の 1 枚） */
+export function sheetsOf(d: Diagram): Sheet[] {
+  return d.sheets?.length ? d.sheets : [DEFAULT_SHEET];
+}
+
+/** 機器のシートID（未指定・存在しないシートなら最初のシート） */
+export function sheetOf(d: Diagram, device: DiagramDevice): string {
+  const sheets = sheetsOf(d);
+  return device.sheet && sheets.some((s) => s.id === device.sheet) ? device.sheet : sheets[0].id;
 }
 
 export interface DiagramFile extends Diagram {
@@ -81,6 +106,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
     version: DIAGRAM_VERSION,
     ...(title ? { title } : {}),
     ...(diagram.settings && Object.keys(diagram.settings).length ? { settings: diagram.settings } : {}),
+    ...(diagram.sheets?.length ? { sheets: diagram.sheets } : {}),
     devices: diagram.devices.map((d) => ({
       id: d.id,
       type: d.type,
@@ -88,6 +114,8 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       y: Math.round(d.y),
       ...(d.params && Object.keys(d.params).length ? { params: d.params } : {}),
       ...(d.mount ? { mount: d.mount } : {}),
+      ...(d.sheet && diagram.sheets?.length ? { sheet: d.sheet } : {}),
+      ...(d.comments && Object.keys(d.comments).length ? { comments: d.comments } : {}),
     })),
     wires: diagram.wires.map((w) => ({
       id: w.id,
@@ -154,6 +182,8 @@ export function parseDiagram(input: string | unknown): Diagram {
       y: typeof d.y === 'number' ? d.y : 0,
       ...(isObj(d.params) ? { params: d.params as ParamValues } : {}),
       ...(parseMount(d.mount) ?? {}),
+      ...(typeof d.sheet === 'string' && d.sheet ? { sheet: d.sheet } : {}),
+      ...(isObj(d.comments) ? { comments: Object.fromEntries(Object.entries(d.comments).filter(([, v]) => typeof v === 'string')) as Record<string, string> } : {}),
     };
   });
   const ids = new Set<string>();
@@ -183,7 +213,21 @@ export function parseDiagram(input: string | unknown): Diagram {
   if (isObj(raw.settings) && typeof raw.settings.requiredPL === 'string' && /^[a-e]$/.test(raw.settings.requiredPL)) {
     settings.requiredPL = raw.settings.requiredPL as DiagramSettings['requiredPL'];
   }
-  return { devices, wires, ...(Object.keys(settings).length ? { settings } : {}) };
+  // シートは { "id", "name" } の配列。name だけ・文字列だけでも受け付ける
+  const sheets: Sheet[] = [];
+  if (Array.isArray(raw.sheets)) {
+    raw.sheets.forEach((v, i) => {
+      const id = isObj(v) && typeof v.id === 'string' && v.id ? v.id : typeof v === 'string' ? v : `S${i + 1}`;
+      const name = isObj(v) && typeof v.name === 'string' && v.name ? v.name : typeof v === 'string' ? v : `シート${i + 1}`;
+      if (!sheets.some((s) => s.id === id)) sheets.push({ id, name });
+    });
+  }
+  return {
+    devices,
+    wires,
+    ...(Object.keys(settings).length ? { settings } : {}),
+    ...(sheets.length ? { sheets } : {}),
+  };
 }
 
 /** mount は { "device": "PLC1", "slot": 1 } のほか "PLC1" や "PLC1#2" の文字列も受け付ける */

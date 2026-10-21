@@ -5,6 +5,7 @@ import type { DeviceCategory, DeviceDefinition } from '../devices/types';
 export const DEVICE_DRAG_TYPE = 'application/x-conneko-device';
 
 const CATEGORY_NAMES: Record<DeviceCategory, string> = {
+  link: 'リンク（シート間の接続）',
   'power-source': '電源',
   breaker: 'ブレーカー',
   contactor: '開閉器',

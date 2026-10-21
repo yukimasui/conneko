@@ -335,6 +335,8 @@ export interface ParamDef {
   key: string;
   label: string;
   unit?: string;
+  /** 'select'（既定）: options から選ぶ。'text': 自由に入力する（options は空でよい） */
+  input?: 'select' | 'text';
   options: ParamOption[];
   default: number | string;
 }
@@ -349,7 +351,8 @@ export type DeviceCategory =
   | 'control'
   | 'plc'
   | 'sensor'
-  | 'safety';
+  | 'safety'
+  | 'link';
 
 /**
  * コネクタのピン（画面上の端子としては表示しない）。
@@ -402,6 +405,10 @@ export interface DeviceDefinition {
    * 例: 三相モーター [['U','V','W']]、単相入力 [['L','N']]
    */
   distinctGroups?: string[][];
+  /**
+   * リンク（他のシートへ電線を飛ばす記号）の場合に指定する。param に書いた名前が同じリンクどうしの terminal が導通する。
+   */
+  netLabel?: { param: string; terminal: string };
   /** コモンあたりの電流の上限 */
   commonLimits?: ParamDependent<CommonLimit[]>;
   /** 安全回路のチャンネルの組 */

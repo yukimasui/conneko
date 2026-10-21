@@ -102,8 +102,10 @@ export interface Model {
   /** ケーブルで導通するピンの組 */
   cablePairs: [string, string][];
   wiresAt: Map<string, DiagramWire[]>;
-  /** 常時導通の内部経路（端子キーの組） */
+  /** 常時導通の内部経路（端子キーの組。リンクによる導通も含む） */
   fixedLinks: [string, string][];
+  /** 同じ名前のリンクによる導通（端子キーの組） */
+  labelLinks: [string, string][];
   switchLinks: SwitchLink[];
   fixed: UnionFind;
   all: UnionFind;
@@ -287,6 +289,33 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     }
   }
 
+  // リンク: 名前が同じリンクの端子どうしを常時導通とみなす
+  const linkNets = new Map<string, string[]>();
+  const labelLinks: [string, string][] = [];
+  for (const { device, def, r } of devices.values()) {
+    if (!def.netLabel) continue;
+    const name = String(r.params[def.netLabel.param] ?? '').trim();
+    const k = key(device.id, def.netLabel.terminal);
+    if (!name) {
+      push({ severity: 'warning', rule: 'link-unnamed', message: `${device.id}: リンクに名前がありません（同じ名前のリンクどうしがつながります）`, devices: [device.id], wires: [] });
+      continue;
+    }
+    linkNets.set(name, [...(linkNets.get(name) ?? []), k]);
+    if (!wiresAt.has(k)) {
+      push({ severity: 'warning', rule: 'link-unwired', message: `${device.id}: リンク「${name}」に電線がつながっていません`, devices: [device.id], wires: [] });
+    }
+  }
+  for (const [name, ks] of linkNets) {
+    if (ks.length === 1) {
+      const id = ks[0].split(':')[0];
+      push({ severity: 'warning', rule: 'link-alone', message: `${id}: リンク「${name}」の相手がありません（同じ名前のリンクを置きます）`, devices: [id], wires: [] });
+    }
+    for (let i = 1; i < ks.length; i++) {
+      fixedLinks.push([ks[0], ks[i]]);
+      labelLinks.push([ks[0], ks[i]]);
+    }
+  }
+
   const fixed = new UnionFind();
   for (const w of wires) fixed.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
   for (const [a, b] of cablePairs) fixed.union(a, b);
@@ -321,6 +350,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     cablePairs,
     wiresAt,
     fixedLinks,
+    labelLinks,
     switchLinks,
     fixed,
     all,
