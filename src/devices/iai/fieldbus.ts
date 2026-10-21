@@ -104,6 +104,8 @@ export function fieldbusBlock(
   area: { x: number; y: number; w: number; h: number },
   side: 'left' | 'right' = 'left',
   labelColor = '#e9eef0',
+  /** ポートの印字（IN / OUT など）を横（既定）でなくポートの上に書く */
+  labelAbove = false,
 ): { svg: string; terminals: TerminalDef[] } {
   const cx = n2(area.x + area.w / 2);
   const lx = side === 'left' ? area.x + area.w + 1 : area.x - 1;
@@ -135,7 +137,7 @@ export function fieldbusBlock(
     const ys = two ? [y0, y0 + 33] : [y0 + 12];
     ys.forEach((y, i) => {
       svg += rj45V(cx, y);
-      svg += lbl(y + 1, labels[i], 2.8);
+      svg += labelAbove ? text(cx + 10, y - 16.2, labels[i], 2.6, labelColor, 'end') : lbl(y + 1, labels[i], 2.8);
     });
     svg += text(cx, ys[ys.length - 1] + 20, name, 2.4, labelColor);
     // EtherCAT は下の IN を NET1、上の OUT を NET2 にする（IN から先につなぐ）

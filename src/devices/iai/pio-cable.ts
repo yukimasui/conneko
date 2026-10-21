@@ -27,15 +27,20 @@ export const IAI_COLORS = [
 ];
 
 /** k 本目（0 から）の線色（'茶-1' など） */
-export const leadColor = (k: number) => ({ ...IAI_COLORS[k % 10], mark: Math.floor(k / 10) + 1 });
+export const leadColor = (k: number) => (k < 0 ? { name: '', hex: '#c9ccd0', mark: 0 } : { ...IAI_COLORS[k % 10], mark: Math.floor(k / 10) + 1 });
+
+/** 線色の表記（'茶-1'。色が不明な芯線は空） */
+const colorName = (c: ReturnType<typeof leadColor>) => (c.name ? `${c.name}-${c.mark}` : '');
 
 export interface PioLead {
   /** 端子ID（マニュアルのピン番号の表記。'1A'、'25' など） */
   id: string;
   /** つながるコネクターのピン番号（ピンID '<CN>#<番号>' の番号） */
   pin: number;
-  /** 線色（IAI_COLORS の順の何本目か） */
+  /** 線色（IAI_COLORS の順の何本目か。線色が公開資料で確認できない場合は −1 で灰色に描く） */
   colorIndex: number;
+  /** 芯線の印字（省略時は id と線色） */
+  label?: string;
   /** 補足（どのコントローラーで何の信号か） */
   note?: string;
 }
@@ -130,8 +135,8 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
       const c = leadColor(l.colorIndex);
       return {
         id: l.id,
-        label: `${l.id} ${c.name}-${c.mark}`,
-        note: l.note ?? `コネクターのピン ${l.id} につながる芯線（${c.name}-${c.mark}）`,
+        label: l.label ?? [l.id, colorName(c)].filter(Boolean).join(' '),
+        note: l.note ?? `コネクターのピン ${l.id} につながる芯線${colorName(c) ? `（${colorName(c)}）` : ''}`,
         x: xs[i],
         y: yEnd,
         side: 'bottom',
@@ -141,6 +146,10 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
     }),
   ];
   const pins: PinDef[] = s.leads.map((l) => ({ id: `CN#${l.pin}`, label: `ピン ${l.id}`, role: 'pass', optional: true }));
+  // 芯線のないピン（未使用）
+  for (let k = 1; k <= s.poles; k++) {
+    if (!s.leads.some((l) => l.pin === k)) pins.push({ id: `CN#${k}`, label: `ピン ${k}（芯線なし）`, role: 'signal', optional: true });
+  }
   const links: InternalLink[] = s.leads.map((l) => ({ from: `CN#${l.pin}`, to: l.id }));
 
   return {
