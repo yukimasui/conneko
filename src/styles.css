@@ -1317,25 +1317,19 @@ textarea {
   background: #eef4ff;
 }
 
-/* --- I/O の入れ替え --- */
-.io-swap {
-  padding: 1px 7px;
-  font-size: 12px;
-  border-radius: 10px;
-  white-space: nowrap;
+/* --- I/O の入れ替え（番号をドラッグ） --- */
+.io-address.is-draggable {
+  cursor: grab;
 }
-.io-swap.is-target:not(:disabled) {
+.io-address__grip {
+  color: #b6bec9;
+  margin-right: 3px;
+  font-weight: 400;
+}
+.io-address.is-draggable:hover .io-address__grip {
   color: var(--accent);
-  border-color: var(--accent);
-}
-.io-swap.is-active {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
 }
 .io-table tr.is-swap td {
   background: #fef9c3;
-}
-.io-banner.is-swap {
-  background: #e0f2fe;
+  opacity: 0.7;
 }

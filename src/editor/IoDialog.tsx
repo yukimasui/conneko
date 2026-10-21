@@ -67,6 +67,8 @@ function rankTerminals(
 
 /** 機器の端子をパッチボードから I/O の行へドラッグするときのデータの種類 */
 const TERMINAL_MIME = 'application/x-conneko-terminal';
+/** I/O の番号を別の I/O の行へドラッグして入れ替えるときのデータの種類 */
+const IO_MIME = 'application/x-conneko-io';
 
 interface FieldTerminal {
   ref: TerminalRef;
@@ -238,8 +240,8 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
   const [onlyFree, setOnlyFree] = useState(false);
   const [picked, setPicked] = useState<TerminalRef | null>(null);
   const [dropRow, setDropRow] = useState<string | null>(null);
-  /** 入れ替え元の I/O 点 */
-  const [swapFrom, setSwapFrom] = useState<IoPoint | null>(null);
+  /** 番号をドラッグして入れ替えようとしている I/O 点 */
+  const [dragging, setDragging] = useState<IoPoint | null>(null);
 
   if (!system || !system.units.length) {
     return (
@@ -305,16 +307,6 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
             })}
           </nav>
           <section className="io-table-wrap">
-            {swapFrom && (
-              <div className="io-banner is-swap">
-                <span>
-                  {swapFrom.address}（{swapFrom.comment || '接続なし'}）と入れ替える I/O の「⇄ ここ」を押してください。
-                </span>
-                <button type="button" onClick={() => setSwapFrom(null)}>
-                  やめる
-                </button>
-              </div>
-            )}
             <div className="io-toolbar">
               <input type="search" placeholder="番号・コメント・接続先で絞り込み" value={filter} onChange={(e) => setFilter(e.target.value)} />
               <label className="muted small">
@@ -343,16 +335,18 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                   <th>コメント</th>
                   <th>接続先</th>
                   <th>経由</th>
-                  <th title="2 つの I/O の接続先・コメントを入れ替える">入替</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((p) => (
                   <tr
                     key={pointKey(p)}
-                    className={`${p.dir === 'in' ? 'is-in' : 'is-out'}${dropRow === pointKey(p) ? ' is-drop' : ''}${picked && p.endpoint ? ' is-pickable' : ''}${swapFrom && pointKey(swapFrom) === pointKey(p) ? ' is-swap' : ''}`}
+                    className={`${p.dir === 'in' ? 'is-in' : 'is-out'}${dropRow === pointKey(p) ? ' is-drop' : ''}${picked && p.endpoint ? ' is-pickable' : ''}${dragging && pointKey(dragging) === pointKey(p) ? ' is-swap' : ''}`}
                     onDragOver={(e) => {
-                      if (!p.endpoint || !e.dataTransfer.types.includes(TERMINAL_MIME)) return;
+                      if (!p.endpoint) return;
+                      // 機器の端子（パッチボードから）、または同じ向きの別の I/O の番号（入れ替え）を受け付ける
+                      const swap = e.dataTransfer.types.includes(IO_MIME) && dragging && dragging.dir === p.dir && pointKey(dragging) !== pointKey(p);
+                      if (!e.dataTransfer.types.includes(TERMINAL_MIME) && !swap) return;
                       e.preventDefault();
                       setDropRow(pointKey(p));
                     }}
@@ -360,14 +354,33 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                     onDrop={(e) => {
                       setDropRow(null);
                       const raw = e.dataTransfer.getData(TERMINAL_MIME);
-                      if (raw && p.endpoint) connect(p, JSON.parse(raw) as TerminalRef);
+                      if (raw && p.endpoint) return connect(p, JSON.parse(raw) as TerminalRef);
+                      const from = dragging;
+                      setDragging(null);
+                      if (from && e.dataTransfer.getData(IO_MIME) && p.endpoint) {
+                        onApply(swapIo(diagram, from, p, getDeviceDefinition), `${from.address} と ${p.address} を入れ替えました`);
+                      }
                     }}
                     onClick={(e) => {
                       if (!picked || !p.endpoint || (e.target as Element).closest('input,button,select')) return;
                       connect(p, picked);
                     }}
                   >
-                    <td className="io-address" title={p.label}>
+                    <td
+                      className={`io-address${p.endpoint ? ' is-draggable' : ''}`}
+                      title={p.endpoint ? `${p.label}（ドラッグしてほかの番号に落とすと入れ替え）` : p.label}
+                      draggable={!!p.endpoint}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(IO_MIME, pointKey(p));
+                        e.dataTransfer.effectAllowed = 'move';
+                        setDragging(p);
+                      }}
+                      onDragEnd={() => {
+                        setDragging(null);
+                        setDropRow(null);
+                      }}
+                    >
+                      <span className="io-address__grip">⠿</span>
                       {p.address}
                     </td>
                     <td className="muted small">{pointKind(p)}</td>
@@ -420,37 +433,6 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
                       </div>
                     </td>
                     <td className="muted small">{p.via.join('・')}</td>
-                    <td>
-                      {swapFrom && pointKey(swapFrom) === pointKey(p) ? (
-                        <button type="button" className="io-swap is-active" onClick={() => setSwapFrom(null)} title="入れ替えをやめる">
-                          取消
-                        </button>
-                      ) : swapFrom ? (
-                        <button
-                          type="button"
-                          className="io-swap is-target"
-                          disabled={swapFrom.dir !== p.dir || !p.endpoint}
-                          onClick={() => {
-                            const from = swapFrom;
-                            setSwapFrom(null);
-                            onApply(swapIo(diagram, from, p, getDeviceDefinition), `${from.address} と ${p.address} を入れ替えました`);
-                          }}
-                          title={`${swapFrom.address} と入れ替える`}
-                        >
-                          ⇄ ここ
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="io-swap"
-                          disabled={!p.endpoint}
-                          onClick={() => setSwapFrom(p)}
-                          title="ほかの I/O と入れ替える（次に入れ替え先を選ぶ）"
-                        >
-                          ⇅
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -461,6 +443,7 @@ export function IoDialog({ diagram, deviceId, onApply, onJump, onClose }: Props)
         </div>
         <p className="muted small io-dialog__foot">
           接続すると、線番を入出力番号にした電線を引きます。別のシートの機器へは、入出力番号を名前にしたリンクを両方のシートに置いてつなぎます。
+          番号をドラッグしてほかの番号の行に落とすと、接続先・コメントを入れ替えます。
         </p>
       </div>
     </div>
