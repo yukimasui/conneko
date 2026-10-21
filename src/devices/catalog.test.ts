@@ -2,7 +2,9 @@
  * 全機器定義の整合性（パラメータの全選択肢で端子・ピン・内部経路・SVG を検査する）。
  */
 import { describe, expect, it } from 'vitest';
-import { deviceDefinitions } from './registry';
+import { checkDiagram } from '../check/checkDiagram';
+import { buildAiPrompt } from '../io/aiPrompt';
+import { deviceDefinitions, getDeviceDefinition } from './registry';
 import { paramVariants, validateDefinition } from './validate';
 
 describe('全機器定義', () => {
@@ -14,5 +16,12 @@ describe('全機器定義', () => {
   it.each(deviceDefinitions.map((d) => [d.type, d] as const))('%s', (_, def) => {
     const problems = paramVariants(def).flatMap((p) => validateDefinition(def, p).map((m) => `${JSON.stringify(p)} ${m}`));
     expect([...new Set(problems)]).toEqual([]);
+  });
+
+  it('どの機器も、1 台だけ置いてチェック・AI 用プロンプトの作成ができる', () => {
+    for (const def of deviceDefinitions) {
+      const d = { devices: [{ id: 'X1', type: def.type, x: 0, y: 0 }], wires: [] };
+      expect(() => buildAiPrompt(d, checkDiagram(d, getDeviceDefinition)), def.type).not.toThrow();
+    }
   });
 });
