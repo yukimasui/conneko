@@ -341,7 +341,7 @@ describe('安全機器の安全回路用の定義', () => {
   });
 
   it('安全コントローラー・セーフティリレー・ライトカーテン受光器・スキャナにチャンネルの組がある', () => {
-    const withChannels = SAFETY_TYPES.filter((t) => getDeviceDefinition(t)!.safetyChannels?.length);
+    const withChannels = SAFETY_TYPES.filter((t) => resolveDevice(getDeviceDefinition(t)!).safetyChannels.length);
     expect(withChannels.sort()).toEqual(
       [
         'idec.fs1b-c31s',
@@ -405,5 +405,432 @@ describe('安全機器の安全回路用の定義', () => {
     for (const type of ['keyence.gl-r.receiver', 'keyence.gl-r.emitter', 'omron.f3sg-sr.receiver', 'omron.f3sg-sr.emitter']) {
       expect(getDeviceDefinition(type)!.safety).toMatchObject({ esType: 4, pl: 'e', category: '4' });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 実機の定義で安全回路のルールを確認する
+// ---------------------------------------------------------------------------
+
+/** 安全回路のルール */
+const SAFETY_RULES = new Set([
+  'safety-channel-partial',
+  'safety-channel-cross',
+  'safety-channel-open',
+  'safety-test-bypass',
+  'ossd-to-test-input',
+  'ossd-short',
+  'estop-not-nc',
+  'not-direct-opening',
+  'safety-output-partial',
+  'single-channel-output',
+  'edm-missing',
+  'edm-not-linked',
+  'common-0v',
+  'reset-auto',
+  'lock-power-source',
+  'safety-rating',
+]);
+
+/** リセット用の押しボタン（a 接点 1 個。テスト用の最小の定義） */
+const resetButton: DeviceDefinition = {
+  type: 'test.reset-button',
+  name: 'リセットボタン',
+  model: '1a',
+  category: 'control',
+  labelPrefix: 'PB',
+  width: 10,
+  height: 10,
+  svg: '',
+  terminals: [
+    { id: '13', x: 0, y: 0, side: 'top', role: 'signal' },
+    { id: '14', x: 0, y: 10, side: 'bottom', role: 'signal' },
+  ],
+  links: [{ from: '13', to: '14', switch: 'NO' }],
+};
+const lookupWithButton = (type: string) => (type === resetButton.type ? resetButton : getDeviceDefinition(type));
+
+const safetyIssues = (d: Diagram) => checkDiagram(d, lookupWithButton).filter((i) => SAFETY_RULES.has(i.rule));
+const rulesOf = (d: Diagram) => safetyIssues(d).map((i) => `${i.severity}:${i.rule}`);
+
+const dev = (id: string, type: string, params?: Record<string, number | string>) => ({ id, type, x: 0, y: 0, ...(params ? { params } : {}) });
+
+/** セーフティリレーの出力 13-14・23-24 で接触器 MC1・MC2 を駆動する配線（+24V は PSU1.+V2） */
+const relayOutputs = (sr: string): DiagramWire[] => [
+  w('PSU1.+V2', `${sr}.13`),
+  w(`${sr}.13`, `${sr}.23`),
+  w(`${sr}.14`, 'MC1.A1'),
+  w(`${sr}.24`, 'MC2.A1'),
+  w('MC1.A2', 'PSU1.-V2'),
+  w('MC2.A2', 'PSU1.-V2'),
+];
+/** G9SE の手動リセット: T31 → リセットボタン → MC1・MC2 のミラー接点 → T32、T33 は +24V（インストラクションシートの配線例） */
+const g9seManualReset = (sr: string): DiagramWire[] => [
+  w(`${sr}.T31`, 'PB1.13'),
+  w('PB1.14', 'MC1.21'),
+  w('MC1.22', 'MC2.21'),
+  w('MC2.22', `${sr}.T32`),
+  w('PSU1.+V2', `${sr}.T33`),
+];
+/** 非常停止 XW1E の b 接点 2 回路を T11→T12、T21→T22 へ */
+const g9seEstop = (sr: string): DiagramWire[] => [
+  w(`${sr}.T11`, 'EMG1.21'),
+  w('EMG1.22', `${sr}.T12`),
+  w(`${sr}.T21`, 'EMG1.41'),
+  w('EMG1.42', `${sr}.T22`),
+];
+const g9seDevices = (extra: Diagram['devices'] = []): Diagram['devices'] => [
+  dev('PSU1', 'generic.psu.dc24v'),
+  dev('SR1', 'omron.g9se-201'),
+  dev('MC1', 'mitsubishi.sd-t12.dc24v'),
+  dev('MC2', 'mitsubishi.sd-t12.dc24v'),
+  dev('PB1', resetButton.type),
+  ...extra,
+];
+const g9sePower = [w('PSU1.+V1', 'SR1.A1'), w('PSU1.-V1', 'SR1.A2')];
+
+describe('安全回路のルール（実機の定義）', () => {
+  it('非常停止 → G9SE → 接触器 2 台（ミラー接点で EDM、手動リセット）は安全回路の指摘なし', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [...g9sePower, ...g9seEstop('SR1'), ...g9seManualReset('SR1'), ...relayOutputs('SR1')],
+    };
+    expect(safetyIssues(d)).toEqual([]);
+    expect(checkDiagram(d, lookupWithButton).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('安全入力のループに a 接点（ロープスイッチの 33-34）を入れると estop-not-nc', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'omron.er6022-021m')]),
+      wires: [
+        ...g9sePower,
+        w('SR1.T11', 'EMG1.11'),
+        w('EMG1.12', 'SR1.T12'),
+        w('SR1.T21', 'EMG1.33'),
+        w('EMG1.34', 'SR1.T22'),
+        ...g9seManualReset('SR1'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    const issues = safetyIssues(d);
+    expect(issues.filter((i) => i.rule === 'estop-not-nc').map((i) => i.severity)).toEqual(['error']);
+    expect(issues.find((i) => i.rule === 'estop-not-nc')!.message).toContain('33-34');
+  });
+
+  it('2 チャンネル入力の片側だけを配線すると safety-channel-partial', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [...g9sePower, w('SR1.T11', 'EMG1.21'), w('EMG1.22', 'SR1.T12'), ...g9seManualReset('SR1'), ...relayOutputs('SR1')],
+    };
+    expect(rulesOf(d)).toEqual(['error:safety-channel-partial']);
+  });
+
+  it('チャンネルのテスト出力を入れ違えると safety-channel-cross', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [
+        ...g9sePower,
+        w('SR1.T21', 'EMG1.21'),
+        w('EMG1.22', 'SR1.T12'),
+        w('SR1.T11', 'EMG1.41'),
+        w('EMG1.42', 'SR1.T22'),
+        ...g9seManualReset('SR1'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    expect(rulesOf(d)).toContain('error:safety-channel-cross');
+  });
+
+  it('EDM（T31）を配線しないと edm-missing', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [...g9sePower, ...g9seEstop('SR1'), w('PSU1.+V2', 'SR1.T33'), ...relayOutputs('SR1')],
+    };
+    expect(rulesOf(d)).toEqual(['warning:edm-missing']);
+  });
+
+  it('EDM ループに接触器の a 接点を入れると edm-not-linked', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [
+        ...g9sePower,
+        ...g9seEstop('SR1'),
+        w('SR1.T31', 'PB1.13'),
+        w('PB1.14', 'MC1.13'),
+        w('MC1.14', 'MC2.21'),
+        w('MC2.22', 'SR1.T32'),
+        w('PSU1.+V2', 'SR1.T33'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    const issues = safetyIssues(d);
+    expect(issues.map((i) => i.rule)).toEqual(['edm-not-linked']);
+    expect(issues[0].devices).toContain('MC1');
+  });
+
+  it('接触器 1 台だけを駆動すると single-channel-output（注意）', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('EMG1', 'idec.xw1e-bv402mr')]),
+      wires: [
+        ...g9sePower,
+        ...g9seEstop('SR1'),
+        w('SR1.T31', 'PB1.13'),
+        w('PB1.14', 'MC1.21'),
+        w('MC1.22', 'SR1.T32'),
+        w('PSU1.+V2', 'SR1.T33'),
+        w('PSU1.+V2', 'SR1.13'),
+        w('SR1.13', 'SR1.23'),
+        w('SR1.14', 'MC1.A1'),
+        w('SR1.24', 'MC1.A1'),
+        w('MC1.A2', 'PSU1.-V2'),
+      ],
+    };
+    expect(rulesOf(d)).toEqual(['info:single-channel-output']);
+  });
+
+  it('イネーブルスイッチ HE1G の a 接点（強制開離）は安全入力に使える', () => {
+    const d: Diagram = {
+      devices: g9seDevices([dev('ES1', 'idec.he1g-l21sm')]),
+      wires: [
+        ...g9sePower,
+        w('SR1.T11', 'ES1.1'),
+        w('ES1.2', 'SR1.T12'),
+        w('SR1.T21', 'ES1.3'),
+        w('ES1.4', 'SR1.T22'),
+        ...g9seManualReset('SR1'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    expect(safetyIssues(d)).toEqual([]);
+  });
+
+  it('ライトカーテン → G9SE（OSSD 入力）を自動リセットにすると reset-auto（注意）、手動リセットなら指摘なし', () => {
+    const lc = [dev('LCR', 'keyence.gl-r.receiver'), dev('LCE', 'keyence.gl-r.emitter')];
+    const lcWires = [
+      w('PSU1.+V1', 'LCR.+24V'),
+      w('PSU1.-V1', 'LCR.0V'),
+      w('LCR.+24V', 'LCE.+24V'),
+      w('LCR.0V', 'LCE.0V'),
+      w('LCR.OSSD1', 'SR1.T12'),
+      w('LCR.OSSD2', 'SR1.T22'),
+      // ライトカーテン側は自動復帰（リセットは G9SE で行う）
+      w('LCR.RESET', 'LCR.+24V'),
+    ];
+    // 自動リセット: T31 → MC1・MC2 のミラー接点 → T33、T32 は +24V
+    const auto: Diagram = {
+      devices: g9seDevices(lc),
+      wires: [
+        ...g9sePower,
+        ...lcWires,
+        w('SR1.T31', 'MC1.21'),
+        w('MC1.22', 'MC2.21'),
+        w('MC2.22', 'SR1.T33'),
+        w('PSU1.+V2', 'SR1.T32'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    expect(rulesOf(auto)).toEqual(['info:reset-auto']);
+    const manual: Diagram = { devices: g9seDevices(lc), wires: [...g9sePower, ...lcWires, ...g9seManualReset('SR1'), ...relayOutputs('SR1')] };
+    expect(rulesOf(manual)).toEqual([]);
+  });
+
+  it('G9SA-301 で A-B を短絡（自動リセット）してライトカーテンをつなぐと reset-auto（注意）', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SR1', 'omron.g9sa-301'), dev('LCR', 'keyence.gl-r.receiver'), dev('MC1', 'mitsubishi.sd-t12.dc24v'), dev('MC2', 'mitsubishi.sd-t12.dc24v')],
+      wires: [
+        w('PSU1.+V1', 'SR1.A1'),
+        w('PSU1.-V1', 'SR1.A2'),
+        w('PSU1.+V2', 'LCR.+24V'),
+        w('PSU1.-V2', 'LCR.0V'),
+        w('LCR.OSSD1', 'SR1.T12'),
+        w('LCR.OSSD2', 'SR1.T22'),
+        w('LCR.RESET', 'LCR.+24V'),
+        w('SR1.A', 'SR1.B'),
+        w('SR1.T31', 'MC1.21'),
+        w('MC1.22', 'MC2.21'),
+        w('MC2.22', 'SR1.T32'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    expect(rulesOf(d)).toContain('info:reset-auto');
+  });
+
+  // 現在のチェッカーは「安全入力の組に ESPE の OSSD が入っている機器」だけを自動リセットの対象にしているため、
+  // ライトカーテン自身のリセット線を +24V にした（自動復帰）場合は指摘されない。チェッカーが対応したら it に変える
+  it.fails('ライトカーテン単体で接触器を駆動し、リセット線を +24V にすると reset-auto（注意）', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('LCR', 'keyence.gl-r.receiver'), dev('MC1', 'mitsubishi.sd-t12.dc24v'), dev('MC2', 'mitsubishi.sd-t12.dc24v')],
+      wires: [
+        w('PSU1.+V1', 'LCR.+24V'),
+        w('PSU1.-V1', 'LCR.0V'),
+        w('LCR.OSSD1', 'MC1.A1'),
+        w('LCR.OSSD2', 'MC2.A1'),
+        w('MC1.A2', 'PSU1.-V2'),
+        w('MC2.A2', 'PSU1.-V2'),
+        w('LCR.EDM', 'MC1.21'),
+        w('MC1.22', 'MC2.21'),
+        w('MC2.22', 'PSU1.+V2'),
+        w('LCR.RESET', 'LCR.+24V'),
+      ],
+    };
+    expect(rulesOf(d)).toContain('info:reset-auto');
+  });
+
+  it('ライトカーテンの OSSD で接触器を駆動: EDM ありは指摘なし、EDM なしは edm-missing、OSSD1-OSSD2 の短絡は ossd-short', () => {
+    const devices = [
+      dev('PSU1', 'generic.psu.dc24v'),
+      dev('LCR', 'keyence.gl-r.receiver'),
+      dev('MC1', 'mitsubishi.sd-t12.dc24v'),
+      dev('MC2', 'mitsubishi.sd-t12.dc24v'),
+      dev('PB1', resetButton.type),
+    ];
+    const base = [
+      w('PSU1.+V1', 'LCR.+24V'),
+      w('PSU1.-V1', 'LCR.0V'),
+      w('LCR.OSSD1', 'MC1.A1'),
+      w('LCR.OSSD2', 'MC2.A1'),
+      w('MC1.A2', 'PSU1.-V2'),
+      w('MC2.A2', 'PSU1.-V2'),
+      // 手動復帰: 黄 → リセットボタン → +24V
+      w('LCR.RESET', 'PB1.13'),
+      w('PB1.14', 'PSU1.+V2'),
+    ];
+    const edm = [w('LCR.EDM', 'MC1.21'), w('MC1.22', 'MC2.21'), w('MC2.22', 'PSU1.+V2')];
+    expect(rulesOf({ devices, wires: [...base, ...edm] })).toEqual([]);
+    expect(rulesOf({ devices, wires: base })).toEqual(['warning:edm-missing']);
+    const shorted = checkDiagram({ devices, wires: [...base, ...edm, w('LCR.OSSD1', 'LCR.OSSD2')] }, lookupWithButton);
+    expect(shorted.filter((i) => i.rule === 'ossd-short').map((i) => i.severity)).toContain('error');
+  });
+
+  it('ライトカーテン → GC-1000（設定で決まる入力）は OSSD 入力として扱い、テスト出力の指摘をしない', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SC1', 'keyence.gc-1000'), dev('LCR', 'keyence.gl-r.receiver')],
+      wires: [
+        w('PSU1.+V1', 'SC1.+24V'),
+        w('PSU1.-V1', 'SC1.0V'),
+        w('PSU1.+V2', 'LCR.+24V'),
+        w('PSU1.-V2', 'LCR.0V'),
+        w('LCR.OSSD1', 'SC1.Si0'),
+        w('LCR.OSSD2', 'SC1.Si1'),
+        w('LCR.RESET', 'LCR.+24V'),
+      ],
+    };
+    expect(rulesOf(d)).toEqual([]);
+  });
+
+  // 単体使用の GS-11P5 は安全入力 1/2 をどちらも +24V につなぐ（取扱説明書の配線）が、現在のチェッカーは
+  // 「2 チャンネルの入力が同じネット」として safety-channel-cross（エラー）にする。チェッカーが対応したら it に変える
+  it.fails('非接触スイッチ GS-11P5 の OSSD を GC-1000 へ、安全入力 1/2 は +24V（単体使用）で指摘なし', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SC1', 'keyence.gc-1000'), dev('DS1', 'keyence.gs-11p5')],
+      wires: [
+        w('PSU1.+V1', 'SC1.+24V'),
+        w('PSU1.-V1', 'SC1.0V'),
+        w('PSU1.+V2', 'DS1.+24V'),
+        w('PSU1.-V2', 'DS1.0V'),
+        w('DS1.+24V', 'DS1.IN1'),
+        w('DS1.+24V', 'DS1.IN2'),
+        w('DS1.OSSD1', 'SC1.Si2'),
+        w('DS1.OSSD2', 'SC1.Si3'),
+      ],
+    };
+    expect(rulesOf(d)).toEqual([]);
+  });
+
+  it('G9SP の汎用入力は設定で決まるため、片側だけの入力は注意にとどめる', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SC1', 'omron.g9sp-n10s'), dev('PB1', resetButton.type)],
+      wires: [w('PSU1.+V1', 'SC1.V1'), w('PSU1.-V1', 'SC1.G1'), w('SC1.T2', 'PB1.13'), w('PB1.14', 'SC1.Si2')],
+    };
+    const rules = rulesOf(d);
+    expect(rules.length).toBeGreaterThan(0);
+    expect(rules.every((r) => r.startsWith('info:'))).toBe(true);
+  });
+
+  it('HR6S-AF: FUNCTION 6 なら OSSD 入力として扱い、FUNCTION 1 に OSSD をつなぐと ossd-to-test-input', () => {
+    const wires = [
+      w('PSU1.+V1', 'SR1.A1'),
+      w('PSU1.-V1', 'SR1.A2'),
+      w('PSU1.+V2', 'LCR.+24V'),
+      w('PSU1.-V2', 'LCR.0V'),
+      w('LCR.OSSD1', 'SR1.S12'),
+      w('LCR.OSSD2', 'SR1.S22'),
+      w('LCR.RESET', 'LCR.+24V'),
+      w('SR1.Y1', 'PB1.13'),
+      w('PB1.14', 'SR1.Y2'),
+    ];
+    const devices = (fn: number) => [
+      dev('PSU1', 'generic.psu.dc24v'),
+      dev('SR1', 'idec.hr6s-af', { function: fn }),
+      dev('LCR', 'keyence.gl-r.receiver'),
+      dev('PB1', resetButton.type),
+    ];
+    expect(rulesOf({ devices: devices(6), wires })).toEqual([]);
+    expect(rulesOf({ devices: devices(1), wires })).toEqual(['warning:ossd-to-test-input', 'warning:ossd-to-test-input']);
+  });
+
+  it('非接触ドアスイッチ D40A 2 台を直列にした G9SX-NS の入力は安全回路の指摘なし', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('SR1', 'omron.g9sx-ns202-rt'), dev('DS1', 'omron.d40a-1c5'), dev('DS2', 'omron.d40a-1c5')],
+      wires: [
+        w('PSU1.+V1', 'SR1.A1'),
+        w('PSU1.-V1', 'SR1.A2'),
+        w('SR1.D3', 'DS1.+'),
+        w('SR1.D4', 'DS1.-'),
+        w('SR1.D3', 'DS2.+'),
+        w('SR1.D4', 'DS2.-'),
+        w('SR1.D1', 'DS1.IN'),
+        w('DS1.OUT', 'DS2.IN'),
+        w('DS2.OUT', 'SR1.D2'),
+      ],
+    };
+    expect(rulesOf(d)).toEqual([]);
+  });
+
+  // PNOZ はスタート回路を CH1 の入力 S12 から取る（S12 → リセットボタン → 接触器の b 接点 → S34）。現在のチェッカーは
+  // S12 からたどった接点にリセットボタンの a 接点が含まれるため estop-not-nc（エラー）にする。チェッカーが対応したら it に変える
+  it.fails('PNOZ のスタート回路（S12-S34）に押しボタンとミラー接点を入れると、EDM・手動リセットとも満たす', () => {
+    const d: Diagram = {
+      devices: [
+        dev('PSU1', 'generic.psu.dc24v'),
+        dev('SR1', 'pilz.pnoz-x2-8p'),
+        dev('EMG1', 'idec.xw1e-bv402mr'),
+        dev('MC1', 'mitsubishi.sd-t12.dc24v'),
+        dev('MC2', 'mitsubishi.sd-t12.dc24v'),
+        dev('PB1', resetButton.type),
+      ],
+      wires: [
+        w('PSU1.+V1', 'SR1.A1'),
+        w('PSU1.-V1', 'SR1.A2'),
+        w('SR1.S11', 'SR1.S52'),
+        w('SR1.S11', 'EMG1.21'),
+        w('EMG1.22', 'SR1.S12'),
+        w('SR1.S21', 'EMG1.41'),
+        w('EMG1.42', 'SR1.S22'),
+        w('SR1.S12', 'PB1.13'),
+        w('PB1.14', 'MC1.21'),
+        w('MC1.22', 'MC2.21'),
+        w('MC2.22', 'SR1.S34'),
+        ...relayOutputs('SR1'),
+      ],
+    };
+    expect(rulesOf(d)).toEqual([]);
+  });
+
+  it('スプリングロックのソレノイドを電源に直結すると lock-power-source', () => {
+    const d: Diagram = {
+      devices: [dev('PSU1', 'generic.psu.dc24v'), dev('DS1', 'idec.hs5e-a4403-g')],
+      wires: [w('PSU1.+V1', 'DS1.A2'), w('PSU1.-V1', 'DS1.A1')],
+    };
+    expect(rulesOf(d)).toEqual(['warning:lock-power-source']);
+  });
+
+  it('要求 PL e の図面ではレーザスキャナ SZ-V32（PL d）を指摘する', () => {
+    const d: Diagram = {
+      devices: [dev('LS1', 'keyence.sz-v32'), dev('SC1', 'keyence.gc-1000')],
+      wires: [],
+      settings: { requiredPL: 'e' },
+    };
+    expect(safetyIssues(d).filter((i) => i.rule === 'safety-rating').map((i) => i.devices[0])).toEqual(['LS1']);
   });
 });

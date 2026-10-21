@@ -108,8 +108,8 @@ const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'oss
 const SPEC: Record<string, Partial<TerminalDef>> = {
   OSSD1: { role: 'supply', supply: OSSD, function: 'ossd', channel: 1 },
   OSSD2: { role: 'supply', supply: OSSD, function: 'ossd', channel: 2 },
-  // RESET/EDM 兼用（リセットスイッチと接触器の b 接点を直列にして +24V へ）。EDM の配線チェックを優先して edm にする
-  RESET: { function: 'edm' },
+  // RESET/EDM 兼用（リセットスイッチと接触器の b 接点を直列にして +24V へ）
+  RESET: { function: ['reset', 'edm'] },
   MUTE_A: { function: 'muting' },
   MUTE_B: { function: 'muting' },
   AUX: { function: 'aux-output', signal: { dir: 'out', kind: 'pnp' } },

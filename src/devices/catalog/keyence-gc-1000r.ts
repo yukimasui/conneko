@@ -195,13 +195,13 @@ const ioTerminal = (id: string, x: number, y: number, col: 'L' | 'R'): TerminalD
 
 /**
  * 安全入力の組（偶数・奇数の Si）と、戻すテスト出力（組ごとに To0/To1・To2/To3 を交互に割り当てた既定の配線）。
- * 入力の種類（b 接点 2 回路・OSSD・非等価など）は設定ソフトで組ごとに選ぶが、ここでは b 接点 2 回路として書く。
+ * 入力の種類（b 接点 2 回路・OSSD・非等価など）と組み合わせは設定ソフトで決めるため configurable にする。
  */
 const inputGroups = (pairs: number, tests: [string, string][]): SafetyChannelGroup[] =>
   Array.from({ length: pairs }, (_, k) => {
     const [a, b] = [`Si${k * 2}`, `Si${k * 2 + 1}`];
     const [ta, tb] = tests[k % tests.length];
-    return { id: `${a}-${b}`, label: `安全入力 ${a}/${b}（${ta}→${a}、${tb}→${b}）`, kind: 'input', mode: 'nc-nc', channels: [{ source: ta, input: a }, { source: tb, input: b }] };
+    return { id: `${a}-${b}`, label: `安全入力 ${a}/${b}（${ta}→${a}、${tb}→${b}）`, kind: 'input', configurable: true, mode: ['nc-nc', 'ossd'], channels: [{ source: ta, input: a }, { source: tb, input: b }] };
   });
 /** 安全出力の組（So0/So1 など） */
 const outputGroups = (pairs: number): SafetyChannelGroup[] =>
@@ -255,7 +255,8 @@ const def: DeviceDefinition = {
   safetyChannels: [
     ...inputGroups(7, [['To0', 'To1'], ['To2', 'To3']]),
     ...outputGroups(2),
-    { id: 'SRo', label: '安全リレー出力 SRo 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+    // 接触器 2 台を駆動する 13-14・23-24 を組にする（33-34 は使わなくても警告しない）
+    { id: 'SRo', label: '安全リレー出力 SRo 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 内部消費 200mA 以下（安全出力・テスト出力の負荷電流は別途）

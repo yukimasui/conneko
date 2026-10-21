@@ -187,10 +187,15 @@ const def: DeviceDefinition = {
     { from: '23', to: '24', switch: 'NO' },
     { from: '33', to: '34', switch: 'NO' },
   ],
-  // FUNCTION 1（2 チャンネルの b 接点入力）の場合
-  safetyChannels: [
-    { id: 'IN', label: '安全入力（CH1: S11→S12、CH2: S21→S22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'S11', input: 'S12' }, { source: 'S21', input: 'S22' }] },
-    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+  // FUNCTION スイッチ（取扱説明書 HR9Z-B2192「Application Functions」）:
+  //   1〜3: S11→S12・S21→S22 にテストパルス付きの接点（非常停止・ドアスイッチ。2・3 は同期監視あり）
+  //   4・5: S12・S22 に PNP 出力の近接スイッチ（テストパルスなし）、6: S12・S22 にライトカーテンなどの OSSD
+  safetyChannels: (p) => [
+    Number(p.function) >= 4
+      ? { id: 'IN', label: '安全入力（S12・S22 に PNP 出力・OSSD）', kind: 'input', mode: 'ossd', channels: [{ input: 'S12' }, { input: 'S22' }] }
+      : { id: 'IN', label: '安全入力（CH1: S11→S12、CH2: S21→S22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'S11', input: 'S12' }, { source: 'S21', input: 'S22' }] },
+    // 接触器 2 台（K1/K2）を駆動する 13-14・23-24 を組にする。33-34 は増設・状態入力用で、使わなくても警告しない
+    { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   params: [

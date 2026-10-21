@@ -27,8 +27,13 @@
 
 - 2 チャンネルの組は `safetyChannels` に書いた。入力の組は「テスト出力（source）→ 接点 → 安全入力（input）」で、
   セーフティリレーは端子の決まった組（T11→T12 / T21→T22 など）、設定で入力を割り付ける安全コントローラー（GC、G9SP、MELSEC-WS、FS1B）は
-  データシートの配線例に沿った既定の組（偶数・奇数の入力と、組ごとのテスト出力）を書いた。入力の種類は `mode: 'nc-nc'`（b 接点 2 回路）としている。
-- 出力の組は、安全コントローラーは So0/So1 のような 2 点 1 組、セーフティリレーは安全出力の接点すべて（G9SE-221-T05 は瞬時とオフディレーを別の組）。
+  データシートの配線例に沿った既定の組（偶数・奇数の入力と、組ごとのテスト出力）を書き、`configurable: true`（使い方は設定・プログラムで決まるので、片側配線などは注意にとどめる）、
+  `mode: ['nc-nc', 'ossd']`（b 接点 2 回路とライトカーテンなどの OSSD のどちらも受ける）にした。G9SE も OSSD を直接受けられるので `['nc-nc', 'ossd']`。
+  HR6S-AF は FUNCTION スイッチで入力の種類が変わるため、`safetyChannels` をパラメータの関数にした（1〜3: テストパルス付きの接点、4〜6: PNP 出力・OSSD）。
+- 出力の組は、安全コントローラーは So0/So1 のような 2 点 1 組、セーフティリレーは接触器 2 台を駆動する 13-14・23-24（33-34 以降は増設・状態入力用として組に入れず、
+  使わなくても警告しない。G9SE-221-T05 はオフディレー 37-38・47-48 を別の組）。
+- リセットとフィードバックを兼ねる端子（PNOZ の S34、F3SG-SR の黄線 RESET/EDM）は `function: ['reset', 'edm']`。
+  G9SA-301 の A・B は短絡すると自動リセットになるので `reset-auto`。
 - 安全性能は `safety` に書いた。非常停止・ドアスイッチ・リミットスイッチ・接触器・強制ガイドリレーは単体では PL が決まらない
   （B10d と回路の構成で決まる）ため、準拠規格（`standards`）だけを書いた。
 - 電源チェックでは、接点はすべて閉じた状態（動作中）で電源が届くかを見るため、`+24V → 13-14 → 接触器コイル A1` や `OSSD1 → コイル A1` と配線すればコイルに電源が届いたと判定される。
@@ -38,20 +43,20 @@
 
 | 機器 | テスト出力 → 安全入力（組） | 安全出力（組） | EDM / リセット ほか | 安全性能 |
 |---|---|---|---|---|
-| `keyence.gc-1000` | To0/To1・To2/To3 → Si0/Si1 … Si14/Si15（8 組、組ごとに交互） | So0/So1・So2/So3・So4/So5（OSSD 500mA） | Ao0〜3 は aux-output。EDM は任意の Si | PL e / Cat.4 / SIL3 |
-| `keyence.gc-1000r` | 同上（Si0〜Si13、7 組） | So0/So1・So2/So3、SRo 13/23/33（接点） | 同上 | PL e / Cat.4 / SIL3 |
+| `keyence.gc-1000` | To0/To1・To2/To3 → Si0/Si1 … Si14/Si15（8 組、組ごとに交互。configurable、b 接点・OSSD） | So0/So1・So2/So3・So4/So5（OSSD 500mA） | Ao0〜3 は aux-output。EDM は任意の Si | PL e / Cat.4 / SIL3 |
+| `keyence.gc-1000r` | 同上（Si0〜Si13、7 組） | So0/So1・So2/So3、SRo 13/23（接点） | 同上 | PL e / Cat.4 / SIL3 |
 | `keyence.gc-s84` | To0/To1 → Si0/Si1 … Si6/Si7（4 組） | So0/So1・So2/So3 | | PL e / Cat.4 / SIL3 |
 | `omron.g9sp-n10s` | T0/T1・T2/T3 → Si0/Si1 … Si8/Si9（5 組） | So0/So1・So2/So3（0.8A） | O0〜3 は aux-output（PNP）。テスト出力 T0/T1 60mA、T2 30mA、T3 300mA | PL e / Cat.4 / SIL3 |
 | `mitsubishi.ws0-cpu0-xtio` | X1/X2 → I1/I2 … I7/I8（4 組） | Q1/Q2・Q3/Q4（2A） | テスト出力 120mA | PL e / Cat.4 / SIL3 |
 | `idec.fs1b-c31s` | Tn → Xn（X0/X1 … X14/X15、7 組） | Y0/Y1・Y2/Y3（500mA） | X16/X17 は reset、Y4〜Y16 は aux-output | PL e / Cat.4 / SIL3 |
-| `omron.g9se-201` / `-401` / `-221-t05` | T11 → T12 / T21 → T22 | 13・23（・33・43）、221-T05 はオフディレー 37・47 を別の組 | T31 edm、T32/T33 reset、X1 aux-output | PL e / Cat.4 / SIL3 |
-| `omron.g9sa-301` | T11 → T12 / T21 → T22 | 13・23・33 | T31 edm、T32 reset、41-42 は b 接点の aux-output | PL e / Cat.4 |
-| `omron.g9sa-th301` | 押ボタンごとに `nc-no`（T12 → T11 b 接点 / T12 → T13 a 接点、T22 → T21 / T22 → T23） | 13・23・33 | T31/T32 edm | PL e / Cat.4（タイプ IIIC） |
-| `pilz.pnoz-x2-8p` / `pilz.pnoz-s4` | S11 → S12 / S21 → S22 | 13・23・33 | S34 edm（スタート回路と兼用）、41-42・Y32 は aux-output | PL e / Cat.4 / SIL3 |
-| `idec.hr6s-af` | S11 → S12 / S21 → S22（FUNCTION 1） | 13・23・33 | Y1 edm、Y2 reset、Z1 aux-output | PL e / Cat.4 / SIL3 |
+| `omron.g9se-201` / `-401` / `-221-t05` | T11 → T12 / T21 → T22 | 13・23、221-T05 はオフディレー 37・47 を別の組 | T31 edm、T32/T33 reset（手動・自動は配線で決まる）、X1 aux-output。入力は b 接点・OSSD の両方 | PL e / Cat.4 / SIL3 |
+| `omron.g9sa-301` | T11 → T12 / T21 → T22 | 13・23 | T31 edm、T32 reset、A・B reset-auto、41-42 は b 接点の aux-output | PL e / Cat.4 |
+| `omron.g9sa-th301` | 押ボタンごとに `nc-no`（T12 → T11 b 接点 / T12 → T13 a 接点、T22 → T21 / T22 → T23） | 13・23 | T31/T32 edm | PL e / Cat.4（タイプ IIIC） |
+| `pilz.pnoz-x2-8p` / `pilz.pnoz-s4` | S11 → S12 / S21 → S22 | 13・23 | S34 reset + edm（スタート回路とフィードバック）、41-42・Y32 は aux-output | PL e / Cat.4 / SIL3 |
+| `idec.hr6s-af` | FUNCTION 1〜3: S11 → S12 / S21 → S22、4〜6: S12・S22 に PNP 出力・OSSD | 13・23 | Y1 edm、Y2 reset、Z1 aux-output | PL e / Cat.4 / SIL3 |
 | `omron.g9sx-ns202-rt` | D1 → D40A（直列）→ D2（1 組） | S14/S24（OSSD 0.8A） | T31 edm、T32/T33 reset、X1/X2 aux-output | PL e / Cat.4（D40A と組み合わせると PL d / Cat.3） |
 | `keyence.gl-r.receiver` | | OSSD1/OSSD2（500mA） | RESET reset、EDM edm、AUX aux-output | タイプ4 / PL e / Cat.4 / SIL3 |
-| `omron.f3sg-sr.receiver` | | OSSD1/OSSD2（300mA） | RESET/EDM 兼用線は edm、MUTE A/B muting、AUX aux-output | タイプ4 / PL e / Cat.4 / SIL3 |
+| `omron.f3sg-sr.receiver` | | OSSD1/OSSD2（300mA） | RESET/EDM 兼用線は reset + edm、MUTE A/B muting、AUX aux-output | タイプ4 / PL e / Cat.4 / SIL3 |
 | `keyence.sz-v32` | | OSSD1/OSSD2（500mA、PNP 設定時） | 入力1 reset、入力2 edm、AUX1/2 aux-output | タイプ3 / PL d / Cat.3 / SIL2 |
 | `keyence.gs-11p5` | 安全入力 1/2（`mode: 'ossd'`。前段の OSSD または +24V） | OSSD1/OSSD2（150mA） | AUX aux-output | PL e / Cat.4 / SIL3 |
 | `omron.d40a-1c5` | 白 → 黒を半導体出力（`switch: 'output'`）として G9SX-NS のループをたどる | | 黄 aux-output | PL d / Cat.3（G9SX-NS と組み合わせ） |
@@ -153,14 +158,16 @@
   図ではどちらも DC24V `+` のテスト出力として定義した（接点を通って戻す配線であれば判定は変わらない）。
 - **G9SA-TH301 の押ボタン入力**: 共通側 T12/T22 をテスト出力、b 接点側・a 接点側（T11・T13 / T21・T23）を安全入力とした。内部の向きは未確認。
 - **安全コントローラーの入力の組**: GC・G9SP・MELSEC-WS・FS1B は設定で入力の組・種類・テスト出力を変えられる。`safetyChannels` は配線例に沿った既定の組で、
-  ライトカーテンの OSSD をつなぐ組や別のテスト出力を使う組は、チェックで警告が出ることがある。
-- **リセットと EDM を兼ねる端子**: PNOZ の S34、F3SG-SR の黄（RESET/EDM）は 1 つの端子に機能を 1 つしか書けないため `edm` にした。
-  G9SE などのリセット端子は手動（T32）と自動（T33）を区別していない。
+  `configurable` にしてあるので、既定と違う使い方の指摘は注意（info）にとどまる。
+- **G9SE のリセット**: インストラクションシートでは、手動リセットは T31 → リセットスイッチ → 接触器の b 接点 → T32・T33 を +24V、
+  自動リセットは T31 → 接触器の b 接点 → T33・T32 を +24V。どちらの端子も配線するため `reset-auto` は使わず、T32・T33 とも `reset` にした
+  （リセット入力のループに押しボタンの a 接点がなければ自動リセットと判定される）。G9SX-NS も同じ。
 - **HE1G のイネーブル接点**: a 接点だが、ポジション 3 への握り込みで強制的に開く（IEC 60947-5-8）ため `directOpening: true` を付けた。
 - **SZ-V32 の OSSD**: PNP / NPN を設定で選ぶ機種で、図は PNP（`+` を出す）として定義した。
 - **G9SP のテスト出力の電流**: データシート F42I-E-05 は「0.3A max. per output（詳細はユーザーマニュアル）」とし、オムロンの仕様ページは T0/T1 60mA・T2 30mA・T3 300mA としている。小さいほうの値を使った [O1][O21]。
 - **FS1B のテスト出力の電流**: 確認できなかったため `limitCurrent` を書いていない。
-- **G9SE-221-T05 のオフディレー時間**: データシートでは 0、0.1〜0.8、1、1.5、2、2.5、3、4、5 秒の 16 段階。`params.offDelay` の選択肢（12 段階）とは一部違う。
+- **G9SE-221-T05 のオフディレー時間**: インストラクションシートの 16 段階（0、0.1〜0.8、1、1.5、2、2.5、3、4、5 秒。工場出荷時は 0）を `params.offDelay` の選択肢にした。既定値は従来どおり 1 秒。
+- **B10d**: 非常停止・ドアスイッチ・接触器・強制ガイドリレーのデータシート（[I8][I10][O6][O8][I11][M2]）に B10d の記載が見つからなかったため、`safety.b10d` は書いていない。
 
 ## 5. 出典
 
