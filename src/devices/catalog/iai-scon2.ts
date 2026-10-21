@@ -15,6 +15,7 @@ import {
   screw,
   slideSwitch,
   smallBlackConnector,
+  stopLoop,
   text,
 } from '../iai/parts';
 import { patternOf, pioLinks, pioPins, positionerPio40 } from '../iai/pio';
@@ -138,10 +139,10 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     { id: 'FG', label: '⏚', note: '接地用ねじ', x: FG.x, y: FG.y, side: 'left', role: 'ground', optional: true },
     { id: 'S1', label: 'S1', note: 'ティーチングボックスの停止スイッチ接続（TB 未接続時はダミープラグ DP-5 で短絡）', ...at(sysL.pos.S1), role: 'signal', optional: true },
     { id: 'S2', label: 'S2', note: 'ティーチングボックスの停止スイッチ接続', ...at(sysR.pos.S2), role: 'signal', optional: true },
-    { id: 'STOP+', label: 'STOP+', note: '停止回路専用の内蔵 24V 出力（STOP- へは必ずこの電源から停止スイッチを通して戻す）', ...at(sysL.pos['STOP+']), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1 } },
-    { id: 'STOP-', label: 'STOP-', note: '停止入力（STOP+ の 24V が来ていれば停止解除）', ...at(sysR.pos['STOP-']), role: 'input', accepts: DC24_PLUS, function: 'safety-input' },
-    { id: 'ENB+', label: 'ENB+', note: 'イネーブル回路専用の内蔵 24V 出力', ...at(sysL.pos['ENB+']), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1 } },
-    { id: 'ENB-', label: 'ENB-', note: 'イネーブル入力（イネーブルスイッチを使わない場合は ENB+ と短絡）', ...at(sysR.pos['ENB-']), role: 'input', accepts: DC24_PLUS, function: 'safety-input' },
+    { id: 'STOP+', label: 'STOP+', note: '停止回路専用の内蔵 24V 出力（STOP- へは必ずこの電源から停止スイッチを通して戻す）', ...at(sysL.pos['STOP+']), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' } },
+    { id: 'STOP-', label: 'STOP-', note: '停止入力（STOP+ の 24V が来ていれば停止解除）', ...at(sysR.pos['STOP-']), role: 'signal', function: 'safety-input' },
+    { id: 'ENB+', label: 'ENB+', note: 'イネーブル回路専用の内蔵 24V 出力', ...at(sysL.pos['ENB+']), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' } },
+    { id: 'ENB-', label: 'ENB-', note: 'イネーブル入力（イネーブルスイッチを使わない場合は ENB+ と短絡）', ...at(sysR.pos['ENB-']), role: 'signal', function: 'safety-input' },
     { id: 'BK+', label: 'BK+', note: 'ブレーキ電源 DC24V ±10%（最大 1A。ブレーキ付きアクチュエーターのとき）', ...at(sysL.pos['BK+']), role: 'input', accepts: DC24_PLUS, optional: true },
     { id: 'BK-', label: 'BK-', note: 'ブレーキ電源 0V', ...at(sysR.pos['BK-']), role: 'input', accepts: DC24_MINUS, optional: true },
     {
@@ -212,6 +213,8 @@ const links = (p: ParamValues): InternalLink[] => {
 };
 
 const safetyChannels: SafetyChannelGroup[] = [
+  stopLoop('STOP', '停止（STOP+ → STOP-）', 'STOP-'),
+  stopLoop('ENB', 'イネーブル（ENB+ → ENB-）', 'ENB-'),
   {
     id: 'SAFE',
     label: '安全機能（安全要求入力 /SRI1・/SRI2）',

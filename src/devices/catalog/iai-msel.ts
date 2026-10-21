@@ -16,6 +16,7 @@ import {
   smallBlackConnector,
   text,
   whiteConnectorV,
+  stopLoop,
 } from '../iai/parts';
 import { pioLinks, pioPins, selPio40, type Polarity } from '../iai/pio';
 import type { DeviceDefinition, InternalLink, ParamValues, PinDef, TerminalDef } from '../types';
@@ -126,14 +127,14 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     { id: 'L', label: 'L', note: '電源入力（単相 AC100〜230V ±10%）', ...at(pwr.pos.L), role: 'input', accepts: ac },
     { id: 'N', label: 'N', note: '電源入力（単相 AC100〜230V ±10%）', ...at(pwr.pos.N), role: 'input', accepts: ac },
     { id: 'PE', label: 'PE', note: '保護接地', ...at(pwr.pos.PE), role: 'ground' },
-    { id: 'EMGIN', label: 'EMGIN', note: '非常停止検出入力（EMGOUT の 24V が来ていれば非常停止解除）', ...at(sysL.pos.EMGIN), role: 'input', accepts: DC24_PLUS, function: 'safety-input' },
-    { id: 'EMGOUT', label: 'EMGOUT', note: '非常停止検出入力用 24V 電源出力（DC30V、最大 0.5A）', ...at(sysL.pos.EMGOUT), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.5 } },
+    { id: 'EMGIN', label: 'EMGIN', note: '非常停止検出入力（EMGOUT の 24V が来ていれば非常停止解除）', ...at(sysL.pos.EMGIN), role: 'signal', function: 'safety-input' },
+    { id: 'EMGOUT', label: 'EMGOUT', note: '非常停止検出入力用 24V 電源出力（DC30V、最大 0.5A）', ...at(sysL.pos.EMGOUT), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.5, kind: 'test' } },
     { id: 'EMGS1+', label: 'EMGS1+', note: 'ティーチングボックスの非常停止接点 1（+側）', ...at(sysL.pos['EMGS1+']), role: 'signal', optional: true },
     { id: 'EMGS1-', label: 'EMGS1-', note: 'ティーチングボックスの非常停止接点 1（−側）', ...at(sysL.pos['EMGS1-']), role: 'signal', optional: true },
     { id: 'EMGS2+', label: 'EMGS2+', note: 'ティーチングボックスの非常停止接点 2（+側。PG タイプで使用）', ...at(sysL.pos['EMGS2+']), role: 'signal', optional: true },
     { id: 'EMGS2-', label: 'EMGS2-', note: 'ティーチングボックスの非常停止接点 2（−側。PG タイプで使用）', ...at(sysL.pos['EMGS2-']), role: 'signal', optional: true },
-    { id: 'ENBIN', label: 'ENBIN', note: 'イネーブル検出入力', ...at(sysR.pos.ENBIN), role: 'input', accepts: DC24_PLUS, function: 'safety-input' },
-    { id: 'ENBOUT', label: 'ENBOUT', note: 'イネーブル検出入力用 24V 電源出力（DC30V、最大 0.5A）', ...at(sysR.pos.ENBOUT), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.5 } },
+    { id: 'ENBIN', label: 'ENBIN', note: 'イネーブル検出入力', ...at(sysR.pos.ENBIN), role: 'signal', function: 'safety-input' },
+    { id: 'ENBOUT', label: 'ENBOUT', note: 'イネーブル検出入力用 24V 電源出力（DC30V、最大 0.5A）', ...at(sysR.pos.ENBOUT), role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.5, kind: 'test' } },
     { id: 'ENBS1+', label: 'ENBS1+', note: 'ティーチングボックスのイネーブル接点 1（+側）', ...at(sysR.pos['ENBS1+']), role: 'signal', optional: true },
     { id: 'ENBS1-', label: 'ENBS1-', note: 'ティーチングボックスのイネーブル接点 1（−側）', ...at(sysR.pos['ENBS1-']), role: 'signal', optional: true },
     { id: 'ENBS2+', label: 'ENBS2+', note: 'ティーチングボックスのイネーブル接点 2（+側。PG タイプで使用）', ...at(sysR.pos['ENBS2+']), role: 'signal', optional: true },
@@ -205,13 +206,13 @@ const links = (p: ParamValues): InternalLink[] => {
   const ext = extOf(p);
   const g = isG(p);
   return [
-    // ティーチングボックスの非常停止・イネーブル接点（PC タイプは TB 未接続時に内部で 1+/1- を短絡。PG タイプは TB またはダミープラグ）
-    { from: 'EMGS1+', to: 'EMGS1-', switch: 'NC' },
-    { from: 'ENBS1+', to: 'ENBS1-', switch: 'NC' },
+    // ティーチングボックスの非常停止・イネーブル接点（PC タイプは TB 未接続時に内部で 1+/1- を短絡。PG タイプは TB またはダミープラグ）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
+    { from: 'EMGS1+', to: 'EMGS1-' },
+    { from: 'ENBS1+', to: 'ENBS1-' },
     ...(g
       ? [
-          { from: 'EMGS2+', to: 'EMGS2-', switch: 'NC' as const },
-          { from: 'ENBS2+', to: 'ENBS2-', switch: 'NC' as const },
+          { from: 'EMGS2+', to: 'EMGS2-' },
+          { from: 'ENBS2+', to: 'ENBS2-' },
         ]
       : []),
     ...pioLinks(selPio40('I/O1', 0, 300), stdPolarity(p), 0.1),
@@ -239,6 +240,7 @@ const def: DeviceDefinition = {
   terminals,
   pins,
   links,
+  safetyChannels: [stopLoop('EMG', '非常停止（EMGOUT → EMGIN）', 'EMGIN'), stopLoop('ENB', 'イネーブル（ENBOUT → ENBIN）', 'ENBIN')],
   params: [
     {
       key: 'model',

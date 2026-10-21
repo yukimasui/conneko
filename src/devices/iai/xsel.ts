@@ -11,7 +11,7 @@
  *   RA は駆動源遮断リレー内蔵（ハードワイヤード）、SA は外部の安全回路で遮断する（カテゴリー4 まで対応）。
  */
 import type { InternalLink, TerminalDef } from '../types';
-import { DC24_PLUS, plugV, text } from './parts';
+import { plugV, text } from './parts';
 import { pioLinks, pioPins, xselPio50, type Polarity } from './pio';
 
 /** システム I/O の端子（ピン番号、ID、印字、説明） */
@@ -56,19 +56,20 @@ export function xselSystemIo(x: number, y: number, pitch: number, sa: boolean) {
   const terminals: TerminalDef[] = XSEL_SYS_IO.map((s): TerminalDef => {
     const p = pos[s.id];
     const base = { id: s.id, label: `${s.label}（${s.pin}）`, note: s.note, x: p.x, y: p.y, side: p.side };
-    if (SUPPLY_IDS.has(s.id)) return { ...base, role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1 }, optional: true };
-    if (s.id === 'EMGIN' || s.id === 'ENBIN') return { ...base, role: 'input', accepts: DC24_PLUS, function: 'safety-input' };
-    if (s.id === 'DETIN') return { ...base, role: 'input', accepts: DC24_PLUS, optional: true, ...(sa ? { function: 'edm' as const } : {}) };
-    if (s.id === 'AUTO2IN') return { ...base, role: 'input', accepts: DC24_PLUS, optional: true };
+    if (SUPPLY_IDS.has(s.id)) return { ...base, role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' }, optional: true };
+    if (s.id === 'EMGIN' || s.id === 'ENBIN') return { ...base, role: 'signal', function: 'safety-input' };
+    if (s.id === 'DETIN') return { ...base, role: 'signal', optional: true, ...(sa ? { function: 'edm' as const } : {}) };
+    if (s.id === 'AUTO2IN') return { ...base, role: 'signal', optional: true };
     return { ...base, role: 'signal', optional: true };
   });
+  // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグ DP-2 で閉）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
   const links: InternalLink[] = [
-    { from: 'EMG1+', to: 'EMG1-', switch: 'NC' },
-    { from: 'ENB1+', to: 'ENB1-', switch: 'NC' },
+    { from: 'EMG1+', to: 'EMG1-' },
+    { from: 'ENB1+', to: 'ENB1-' },
     ...(sa
       ? [
-          { from: 'EMG2+', to: 'EMG2-', switch: 'NC' as const },
-          { from: 'ENB2+', to: 'ENB2-', switch: 'NC' as const },
+          { from: 'EMG2+', to: 'EMG2-' },
+          { from: 'ENB2+', to: 'ENB2-' },
         ]
       : []),
     { from: 'SDN+', to: 'SDN-', switch: 'NO' },

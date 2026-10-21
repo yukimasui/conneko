@@ -10,7 +10,7 @@
  *   上下に金属の取付けタブ（ねじ固定仕様）があり、上にコネクター、下に緑の電源プラグが並ぶ。
  * - プログラムコントローラー（XSEL・MSEL）や SCON は、黒〜濃いグレーの正面パネル。
  */
-import type { AcceptSpec, ConnectorSpec } from '../types';
+import type { AcceptSpec, ConnectorSpec, SafetyChannelGroup } from '../types';
 
 /** 1mm あたりの px */
 export const MM = 2;
@@ -45,6 +45,20 @@ export const DNET_MINUS: AcceptSpec = { system: 'DC', minVoltage: 11, maxVoltage
 export const AC_1P_100_230: AcceptSpec = { system: 'AC', minVoltage: 90, maxVoltage: 253 };
 /** AC200〜230V（モーター電源など。−10%〜+10% を含めて 180〜253V） */
 export const AC_200_230: AcceptSpec = { system: 'AC', minVoltage: 180, maxVoltage: 253 };
+
+/**
+ * 内蔵 24V から非常停止スイッチ・イネーブルスイッチを通して戻す停止入力の組（1 チャンネル）。
+ * 接点の種類（b 接点・直接開路動作か）をチェックするために書く。セーフティリレーの安全接点（a 接点）を
+ * ループに入れる構成もあるため、指摘は注意（configurable）にとどめる。
+ */
+export const stopLoop = (id: string, label: string, input: string): SafetyChannelGroup => ({
+  id,
+  label,
+  kind: 'input',
+  mode: 'nc-nc',
+  configurable: true,
+  channels: [{ input }],
+});
 
 /* ------------------------------------------------------------------ */
 /* コネクターの仕様                                                     */

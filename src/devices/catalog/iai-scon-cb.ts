@@ -16,6 +16,7 @@ import {
   screw,
   slideSwitch,
   smallBlackConnector,
+  stopLoop,
   text,
 } from '../iai/parts';
 import { iaiDefs } from '../iai/parts';
@@ -185,7 +186,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: sy['EMG+'].y,
       side: 'left',
       role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1 },
+      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' },
     },
     {
       id: 'EMG-',
@@ -194,8 +195,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       x: sy['EMG-'].x,
       y: sy['EMG-'].y,
       side: 'left',
-      role: 'input',
-      accepts: DC24_PLUS,
+      role: 'signal',
       function: 'safety-input',
     },
     { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（GIC2.5/4-STF-7.62）', x: mo.V.x, y: n2((mo.U.y + mo.V.y) / 2), side: 'left', role: 'connector', connector: { kind: 'IAI-SCON-MOT', pins: 0, width: 4 * 7.62 * MM, length: 16, facing: 'front' }, optional: true },
@@ -281,8 +281,8 @@ const pins = (p: ParamValues): PinDef[] => {
 const links = (p: ParamValues): InternalLink[] => {
   const io = ioOf(p);
   const ls: InternalLink[] = [
-    // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ DP-5）。TB 接続時は TB の停止スイッチ（b 接点）
-    { from: 'S1', to: 'S2', switch: 'NC' },
+    // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ DP-5）。TB 接続時は TB の停止スイッチ（b 接点）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
+    { from: 'S1', to: 'S2' },
     { from: 'PE', to: 'FG' },
   ];
   if (isPio(io)) ls.push(...pioLinks(positionerPio40('PIO', patternOf(p), '*BALM'), polarityOf(io)));
@@ -290,20 +290,22 @@ const links = (p: ParamValues): InternalLink[] => {
   return ls;
 };
 
-const safetyChannels = (p: ParamValues): SafetyChannelGroup[] =>
-  hasSto(p)
+const safetyChannels = (p: ParamValues): SafetyChannelGroup[] => [
+  stopLoop('EMG', '非常停止（EMG+ → EMG-）', 'EMG-'),
+  ...(hasSto(p)
     ? [
         {
           id: 'STO',
           label: 'STO（安全要求入力 /SRI1・/SRI2）',
-          kind: 'input',
-          mode: ['nc-nc', 'ossd'],
+          kind: 'input' as const,
+          mode: ['nc-nc' as const, 'ossd' as const],
           // セーフティリレーの a 接点（安全出力）で駆動することも多いため、接点の種類の指摘は注意にとどめる
           configurable: true,
           channels: [{ input: 'STO#4' }, { input: 'STO#6' }],
         },
       ]
-    : [];
+    : []),
+];
 
 const def: DeviceDefinition = {
   type: 'iai.scon-cb',

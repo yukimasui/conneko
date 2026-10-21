@@ -20,7 +20,7 @@ import {
 } from '../iai/parts';
 import { XSEL_PIO_OPTIONS, xselBoardPins, xselSystemIo, type XselPioBoard } from '../iai/xsel';
 import type { AcceptSpec, DeviceDefinition, InternalLink, ParamValues, PinDef, TerminalDef } from '../types';
-import { DC24_MINUS, DC24_PLUS } from '../iai/parts';
+import { DC24_MINUS, DC24_PLUS, stopLoop } from '../iai/parts';
 
 /**
  * IAI プログラムコントローラー XSEL-RA / SA（単軸ロボット・直交ロボット・リニアサーボ・ロボシリンダー RCS 用、AC サーボ 1〜4 軸仕様）。
@@ -233,6 +233,7 @@ const def: DeviceDefinition = {
   terminals,
   pins,
   links,
+  safetyChannels: [stopLoop('EMG', '非常停止（EMGin +24V → EMGin IN）', 'EMGIN'), stopLoop('ENB', 'イネーブル（ENBin +24V → ENBin IN）', 'ENBIN')],
   distinctGroups: [['CP_L', 'CP_N'], ['MP_R', 'MP_S', 'MP_T']],
   params: [
     {
