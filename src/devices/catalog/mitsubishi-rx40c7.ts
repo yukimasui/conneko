@@ -165,7 +165,7 @@ export function buildR18PointModule(o: R18ModuleOptions): DeviceDefinition {
   <rect x="2" y="46.5" width="${W - 4}" height="${H - 52}" rx="1" fill="#1b1c1e" stroke="#0b0b0c" stroke-width="0.6"/>
   <!-- 信号名の表示板 -->
   <rect x="2.6" y="47.2" width="11" height="${H - 53.5}" rx="0.8" fill="${accentFill}"/>
-  ${text(10.6, 52.4, o.ioLetter, 3.8, '#ffffff')}
+  ${text(10.6, 51.6, o.ioLetter, 3.4, '#ffffff')}
   ${marks}
   <!-- 端子台本体 -->
   <rect x="15.2" y="47.2" width="27.6" height="${H - 53.5}" rx="0.8" fill="url(#tb-{{uid}})"/>
