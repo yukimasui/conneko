@@ -950,6 +950,12 @@ textarea {
 .io-toolbar input[type='search'] {
   flex: 1;
 }
+.io-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
 .io-banner {
   display: flex;
   align-items: center;
@@ -978,6 +984,7 @@ textarea {
   z-index: 1;
 }
 .io-table td {
+  white-space: nowrap;
   padding: 3px 6px;
   border-bottom: 1px solid #edf0f4;
   vertical-align: middle;
@@ -1000,6 +1007,7 @@ textarea {
   font-size: 13px;
 }
 .io-conns {
+  white-space: normal;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

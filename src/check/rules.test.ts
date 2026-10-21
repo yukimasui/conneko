@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { AcceptSpec, DeviceDefinition, TerminalDef } from '../devices/types';
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 import source3p from '../devices/catalog/power-source-3p200v';
+import link from '../devices/catalog/generic-link';
 import { checkDiagram } from './checkDiagram';
 
 const t = (id: string, role: TerminalDef['role'], extra: Partial<TerminalDef> = {}): TerminalDef => ({ id, x: 0, y: 0, side: 'top', role, ...extra });
@@ -226,7 +227,7 @@ const dual: DeviceDefinition = {
   ],
 };
 
-const defs = [psu, plcIn, plcOut, lamp, sensor('npn'), sensor('pnp'), sensor('analog-v'), dryIn, twoWire, mc3, mcDc, mcPlain, estop, pushButton, relay, curtain, controller, lock, cpu, in32, out16, other, fcn, mil, ecat, eth, dual, source3p];
+const defs = [link, psu, plcIn, plcOut, lamp, sensor('npn'), sensor('pnp'), sensor('analog-v'), dryIn, twoWire, mc3, mcDc, mcPlain, estop, pushButton, relay, curtain, controller, lock, cpu, in32, out16, other, fcn, mil, ecat, eth, dual, source3p];
 const lookup = (type: string) => defs.find((d) => d.type === type);
 
 let n = 0;
@@ -491,6 +492,33 @@ describe('装着（iQ-R ベースユニット）', () => {
       getDeviceDefinition,
     );
     expect(swapped.problems.map((p) => p.rule)).toContain('mount-slot-role');
+  });
+});
+
+describe('リンク', () => {
+  const linked = (names: string[]): Diagram => ({
+    devices: [
+      dev('PS', 't.psu', { sheet: 'S1' }),
+      dev('L1', 't.lamp', { sheet: 'S2' }),
+      ...names.map((name, i) => dev(`LK${i + 1}`, 'generic.link', { params: { name }, sheet: i ? 'S2' : 'S1' })),
+    ],
+    wires: [w('PS.+V', 'LK1.T'), ...(names.length > 1 ? [w('LK2.T', 'L1.X1')] : [])],
+    sheets: [
+      { id: 'S1', name: '電源' },
+      { id: 'S2', name: '負荷' },
+    ],
+  });
+
+  it('同じ名前のリンクどうしは導通し、保護電流も伝わる', () => {
+    const d = linked(['P24', 'P24']);
+    d.wires.push(w('PS.-V', 'L1.X2'));
+    // L1.X2 はシートをまたぐが、チェックは図面全体で行う
+    expect(rulesOf(d)).toEqual([]);
+  });
+
+  it('相手のいないリンク・名前のないリンクを警告する', () => {
+    expect(rulesOf(linked(['P24']))).toContain('link-alone');
+    expect(rulesOf(linked(['', '']))).toContain('link-unnamed');
   });
 });
 

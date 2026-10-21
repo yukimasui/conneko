@@ -3,7 +3,7 @@ import { checkDiagram } from '../check/checkDiagram';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import type { Diagram } from './diagram';
 import { addTerminalBlock, connectIo, disconnectIo, ioHosts, ioSystem, setComment } from './io';
-import { moveToSheet, splitCrossSheetWires } from './ops';
+import { moveToSheet, splitCrossSheetWires, splitWireWithLinks } from './ops';
 
 const lookup = getDeviceDefinition;
 const attrs = { color: 'blue', sizeSq: 0.75, wireType: 'KIV' };
@@ -100,5 +100,17 @@ describe('シート', () => {
     const d: Diagram = { ...base(), wires: [{ id: 'W1', from: { device: 'KM1', terminal: 'A1' }, to: { device: 'S1', terminal: 'BN' }, ...attrs }] };
     const out = splitCrossSheetWires(d, lookup);
     expect(out.devices.filter((x) => x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['L1', 'L1']);
+  });
+
+  it('同じシートの電線をリンクで分けられる（線番がリンクの名前になる）', () => {
+    const d: Diagram = { ...base(), wires: [{ id: 'W1', from: { device: 'KM1', terminal: 'A1' }, to: { device: 'PLC1', terminal: '24V+' }, wireNo: 'P24', ...attrs }] };
+    const out = splitWireWithLinks(d, 'W1', lookup);
+    const links = out.devices.filter((x) => x.type === 'generic.link');
+    expect(links.map((l) => [l.sheet, l.params?.name])).toEqual([
+      ['S1', 'P24'],
+      ['S1', 'P24'],
+    ]);
+    expect(out.wires).toHaveLength(2);
+    expect(checkDiagram(out, lookup).filter((i) => i.rule.startsWith('link-'))).toEqual([]);
   });
 });

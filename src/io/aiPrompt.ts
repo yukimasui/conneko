@@ -7,7 +7,7 @@ import { computeBus, effectiveParams } from '../model/bus';
 import { getDeviceDefinition } from '../devices/registry';
 import { functionsOf, ioName, resolveDevice, type ResolvedAccept } from '../devices/resolve';
 import { resolveNum, type DeviceDefinition, type InternalLink, type ParamValues, type PinDef, type TerminalDef } from '../devices/types';
-import { toDiagramFile, type Diagram, type DiagramDevice } from '../model/diagram';
+import { sheetOf, sheetsOf, toDiagramFile, type Diagram, type DiagramDevice } from '../model/diagram';
 
 const ROLE_TEXT: Record<TerminalDef['role'], string> = {
   line: '一次側（電源側）',
@@ -90,8 +90,11 @@ function linkText(l: InternalLink): string {
   return `${l.from}${arrow}${l.to}${tags.length ? `(${tags.join('・')})` : ''}`;
 }
 
-function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamValues | undefined): string {
-  const lines = [`- ${d.id}: ${def.name} ${def.model}（type: ${def.type}）`];
+function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamValues | undefined, sheetName: string): string {
+  if (def.netLabel) {
+    return `- ${d.id}: リンク「${String(params?.[def.netLabel.param] ?? '')}」（シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
+  }
+  const lines = [`- ${d.id}: ${def.name} ${def.model}（type: ${def.type}、シート: ${sheetName}）`];
   if (def.description) lines.push(`  説明: ${def.description}`);
   const prot = resolveNum(def.protectionCurrent, def, params);
   if (prot !== undefined) lines.push(`  保護電流: ${prot}A`);
@@ -123,6 +126,8 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
     });
     lines.push(`  コネクタ ${t.id} のピン: ${text.join(', ')}`);
   }
+  const comments = Object.entries(d.comments ?? {});
+  if (comments.length) lines.push(`  コメント: ${comments.map(([k, v]) => `${k}=${v}`).join(', ')}`);
   // ネジ端子と同じ番号のピンをつなぐだけの経路（変換端子台）はまとめて書く
   const isPinToScrew = (l: InternalLink) => !l.switch && ((l.from.includes('#') && l.from.split('#')[1] === l.to) || (l.to.includes('#') && l.to.split('#')[1] === l.from));
   if (r.links.some(isPinToScrew)) lines.push('  コネクタのピン n はネジ端子 n と導通しています');
@@ -155,7 +160,8 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
   const devices = diagram.devices
     .map((d) => {
       const def = getDeviceDefinition(d.type);
-      return def ? deviceSection(d, def, effectiveParams(d, bus)) : `- ${d.id}: 不明な機器 ${d.type}`;
+      const sheetName = sheetsOf(diagram).find((s) => s.id === sheetOf(diagram, d))?.name ?? '';
+      return def ? deviceSection(d, def, effectiveParams(d, bus), sheetName) : `- ${d.id}: 不明な機器 ${d.type}`;
     })
     .join('\n');
   const issueText = issues.length ? issues.map((i) => `- [${i.severity}] ${i.message}`).join('\n') : '- なし';
@@ -164,12 +170,14 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
 下の図面データには、配置済みだが配線されていない機器があります。電気的に正しくなるように配線（wires）を追加し、図面データ全体をJSONで返してください。
 
 ## ルール
-- devices は変更しないでください（id・type・位置・params・mount をそのまま残す）。
+- 既存の devices は変更しないでください（id・type・位置・params・mount・sheet・comments をそのまま残す）。リンクは追加して構いません。
 - 既存の wires は、明らかな誤りがない限り残してください。
 - 追加する電線の形式: {"from": {"device": "機器名", "terminal": "端子ID"}, "to": {"device": "機器名", "terminal": "端子ID"}, "wireNo": "線番", "color": "色ID", "sizeSq": 太さ(mm²), "wireType": "電線種類ID"}
   - id は省略できます（アプリが自動採番します）。
   - 端子IDは下の「機器と端子」に書かれているものだけを使ってください（印字ではなく ID）。
 - コネクタ（MIL40, RJ45 など）どうしは、同じ種類（または変換ケーブルでつなげると書かれた種類）のコネクタ間をケーブルでつなぎます。ケーブルは wireType を "CABLE" にした電線として書きます（color/sizeSq は任意）。ケーブルでつなぐと両端の同じ番号のピンが導通します。通信ポートは通信方式が同じものどうしをつなぎます。
+- 図面はシート（sheets）に分かれています。電線は同じシートの機器どうしだけをつなぎます。別のシートの機器へは、両方のシートにリンク（type: "generic.link"、params: {"name": "名前", "side": "left"}）を置き、名前を同じにしてそれぞれ電線でつなぎます（同じ名前のリンクどうしが導通します）。新しく置く機器には sheet にシートの id を書いてください。シートをまたいだ電線を書いた場合は、アプリが自動でリンクに置き換えます。
+- PLC の入出力の電線は、線番を入出力番号（例: R000）にすると分かりやすくなります。コメント（comments）は入出力の用途です。
 - 電源出力から保護機器（ブレーカー・サーキットプロテクタ）を通して負荷へ給電してください。
 - 三相の負荷には R/S/T の3相を、それぞれ別の端子に接続してください。直流は +/- の極性に注意してください。
 - 接地端子は電源の PE へ接続してください。
