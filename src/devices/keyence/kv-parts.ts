@@ -415,11 +415,6 @@ export const ioOutputLinks = (pts: IoPoint[], rated: number): InternalLink[] =>
     .filter((pt) => pt.kind === 'out' && pt.common)
     .map((pt) => ({ from: pt.id, to: pt.common!, switch: 'output' as const, ratedCurrent: rated }));
 
-/**
- * 信号名（ユニットの先頭リレー番号からの相対番号。チャンネル ch、ビット bit → 'IN 000' / 'OUT 115' など）。
- */
-export const signalName = (kind: 'in' | 'out', ch: number, bit: number) =>
-  `${kind === 'in' ? 'IN' : 'OUT'} ${ch}${String(bit).padStart(2, '0')}`;
 
 /**
  * KEYENCE 34極 I/O コネクタ（左列 No.1〜16 = 16点 + No.17 = COM、右列 No.18〜33 = 16点 + No.34 = COM）のピン。
