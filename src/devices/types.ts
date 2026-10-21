@@ -352,6 +352,7 @@ export type DeviceCategory =
   | 'plc'
   | 'sensor'
   | 'safety'
+  | 'network'
   | 'link';
 
 /**

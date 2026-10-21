@@ -259,10 +259,11 @@ function Editor() {
   const showSheet = useCallback(
     (id: string, ids?: string[]) => {
       setSheet(id);
-      const targets = ids ?? nodesRef.current.filter((n) => n.data.sheet === id).map((n) => n.id);
-      if (targets.length) {
-        window.setTimeout(() => fitView({ nodes: targets.map((x) => ({ id: x })), padding: ids ? 0.5 : 0.15, duration: 350, maxZoom: ids ? 1.3 : 1.5 }), 60);
-      }
+      // 表示が切り替わって機器の大きさが測られてから合わせる（ids がなければ表示中の機器すべて）
+      window.setTimeout(() => {
+        if (ids?.length) fitView({ nodes: ids.map((x) => ({ id: x })), padding: 0.5, duration: 350, maxZoom: 1.3 });
+        else fitView({ padding: 0.15, duration: 350, maxZoom: 1.5 });
+      }, 80);
     },
     [fitView],
   );

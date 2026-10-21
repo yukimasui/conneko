@@ -336,7 +336,7 @@ function checkWireColors(m: Model, push: Push) {
       const info = m.terminals.get(key(r.device, r.terminal))!;
       const cat = info.def.category;
       const isControl =
-        (info.terminal.role === 'input' && (cat === 'contactor' || cat === 'control' || cat === 'plc' || cat === 'sensor' || cat === 'safety')) ||
+        (info.terminal.role === 'input' && (cat === 'contactor' || cat === 'control' || cat === 'plc' || cat === 'sensor' || cat === 'safety' || cat === 'network')) ||
         info.terminal.role === 'signal';
       if (isControl) controlNets.add(find(key(r.device, r.terminal)));
     }

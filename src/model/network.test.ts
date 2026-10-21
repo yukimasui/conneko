@@ -68,4 +68,17 @@ describe('ネットワークリンク', () => {
     expect(netLinks(split)).toHaveLength(2);
     expect(rules(split).filter((r) => r.startsWith('link-'))).toEqual([]);
   });
+
+  it('スイッチングハブ: Ethernet の機器はつながり、EtherCAT のポートをつなぐと通信方式の不一致', () => {
+    const d: Diagram = {
+      devices: [
+        { id: 'PLC1', type: 'keyence.kv-x550', x: 0, y: 0 },
+        { id: 'HMI1', type: 'keyence.vt5-w07', x: 0, y: 0 },
+        { id: 'HUB1', type: 'generic.ethernet-switch.8p', x: 0, y: 0 },
+      ],
+      wires: [cable('C1', 'PLC1.PORT1', 'HUB1.P1'), cable('C2', 'HMI1.LAN', 'HUB1.P2')],
+    };
+    expect(rules(d)).not.toContain('protocol-mismatch');
+    expect(rules({ ...d, wires: [...d.wires, cable('C3', 'PLC1.PORT3', 'HUB1.P3')] })).toContain('protocol-mismatch');
+  });
 });
