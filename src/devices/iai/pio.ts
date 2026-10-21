@@ -69,7 +69,7 @@ export function pioPins(points: PioPoint[], polarity: Polarity): PinDef[] {
           ...base,
           role: 'signal',
           signal: { dir: 'in', kind: 'dc', ...(common ? { common } : { commonPolarity: polarity === 'pnp' ? '-' : '+' }) },
-          note: pt.note ?? (polarity === 'pnp' ? '入力（PNP 仕様: +24V を加えると ON）' : '入力（NPN 仕様: 0V に引き込むと ON）'),
+          note: [pt.note, polarity === 'pnp' ? 'PNP 仕様: +24V を加えると ON' : 'NPN 仕様: 0V に引き込むと ON'].filter(Boolean).join('。'),
         };
       }
       case 'out':
@@ -77,7 +77,7 @@ export function pioPins(points: PioPoint[], polarity: Polarity): PinDef[] {
           ...base,
           role: 'signal',
           signal: { dir: 'out', kind: polarity },
-          note: pt.note ?? (polarity === 'pnp' ? '出力（PNP: ON で +24V を出す。最大 50mA）' : '出力（NPN: ON で 0V に引き込む。最大 50mA）'),
+          note: [pt.note, polarity === 'pnp' ? 'PNP 出力: ON で +24V を出す' : 'NPN 出力: ON で 0V に引き込む'].filter(Boolean).join('。'),
         };
       case 'pulse':
         return { ...base, role: 'signal', signal: { dir: 'in', kind: 'line-driver' }, note: pt.note ?? '差動（ラインドライバー）パルス列入力' };
@@ -178,6 +178,70 @@ export function positionerPio40(cn: string, pattern: number, out15 = 'LOAD/TRQS/
   add('B', 18, pulse ? 'pulse' : 'nc', pulse ? '/NP' : '－', undefined, pulse ? '差動パルス列入力（−）' : 'パルス列入力（パルス列制御モード以外は未使用）');
   add('B', 19, 'n', 'N', '0V');
   add('B', 20, 'n', 'N', '0V');
+  return pts;
+}
+
+/** 入出力ポート番号の表記（3 桁。000、300 など） */
+export const portNo = (n: number) => String(n).padStart(3, '0');
+
+/**
+ * プログラムコントローラー（MSEL・RSEL の PIO ユニットなど）の 40 極 PIO（HIF6）のピン。
+ * 1A・2A が P24、5A〜20A が入力ポート inBase〜inBase+15、1B〜16B が出力ポート outBase〜outBase+15、19B・20B が N。
+ * 入出力点の名前はポート番号（'IN000'、'OUT300'）にする（PLC の I/O 一覧でアドレスとして表示される）。
+ */
+export function selPio40(cn: string, inBase: number, outBase: number): PioPoint[] {
+  const pts: PioPoint[] = [];
+  const add = (row: 'A' | 'B', n: number, kind: PioKind, name: string, func?: string, note?: string) =>
+    pts.push({ id: `${cn}#${hif40No(row, n)}`, no: `${n}${row}`, kind, name, ...(func ? { func } : {}), ...(note ? { note } : {}) });
+  add('A', 1, 'p24', 'P24', '24V');
+  add('A', 2, 'p24', 'P24', '24V');
+  add('A', 3, 'nc', '－');
+  add('A', 4, 'nc', '－');
+  for (let i = 0; i < 16; i++) add('A', 5 + i, 'in', `IN${portNo(inBase + i)}`, undefined, `入力ポート ${portNo(inBase + i)}`);
+  for (let i = 0; i < 16; i++) add('B', 1 + i, 'out', `OUT${portNo(outBase + i)}`, undefined, `出力ポート ${portNo(outBase + i)}`);
+  add('B', 17, 'nc', '－');
+  add('B', 18, 'nc', '－');
+  add('B', 19, 'n', 'N', '0V');
+  add('B', 20, 'n', 'N', '0V');
+  return pts;
+}
+
+/** XSEL の標準 I/O の入力ポートの出荷時の機能（I/O パラメーターで変更できる） */
+const XSEL_IN_FUNC: Record<number, string> = {
+  0: 'プログラムスタート',
+  7: 'プログラム番号指定 1',
+  8: 'プログラム番号指定 2',
+  9: 'プログラム番号指定 4',
+  10: 'プログラム番号指定 8',
+  11: 'プログラム番号指定 10',
+  12: 'プログラム番号指定 20',
+  13: 'プログラム番号指定 40',
+};
+/** XSEL の標準 I/O の出力ポートの出荷時の機能 */
+const XSEL_OUT_FUNC: Record<number, string> = { 300: 'アラーム', 301: 'レディー', 302: '非常停止' };
+
+/**
+ * XSEL の PIO ボード（50 極 MIL フラットコネクター。XG4M-5030 相当）のピン。
+ * - 入力 32 点 / 出力 16 点（N1/P1）: 1 が +24V、2〜33 が入力 inBase〜+31、34〜49 が出力 outBase〜+15、50 が 0V
+ * - 入力 16 点 / 出力 32 点（N2/P2）: 1 が +24V、2〜17 が入力 inBase〜+15、18〜49 が出力 outBase〜+31、50 が 0V
+ * ピン番号は MIL 標準の番号（ピンID '<CN>#<番号>'）。withFunc を true にすると、出荷時の機能（プログラムスタートなど）を添える。
+ */
+export function xselPio50(cn: string, layout: '32/16' | '16/32', inBase: number, outBase: number, withFunc = false): PioPoint[] {
+  const ins = layout === '32/16' ? 32 : 16;
+  const pts: PioPoint[] = [{ id: `${cn}#1`, no: '1', kind: 'p24', name: 'P24', func: '+24V' }];
+  for (let i = 0; i < 48; i++) {
+    const pin = 2 + i;
+    if (i < ins) {
+      const port = inBase + i;
+      const f = withFunc ? XSEL_IN_FUNC[port] : undefined;
+      pts.push({ id: `${cn}#${pin}`, no: String(pin), kind: 'in', name: `IN${portNo(port)}`, note: `入力ポート ${portNo(port)}${f ? `（出荷時: ${f}）` : ''}` });
+    } else {
+      const port = outBase + i - ins;
+      const f = withFunc ? XSEL_OUT_FUNC[port] : undefined;
+      pts.push({ id: `${cn}#${pin}`, no: String(pin), kind: 'out', name: `OUT${portNo(port)}`, note: `出力ポート ${portNo(port)}${f ? `（出荷時: ${f}）` : ''}` });
+    }
+  }
+  pts.push({ id: `${cn}#50`, no: '50', kind: 'n', name: 'N', func: '0V' });
   return pts;
 }
 

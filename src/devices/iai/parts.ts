@@ -353,6 +353,24 @@ export function whiteConnectorV(x: number, y: number, w: number, h: number, rows
   <rect x="${n2(x + w - 1.5)}" y="${n2(y + h * 0.15)}" width="2.6" height="${n2(h * 0.7)}" rx="0.4" fill="#e8eaec" stroke="#8a8f94" stroke-width="0.3"/>`;
 }
 
+/** 7 セグメント表示（消灯時の赤い表示器）。x, y は左上、w×h、digits は桁数 */
+export const sevenSeg = (x: number, y: number, w: number, h: number, digits = 4) => `
+  <rect x="${n2(x)}" y="${n2(y)}" width="${n2(w)}" height="${n2(h)}" rx="1" fill="#1a0b0b" stroke="#000" stroke-width="0.6"/>
+  ${Array.from({ length: digits }, (_, i) => {
+    const cx = x + (w / digits) * (i + 0.5);
+    const sw = w / digits - Math.min(7, w / digits / 2.5);
+    const m = Math.min(5, h / 5);
+    return `<path d="M${n2(cx - sw / 2)} ${n2(y + m)} h${n2(sw)} M${n2(cx - sw / 2)} ${n2(y + h / 2)} h${n2(sw)} M${n2(cx - sw / 2)} ${n2(y + h - m)} h${n2(sw)} M${n2(cx - sw / 2)} ${n2(y + m)} v${n2(h - 2 * m)} M${n2(cx + sw / 2)} ${n2(y + m)} v${n2(h - 2 * m)}" stroke="#4a1a1a" stroke-width="${n2(Math.max(1, sw / 5))}" stroke-linecap="round"/>`;
+  }).join('')}`;
+
+/** 半ピッチの D-sub 風コネクター（エンコーダー・ティーチングなど。縦向き）。cx, cy は中心、h は高さ */
+export function dshellV(cx: number, cy: number, h: number, w = 14, body = 'url(#iaishield-{{uid}})') {
+  return `
+  <rect x="${n2(cx - w / 2)}" y="${n2(cy - h / 2)}" width="${w}" height="${n2(h)}" rx="1.2" fill="${body}" stroke="#5d6166" stroke-width="0.6"/>
+  <path d="M${n2(cx - w / 2 + 3)} ${n2(cy - h / 2 + 6)} L${n2(cx + w / 2 - 3)} ${n2(cy - h / 2 + 7.5)} V${n2(cy + h / 2 - 7.5)} L${n2(cx - w / 2 + 3)} ${n2(cy + h / 2 - 6)} Z" fill="#1a1b1d" stroke="#777" stroke-width="0.4"/>
+  ${screw(cx, cy - h / 2 + 2.8, 1.5)}${screw(cx, cy + h / 2 - 2.8, 1.5)}`;
+}
+
 /** 黒い小さなコネクター（バッテリーなど）。x, y は左上 */
 export const smallBlackConnector = (x: number, y: number, w: number, h: number, pins = 2) => `
   <rect x="${n2(x)}" y="${n2(y)}" width="${w}" height="${h}" rx="0.6" fill="#16171a" stroke="#000" stroke-width="0.4"/>
