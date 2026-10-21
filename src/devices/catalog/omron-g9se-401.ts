@@ -166,7 +166,8 @@ const def: DeviceDefinition = {
   safetyChannels: [
     // 非常停止などの b 接点 2 回路、またはライトカーテンの OSSD1/OSSD2 を T12/T22 へ直接つなぐ
     { id: 'IN', label: '安全入力（CH1: T11→T12、CH2: T21→T22、または OSSD）', kind: 'input', mode: ['nc-nc', 'ossd'], channels: [{ source: 'T11', input: 'T12' }, { source: 'T21', input: 'T22' }] },
-    { id: 'OUT', label: '安全出力 13-14・23-24・33-34・43-44', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }, { output: '43' }] },
+    // 接触器 2 台（K1/K2）を駆動する 13-14・23-24 を組にする。33-34・43-44 は増設・状態入力用で、使わなくても警告しない
+    { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 消費電力 4W 以下 / 24V

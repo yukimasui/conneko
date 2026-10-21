@@ -189,7 +189,8 @@ const def: DeviceDefinition = {
     // 押ボタンごとに b 接点と a 接点を監視する（非等価入力）
     { id: 'S12', label: '押ボタン S12（b 接点: T12→T11、a 接点: T12→T13）', kind: 'input', mode: 'nc-no', channels: [{ source: 'T12', input: 'T11' }, { source: 'T12', input: 'T13' }] },
     { id: 'S11', label: '押ボタン S11（b 接点: T22→T21、a 接点: T22→T23）', kind: 'input', mode: 'nc-no', channels: [{ source: 'T22', input: 'T21' }, { source: 'T22', input: 'T23' }] },
-    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+    // 接触器 2 台（K1/K2）を駆動する 13-14・23-24 を組にする。33-34 は増設・状態入力用で、使わなくても警告しない
+    { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', standards: ['ISO 13849-1', 'ISO 13851（EN 574）タイプ IIIC'] },
   // 消費電力 1.7W / 24V

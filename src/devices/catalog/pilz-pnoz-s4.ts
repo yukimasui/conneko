@@ -156,7 +156,8 @@ const def: DeviceDefinition = {
   ],
   safetyChannels: [
     { id: 'IN', label: '安全入力（CH1: S11→S12、CH2: S21→S22）', kind: 'input', mode: 'nc-nc', channels: [{ source: 'S11', input: 'S12' }, { source: 'S21', input: 'S22' }] },
-    { id: 'OUT', label: '安全出力 13-14・23-24・33-34', kind: 'output', channels: [{ output: '13' }, { output: '23' }, { output: '33' }] },
+    // 接触器 2 台（K1/K2）を駆動する 13-14・23-24 を組にする。33-34 は増設・状態入力用で、使わなくても警告しない
+    { id: 'OUT', label: '安全出力 13-14・23-24', kind: 'output', channels: [{ output: '13' }, { output: '23' }] },
   ],
   safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 消費電力 2.5W 程度 / 24V
