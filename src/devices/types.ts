@@ -134,7 +134,9 @@ export interface SignalSpec {
  * - safety-contact: 安全出力のリレー接点（13-14 など）
  * - aux-output: 補助出力（非安全）
  * - edm: 外部機器監視（EDM）入力・フィードバックループ
- * - reset / start / muting: リセット・スタート・ミューティング入力
+ * - reset: 手動リセット入力（押しボタンをつなぐ）
+ * - reset-auto: 自動リセットにする端子（配線すると自動リセットになる。G9SE の T32 など）
+ * - start / muting: スタート・ミューティング入力
  * - unlock-solenoid: 通電で解錠するソレノイド（スプリングロック式の電磁ロック）
  * - lock-solenoid: 通電で施錠するソレノイド（ソレノイドロック式の電磁ロック）
  */
@@ -146,6 +148,7 @@ export type TerminalFunction =
   | 'aux-output'
   | 'edm'
   | 'reset'
+  | 'reset-auto'
   | 'start'
   | 'muting'
   | 'unlock-solenoid'
@@ -164,7 +167,7 @@ interface TerminalBase {
   /** 信号の種類（role: 'signal' の端子） */
   signal?: SignalSpec;
   /** 安全回路での機能 */
-  function?: TerminalFunction;
+  function?: TerminalFunction | TerminalFunction[];
   /** 2 チャンネル構成の安全回路でのチャンネル番号 */
   channel?: 1 | 2;
   /** true の場合、未接続でも警告しない（予備端子・補助接点など） */
@@ -204,7 +207,7 @@ export interface InternalLink {
    * - output: PLC・センサーなどの出力（ON で導通）。from に出力点、to にコモン（または出力素子の基準側）を書く
    */
   switch?: 'NO' | 'NC' | 'output';
-  /** 直接開路動作（IEC 60947-5-1 附属書 K、⊕ マーク）の b 接点 */
+  /** 直接開路動作（IEC 60947-5-1 附属書 K、⊕ マーク）の接点。イネーブルスイッチの a 接点（強制開離）にも付ける */
   directOpening?: boolean;
   /** 強制ガイド接点（IEC 61810-3）・ミラー接点（IEC 60947-4-1 附属書 F） */
   linked?: 'force-guided' | 'mirror';
@@ -230,12 +233,17 @@ export interface SafetyChannelGroup {
   label?: string;
   kind: 'input' | 'output';
   /**
-   * 入力の想定（kind: 'input'）。省略時は 'nc-nc'。
+   * 入力の想定（kind: 'input'）。省略時は 'nc-nc'。どちらも受けられる入力は配列で書く（例: ['nc-nc', 'ossd']）。
    * - nc-nc: 2 つの b 接点（等価入力。非常停止など）
    * - nc-no: b 接点と a 接点（非等価入力）。channels[0] が b 接点、channels[1] が a 接点
    * - ossd: OSSD 出力機器（ライトカーテンなど）を直接つなぐ入力
    */
-  mode?: 'nc-nc' | 'nc-no' | 'ossd';
+  mode?: SafetyInputMode | SafetyInputMode[];
+  /**
+   * 入力の使い方（2 チャンネルの組、EDM・リセットなど）を機器の設定・プログラムで決める場合 true
+   * （安全コントローラーの汎用安全入力など）。片側だけの配線や別チャンネルのテスト出力の使用は、注意（info）にとどめる
+   */
+  configurable?: boolean;
   channels: {
     /** 安全入力の端子ID（kind: 'input'） */
     input?: string;
@@ -256,9 +264,13 @@ export interface SafetyRating {
   sil?: 1 | 2 | 3;
   /** IEC 61496 のタイプ（ライトカーテン・レーザスキャナなど人を検出する保護装置） */
   esType?: 2 | 3 | 4;
+  /** B10d（10% が危険側故障に至るまでの動作回数。スイッチ・接触器など。表示用） */
+  b10d?: number;
   /** 準拠規格（表示用） */
   standards?: string[];
 }
+
+export type SafetyInputMode = 'nc-nc' | 'nc-no' | 'ossd';
 
 /**
  * 入出力番号の表し方（先頭番号の表示と、ラベル作成の補助に使う）。
@@ -382,7 +394,7 @@ export interface DeviceDefinition {
   /** コモンあたりの電流の上限 */
   commonLimits?: CommonLimit[];
   /** 安全回路のチャンネルの組 */
-  safetyChannels?: SafetyChannelGroup[];
+  safetyChannels?: ParamDependent<SafetyChannelGroup[]>;
   /** 安全性能 */
   safety?: SafetyRating;
   /** 増設ユニットの連結・ベースユニットへの装着 */

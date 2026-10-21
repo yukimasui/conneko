@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
-import { resolveDevice } from '../devices/resolve';
+import { functionsOf, resolveDevice } from '../devices/resolve';
 import { paramsWithDefaults, type DeviceDefinition } from '../devices/types';
 import type { Diagram, DiagramWire } from '../model/diagram';
 import { checkDiagram } from './checkDiagram';
@@ -298,7 +298,7 @@ describe('安全回路の電気チェック', () => {
 });
 
 /** 端子の機能ごとの一覧 */
-const terminalsWith = (type: string, fn: string) => resolveDevice(getDeviceDefinition(type)!).terminals.filter((t) => t.function === fn);
+const terminalsWith = (type: string, fn: string) => resolveDevice(getDeviceDefinition(type)!).terminals.filter((t) => functionsOf(t).includes(fn as never));
 
 describe('安全機器の安全回路用の定義', () => {
   it.each(SAFETY_TYPES)('%s に安全性能（PL など、または準拠規格）がある', (type) => {
@@ -325,17 +325,17 @@ describe('安全機器の安全回路用の定義', () => {
   it.each(SAFETY_TYPES)('%s の安全入力・OSSD はすべてチャンネルの組に含まれ、組の戻し先はテスト出力', (type) => {
     const def = getDeviceDefinition(type)!;
     const r = resolveDevice(def);
-    const groups = def.safetyChannels ?? [];
+    const groups = r.safetyChannels;
     const inputs = new Set(groups.filter((g) => g.kind === 'input').flatMap((g) => g.channels.map((c) => c.input)));
     const outputs = new Set(groups.filter((g) => g.kind === 'output').flatMap((g) => g.channels.map((c) => c.output)));
     for (const t of terminalsWith(type, 'safety-input')) expect(inputs, `${type} ${t.id}`).toContain(t.id);
     for (const t of terminalsWith(type, 'ossd')) expect(outputs, `${type} ${t.id}`).toContain(t.id);
     for (const g of groups) {
       if (g.kind === 'input' && g.mode !== 'ossd') {
-        for (const c of g.channels) expect(r.terminal(c.source!)?.function, `${type} ${g.id}`).toBe('test-output');
+        for (const c of g.channels) expect(functionsOf(r.terminal(c.source!) ?? {}), `${type} ${g.id}`).toContain('test-output');
       }
       if (g.kind === 'output') {
-        for (const c of g.channels) expect(['ossd', 'safety-contact']).toContain(r.terminal(c.output!)?.function);
+        for (const c of g.channels) expect(functionsOf(r.terminal(c.output!) ?? {}).some((f) => f === 'ossd' || f === 'safety-contact')).toBe(true);
       }
     }
   });

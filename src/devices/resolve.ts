@@ -16,6 +16,8 @@ import {
   type ParamValues,
   type PinDef,
   type PowerSystem,
+  type SafetyChannelGroup,
+  type TerminalFunction,
   type Conductor,
   type TerminalDef,
 } from './types';
@@ -35,6 +37,7 @@ export interface ResolvedDevice {
   terminals: TerminalDef[];
   pins: PinDef[];
   links: InternalLink[];
+  safetyChannels: SafetyChannelGroup[];
   /** 端子IDまたはピンID → 受電条件（配列に正規化、電圧は数値） */
   accepts: Map<string, ResolvedAccept[]>;
   terminal(id: string): TerminalDef | undefined;
@@ -76,6 +79,7 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
   const terminals = evaluate(def.terminals, p, []);
   const pins = evaluate(def.pins, p, []);
   const links = evaluate(def.links, p, []);
+  const safetyChannels = evaluate(def.safetyChannels, p, []);
   const accepts = new Map<string, ResolvedAccept[]>();
   for (const t of [...terminals, ...pins]) {
     if (t.accepts) accepts.set(t.id, resolveAccepts(t.accepts, def, p));
@@ -88,6 +92,7 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     terminals,
     pins,
     links,
+    safetyChannels,
     accepts,
     terminal: (id) => tById.get(id),
     pin: (id) => pById.get(id),
@@ -135,4 +140,9 @@ export function parseIoName(format: IoFormat, text: string): number | undefined 
   if (!m) return undefined;
   const n = parseInt(m[1], format === 'hex' ? 16 : 8);
   return Number.isNaN(n) || (format === 'octal' && /[89A-F]/.test(m[1])) ? undefined : n;
+}
+
+/** 端子の機能を配列で返す */
+export function functionsOf(t: { function?: TerminalFunction | TerminalFunction[] }): TerminalFunction[] {
+  return t.function === undefined ? [] : Array.isArray(t.function) ? t.function : [t.function];
 }

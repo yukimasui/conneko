@@ -56,7 +56,7 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   for (const c of def.commonLimits ?? []) {
     if (!ids.has(c.common)) problems.push(`commonLimits に存在しない端子: ${c.common}`);
   }
-  for (const g of def.safetyChannels ?? []) {
+  for (const g of r.safetyChannels) {
     for (const ch of g.channels) {
       for (const id of [ch.input, ch.source, ch.output]) {
         if (id !== undefined && !ids.has(id)) problems.push(`safetyChannels ${g.id} に存在しない端子: ${id}`);

@@ -5,7 +5,8 @@
  * 他の機器の接点（switch のある経路）を通ってたどって求める。電源出力（テスト出力・OSSD・電源）のあるネットに
  * 着いたらそこで止める。たどった接点がループに直列に入っている接点になる。
  */
-import type { SafetyChannelGroup, SafetyRating } from '../devices/types';
+import { functionsOf } from '../devices/resolve';
+import type { SafetyChannelGroup, SafetyInputMode, SafetyRating, TerminalFunction } from '../devices/types';
 import { key, netIsWired, terminalName, wiresOfNet, type DeviceInfo, type Model, type Push, type Supply, type SwitchLink } from './model';
 
 interface Chain {
@@ -83,9 +84,9 @@ export function checkSafety(m: Model, push: Push) {
   for (const owner of m.devices.values()) {
     const { device, def, r } = owner;
     const id = device.id;
-    const groups = def.safetyChannels ?? [];
+    const groups = r.safetyChannels;
     const tKey = (t: string) => key(id, t);
-    const byFunction = (f: string) => [...r.terminals, ...r.pins].filter((t) => t.function === f).map((t) => t.id);
+    const byFunction = (f: TerminalFunction) => [...r.terminals, ...r.pins].filter((t) => functionsOf(t).includes(f)).map((t) => t.id);
     const label = (g: SafetyChannelGroup) => g.label ?? g.id;
 
     // --- 安全入力 ---
@@ -94,18 +95,21 @@ export function checkSafety(m: Model, push: Push) {
       const chs = g.channels.filter((c) => c.input);
       const used = chs.filter((c) => netIsWired(m, tKey(c.input!)));
       if (!used.length) continue;
+      // 使い方を設定で決める入力（安全コントローラーの汎用入力など）は、注意にとどめる
+      const severe = g.configurable ? 'info' : 'error';
+      const settingNote = g.configurable ? '。設定で別の使い方にしている場合は問題ありません' : '';
       if (used.length < chs.length) {
         const missing = chs.filter((c) => !used.includes(c)).map((c) => terminalName(m, tKey(c.input!)));
         push({
-          severity: 'error',
+          severity: severe,
           rule: 'safety-channel-partial',
-          message: `${id}: 安全入力 ${label(g)} の ${missing.join('・')} が未配線です（2 チャンネルの片側だけが配線されています）`,
+          message: `${id}: 安全入力 ${label(g)} の ${missing.join('・')} が未配線です（2 チャンネルの片側だけが配線されています${settingNote}）`,
           devices: [id],
           wires: used.flatMap((c) => wiresOfNet(m, tKey(c.input!))),
           key: `safety-channel-partial:${id}:${g.id}`,
         });
       }
-      const mode = g.mode ?? 'nc-nc';
+      const modes: SafetyInputMode[] = g.mode === undefined ? ['nc-nc'] : [g.mode].flat();
       const chains = used.map((c) => ({ c, idx: g.channels.indexOf(c), chain: chain([tKey(c.input!)], id) }));
       for (const { c, idx, chain: ch } of chains) {
         const input = tKey(c.input!);
@@ -113,7 +117,9 @@ export function checkSafety(m: Model, push: Push) {
         const wires = wiresOfNet(m, input);
         const ossd = ch.supplies.filter((s) => s.kind === 'ossd');
         // ライトカーテンなど人を検出する保護装置からの入力か（自動リセットの注意に使う）
-        if (ossd.some((s) => !!m.devices.get(s.device)?.def.safety?.esType) || (mode === 'ossd' && ossd.length)) fedByEspe = true;
+        if (ossd.some((s) => !!m.devices.get(s.device)?.def.safety?.esType) || (modes.includes('ossd') && ossd.length)) fedByEspe = true;
+        // OSSD をつないだ入力で、OSSD 入力として使える組なら、接点・テスト出力の確認は不要
+        if (ossd.length && modes.includes('ossd')) continue;
         // テスト出力から戻っているか
         if (c.source) {
           const src = tKey(c.source);
@@ -121,8 +127,8 @@ export function checkSafety(m: Model, push: Push) {
           if (ch.supplies.some((s) => s.terminal === src)) {
             // OK
           } else if (ch.supplies.some((s) => others.includes(s.terminal))) {
-            push({ severity: 'error', rule: 'safety-channel-cross', message: `${id}: 安全入力 ${where} に別のチャンネルのテスト出力が戻っています（${terminalName(m, src)} から戻します）`, devices: [id], wires, key: `safety-channel-cross:${input}` });
-          } else if (ossd.length && mode !== 'ossd') {
+            push({ severity: severe, rule: 'safety-channel-cross', message: `${id}: 安全入力 ${where} に別のチャンネルのテスト出力が戻っています（${terminalName(m, src)} から戻します${settingNote}）`, devices: [id], wires, key: `safety-channel-cross:${input}` });
+          } else if (ossd.length) {
             push({
               severity: 'warning',
               rule: 'ossd-to-test-input',
@@ -131,21 +137,24 @@ export function checkSafety(m: Model, push: Push) {
               wires,
               key: `ossd-to-test-input:${input}`,
             });
+          } else if (g.configurable && ch.supplies.some((s) => s.kind === 'test')) {
+            // 設定で別のテスト出力を割り当てている（設定で決まるため指摘しない）
           } else if (ch.supplies.some((s) => s.kind === 'power')) {
-            push({ severity: 'warning', rule: 'safety-test-bypass', message: `${id}: 安全入力 ${where} にテスト出力 ${terminalName(m, src)} ではなく電源から入力しています（配線の短絡を検出できません）`, devices: [id], wires, key: `safety-test-bypass:${input}` });
+            push({ severity: g.configurable ? 'info' : 'warning', rule: 'safety-test-bypass', message: `${id}: 安全入力 ${where} にテスト出力 ${terminalName(m, src)} ではなく電源から入力しています（配線の短絡を検出できません）`, devices: [id], wires, key: `safety-test-bypass:${input}` });
           } else {
             push({ severity: 'warning', rule: 'safety-channel-open', message: `${id}: 安全入力 ${where} がテスト出力 ${terminalName(m, src)} まで戻っていません`, devices: [id], wires, key: `safety-channel-open:${input}` });
           }
         }
         // ループに入っている接点の種類
-        const expectNC = mode === 'nc-nc' || (mode === 'nc-no' && idx === 0);
+        const expectNC = modes.includes('nc-nc') || (modes.includes('nc-no') && idx === 0);
         if (!expectNC) continue;
         for (const s of ch.links) {
           const other = m.devices.get(s.device)!;
           const contact = `${s.device} の ${s.link.from}-${s.link.to}`;
-          if (s.link.switch === 'NO') {
+          // イネーブルスイッチの a 接点（強制開離）は安全入力に使える
+          if (s.link.switch === 'NO' && !s.link.directOpening) {
             push({
-              severity: 'error',
+              severity: severe,
               rule: 'estop-not-nc',
               message: `${id}: 安全入力 ${where} のループに a 接点（${contact}）が入っています。非常停止・ドアスイッチなどは b 接点を使います`,
               devices: [id, s.device],
@@ -171,7 +180,7 @@ export function checkSafety(m: Model, push: Push) {
           const sameNet = m.fixed.find(tKey(chains[i].c.input!)) === m.fixed.find(tKey(chains[j].c.input!));
           if (!shared.length && !sameNet) continue;
           push({
-            severity: 'error',
+            severity: severe,
             rule: 'safety-channel-cross',
             message: sameNet
               ? `${id}: 安全入力 ${chains[i].c.input} と ${chains[j].c.input} がつながっています（2 チャンネルが独立していません）`
@@ -281,13 +290,16 @@ export function checkSafety(m: Model, push: Push) {
 
     // --- リセット（人が通過できる保護に自動リセット） ---
     const reset = byFunction('reset');
-    if (reset.length && fedByEspe) {
-      const loop = chain(reset.map(tKey), id);
-      if (!loop.links.some((s) => s.link.switch === 'NO')) {
+    const autoReset = byFunction('reset-auto').filter((t) => netIsWired(m, tKey(t)));
+    if ((reset.length || autoReset.length) && fedByEspe) {
+      const manual = reset.length > 0 && chain(reset.map(tKey), id).links.some((s) => s.link.switch === 'NO');
+      if (autoReset.length || !manual) {
         push({
           severity: 'info',
           rule: 'reset-auto',
-          message: `${id}: ライトカーテンなどの保護装置を使っていますが、リセット入力 ${reset.join('・')} に押しボタンがなく自動リセットになっています。人が保護範囲に入れる場合は手動リセットにします`,
+          message: autoReset.length
+            ? `${id}: ライトカーテンなどの保護装置を使っていますが、自動リセットの端子 ${autoReset.join('・')} を配線しています。人が保護範囲に入れる場合は手動リセットにします`
+            : `${id}: ライトカーテンなどの保護装置を使っていますが、リセット入力 ${reset.join('・')} に押しボタンがなく自動リセットになっています。人が保護範囲に入れる場合は手動リセットにします`,
           devices: [id],
           wires: [],
           key: `reset-auto:${id}`,

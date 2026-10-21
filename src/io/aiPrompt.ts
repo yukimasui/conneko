@@ -5,7 +5,7 @@ import type { CheckIssue } from '../check/checkDiagram';
 import { CIRCUIT_COLOR_RULES, WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { computeBus, effectiveParams } from '../model/bus';
 import { getDeviceDefinition } from '../devices/registry';
-import { ioName, resolveDevice, type ResolvedAccept } from '../devices/resolve';
+import { functionsOf, ioName, resolveDevice, type ResolvedAccept } from '../devices/resolve';
 import { resolveNum, type DeviceDefinition, type InternalLink, type ParamValues, type PinDef, type TerminalDef } from '../devices/types';
 import { toDiagramFile, type Diagram, type DiagramDevice } from '../model/diagram';
 
@@ -40,6 +40,7 @@ const FUNCTION_TEXT: Record<string, string> = {
   'aux-output': '補助出力',
   edm: 'EDM(外部機器監視)',
   reset: 'リセット入力',
+  'reset-auto': '自動リセット端子',
   start: 'スタート入力',
   muting: 'ミューティング入力',
   'unlock-solenoid': '解錠ソレノイド',
@@ -66,7 +67,8 @@ function traits(t: TerminalDef | PinDef, accepts: ResolvedAccept[]): string[] {
     parts.push(`${kind}${t.supply.system} ${typeof t.supply.voltage === 'number' ? t.supply.voltage + 'V' : ''} 導体=${t.supply.conductor}`);
   }
   if (accepts.length) parts.push(acceptsText(accepts));
-  if (t.function) parts.push(`${FUNCTION_TEXT[t.function] ?? t.function}${t.channel ? ` CH${t.channel}` : ''}`);
+  const fns = functionsOf(t);
+  if (fns.length) parts.push(`${fns.map((f) => FUNCTION_TEXT[f] ?? f).join('・')}${t.channel ? ` CH${t.channel}` : ''}`);
   return parts;
 }
 
@@ -133,9 +135,10 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
     const v = resolveNum(c.current, def, params);
     if (v !== undefined) lines.push(`  コモン ${c.common} の上限: ${v}A`);
   }
-  for (const g of def.safetyChannels ?? []) {
+  for (const g of r.safetyChannels) {
     const chs = g.channels.map((c, i) => `CH${i + 1}=${c.source ? `${c.source}→` : ''}${c.input ?? c.output}`).join(', ');
-    lines.push(`  安全${g.kind === 'input' ? '入力' : '出力'} ${g.label ?? g.id}${g.mode ? `（${g.mode}）` : ''}: ${chs}`);
+    const mode = g.mode ? `（${[g.mode].flat().join(' または ')}）` : '';
+    lines.push(`  安全${g.kind === 'input' ? '入力' : '出力'} ${g.label ?? g.id}${mode}${g.configurable ? '（使い方は機器の設定で決まる）' : ''}: ${chs}`);
   }
   if (def.distinctGroups?.length) {
     lines.push(`  異なる相で給電する端子: ${def.distinctGroups.map((g) => g.join('/')).join('; ')}`);
