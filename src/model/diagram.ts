@@ -60,6 +60,11 @@ export interface DiagramWire {
   wireType: string;
   /** 配線の曲がり位置の調整量[px]。自動配置からのずれ */
   bend?: number;
+  /**
+   * 手で編集した経路（両端のスタブの先どうしの間の頂点。キャンバス上の座標）。
+   * 指定すると自動の経路の代わりに、これを直交につないだ折れ線で描く
+   */
+  route?: { x: number; y: number }[];
 }
 
 /** 図面全体の設定 */
@@ -126,6 +131,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       sizeSq: w.sizeSq,
       wireType: w.wireType,
       ...(w.bend ? { bend: Math.round(w.bend) } : {}),
+      ...(w.route ? { route: w.route.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })) } : {}),
     })),
   };
 }
@@ -207,6 +213,9 @@ export function parseDiagram(input: string | unknown): Diagram {
       sizeSq: typeof w.sizeSq === 'number' ? w.sizeSq : DEFAULT_WIRE.sizeSq,
       wireType: typeof w.wireType === 'string' ? w.wireType : DEFAULT_WIRE.wireType,
       ...(typeof w.bend === 'number' ? { bend: w.bend } : {}),
+      ...(Array.isArray(w.route)
+        ? { route: w.route.filter((p): p is { x: number; y: number } => isObj(p) && typeof p.x === 'number' && typeof p.y === 'number').map((p) => ({ x: p.x, y: p.y })) }
+        : {}),
     };
   });
   const settings: DiagramSettings = {};

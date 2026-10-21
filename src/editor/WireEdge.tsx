@@ -5,7 +5,18 @@ import type { TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode, WireFlowEdge } from './flow';
 import { CableGraphics } from './CableGraphics';
-import { DIR, routeWire, toRoundedPath } from './routing';
+import {
+  autoInner,
+  DIR,
+  manualRoute,
+  orthogonalize,
+  pointAtLength,
+  polylineLength,
+  routeWire,
+  simplifyRoute,
+  toRoundedPath,
+  type Point,
+} from './routing';
 
 /** 線番マーカーを端子から離す距離 */
 const MARKER_GAP = 15;
@@ -17,6 +28,14 @@ const SIDE: Record<Position, TerminalSide> = {
   [Position.Right]: 'right',
 };
 
+/** 線分をドラッグするときの吸着: グリッド（5px）と、ほかの頂点の座標（6px 以内） */
+const SNAP = 5;
+const ALIGN = 6;
+
+type Drag = { k: number; work: Point[]; horizontal: boolean; start: number; base: number };
+
+const isHorizontal = (a: Point, b: Point) => Math.abs(a.y - b.y) < 0.5 && Math.abs(a.x - b.x) >= 0.5;
+
 function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireFlowEdge>) {
   const { lanes, geometry, wireSeverity, showMarkers } = useEditorContext();
   const geo = geometry.get(id);
@@ -26,53 +45,97 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
   const lane = bend ? 0 : (lanes.get(id) ?? 0);
   const offset = lane + bend;
 
-  const route = routeWire(
-    {
-      sx: sourceX,
-      sy: sourceY,
-      sSide: SIDE[sourcePosition],
-      tx: targetX,
-      ty: targetY,
-      tSide: SIDE[targetPosition],
-      sStub: geo?.sStub,
-      tStub: geo?.tStub,
-    },
-    offset,
-  );
-  const path = toRoundedPath(route.points);
+  const ends = {
+    sx: sourceX,
+    sy: sourceY,
+    sSide: SIDE[sourcePosition],
+    tx: targetX,
+    ty: targetY,
+    tSide: SIDE[targetPosition],
+    sStub: geo?.sStub,
+    tStub: geo?.tStub,
+  };
+  // 手で編集した経路があればそれを、なければ自動の経路を使う
+  const manual = data?.route ? manualRoute(ends, data.route) : null;
+  const points = manual ? manual.points : routeWire(ends, offset).points;
+  const inner = manual ? manual.inner : autoInner(ends, offset);
+  const path = toRoundedPath(points);
   const color = getWireColor(data?.color ?? 'black');
   const hex = color?.hex ?? '#1a1a1a';
   const severity = wireSeverity.get(id);
-  const mid = { x: (route.midA.x + route.midB.x) / 2, y: (route.midA.y + route.midB.y) / 2 };
+  const mid = pointAtLength(points, polylineLength(points) / 2);
 
-  // 中間セグメントのドラッグで曲がり位置を調整する
-  const drag = useRef<{ start: number; base: number } | null>(null);
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      e.stopPropagation();
-      (e.target as Element).setPointerCapture(e.pointerId);
-      const p = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      drag.current = { start: route.horizontalMid ? p.y : p.x, base: offset };
+  const setRoute = useCallback(
+    (route: Point[] | undefined) => {
+      setEdges((edges) =>
+        edges.map((ed) => (ed.id === id && ed.data ? { ...ed, data: { ...ed.data, bend: undefined, route: route?.map((p) => ({ x: p.x, y: p.y })) } } : ed)),
+      );
     },
-    [screenToFlowPosition, route.horizontalMid, offset],
+    [setEdges, id],
   );
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!drag.current) return;
-      const p = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      const delta = (route.horizontalMid ? p.y : p.x) - drag.current.start;
-      // 0 だと「未調整」扱いになるため、わずかにずらす
-      const next = Math.round(drag.current.base + delta) || 0.5;
-      setEdges((edges) => edges.map((ed) => (ed.id === id && ed.data ? { ...ed, data: { ...ed.data, bend: next } } : ed)));
-    },
-    [screenToFlowPosition, route.horizontalMid, setEdges, id],
-  );
-  const onPointerUp = useCallback(() => {
-    drag.current = null;
-  }, []);
-  const resetBend = useCallback(() => {
-    setEdges((edges) => edges.map((ed) => (ed.id === id && ed.data ? { ...ed, data: { ...ed.data, bend: undefined } } : ed)));
-  }, [setEdges, id]);
+
+  // 線分 k（inner[k]〜inner[k+1]）を、線分に直交する向きに動かす。
+  // ドラッグ中に頂点が増えてつまみが入れ替わるため、移動はウィンドウで受け取る
+  const drag = useRef<Drag | null>(null);
+  const onPointerDown = (k: number) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const work = inner.map((p) => ({ ...p }));
+    let seg = k;
+    const horizontal = isHorizontal(work[seg], work[seg + 1]);
+    // 両端（スタブの先）は動かせないので、端の線分を動かすときは頂点を足して段を作る
+    if (seg === 0) {
+      work.splice(1, 0, { ...work[0] });
+      seg = 1;
+    }
+    if (seg + 1 === work.length - 1) work.splice(work.length - 1, 0, { ...work[work.length - 1] });
+    const p0 = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    drag.current = { k: seg, work, horizontal, start: horizontal ? p0.y : p0.x, base: horizontal ? work[seg].y : work[seg].x };
+    let last = work;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const p = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+      let v = Math.round((d.base + (d.horizontal ? p.y : p.x) - d.start) / SNAP) * SNAP;
+      // ほかの頂点（スタブの先など）とそろう位置に吸い付ける
+      const others = d.work.filter((_, i) => i !== d.k && i !== d.k + 1).map((q) => (d.horizontal ? q.y : q.x));
+      const hit = others.find((o) => Math.abs(o - v) <= ALIGN);
+      if (hit !== undefined) v = hit;
+      if (!moved && v === d.base) return;
+      moved = true;
+      last = d.work.map((q, i) => (i === d.k || i === d.k + 1 ? (d.horizontal ? { ...q, y: v } : { ...q, x: v }) : q));
+      setRoute(last.slice(1, -1));
+    };
+    const up = () => {
+      drag.current = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      // 一直線にそろった頂点は取り除く（曲がりが減る）
+      if (moved) setRoute(simplifyRoute(last).slice(1, -1));
+      // ドラッグ中につまみが作り直されると、離したときのクリックがキャンバスに届いて選択が外れるため、1 回だけ止める
+      if (moved) {
+        const stop = (ev: MouseEvent) => ev.stopPropagation();
+        window.addEventListener('click', stop, { capture: true, once: true });
+        window.setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 0);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  // ダブルクリックした線分を中点で 2 つに分ける（曲げられる場所が増える）
+  const splitSegment = (k: number) => {
+    const a = inner[k];
+    const b = inner[k + 1];
+    const m = { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
+    const work = [...inner.slice(0, k + 1), m, ...inner.slice(k + 1)];
+    setRoute(work.slice(1, -1));
+  };
+  // ダブルクリックした角を取り除く（その次の頂点と一緒に消して段をなくす）
+  const removeCorner = (j: number) => {
+    const work = inner.filter((_, i) => i !== j && !(i === j + 1 && j + 1 < inner.length - 1));
+    setRoute(simplifyRoute(orthogonalize(work, SIDE[sourcePosition] === 'top' || SIDE[sourcePosition] === 'bottom')).slice(1, -1));
+  };
 
   const width = 2 + Math.min(data?.sizeSq ?? 2, 8) * 0.25;
 
@@ -82,7 +145,7 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
       {selected && <path d={path} className="wire__selected" />}
       {isCable ? (
         <CableGraphics
-          points={route.points}
+          points={points}
           source={{ point: { x: sourceX, y: sourceY }, side: SIDE[sourcePosition], connector: geo!.sConnector! }}
           target={{ point: { x: targetX, y: targetY }, side: SIDE[targetPosition], connector: geo!.tConnector! }}
         />
@@ -121,23 +184,49 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
         {selected && (
           <div
             className={`wire-label is-selected${severity ? ` has-${severity}` : ''}`}
-            style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y + (route.horizontalMid ? -12 : 0)}px)` }}
+            style={{ transform: `translate(-50%, -100%) translate(${mid.x}px, ${mid.y - 10}px)` }}
           >
             {data?.wireNo || id}
             <span className="wire-label__spec">{isCable ? ` ケーブル（${geo?.sConnector?.kind}）` : ` ${data?.wireType ?? ''} ${data?.sizeSq ?? ''}sq`}</span>
           </div>
         )}
-        {selected && (
-          <div
-            className={`wire-grip nodrag nopan ${route.horizontalMid ? 'is-horizontal' : 'is-vertical'}`}
-            style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)` }}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onDoubleClick={resetBend}
-            title="ドラッグで曲がり位置を調整（ダブルクリックで自動に戻す）"
-          />
-        )}
+        {selected &&
+          inner.slice(0, -1).map((a, k) => {
+            const b = inner[k + 1];
+            const len = Math.hypot(b.x - a.x, b.y - a.y);
+            if (len < 14) return null;
+            const horizontal = isHorizontal(a, b);
+            return (
+              <div
+                key={`s${k}`}
+                className={`wire-grip nodrag nopan ${horizontal ? 'is-horizontal' : 'is-vertical'}`}
+                style={{ transform: `translate(-50%, -50%) translate(${(a.x + b.x) / 2}px, ${(a.y + b.y) / 2}px)` }}
+                onPointerDown={onPointerDown(k)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  splitSegment(k);
+                }}
+                title="ドラッグで線分を移動、ダブルクリックで曲がりを増やす"
+              />
+            );
+          })}
+        {selected &&
+          manual &&
+          inner.slice(1, -1).map((p, i) => (
+            <div
+              key={`c${i}`}
+              className="wire-corner nodrag nopan"
+              style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                removeCorner(i + 1);
+              }}
+              title="ダブルクリックで曲がりを減らす"
+            />
+          ))}
       </EdgeLabelRenderer>
     </>
   );

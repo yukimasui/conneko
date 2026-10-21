@@ -195,3 +195,69 @@ export function slicePolyline(points: Point[], from: number, to: number): Point[
   }
   return out;
 }
+
+/** 両端のスタブの先（最初・最後の曲がり位置） */
+export function stubEnds(e: WireEndpoints): { p0: Point; p1: Point; p3: Point; p4: Point } {
+  const { p0, p1, p3, p4 } = skeleton(e);
+  return { p0, p1, p3, p4 };
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
+
+/**
+ * 点列を直交の折れ線にする。隣り合う点が縦にも横にもそろっていなければ角を 1 つ入れる
+ * （直前の線分が縦なら横へ、横なら縦へ曲がる）。firstVertical は最初の点に入ってくる線分（スタブ）が縦か。
+ */
+export function orthogonalize(points: Point[], firstVertical: boolean): Point[] {
+  const out: Point[] = [];
+  let vertical = firstVertical;
+  for (const p of points) {
+    const a = out[out.length - 1];
+    if (a && !near(a.x, p.x) && !near(a.y, p.y)) {
+      const corner = vertical ? { x: p.x, y: a.y } : { x: a.x, y: p.y };
+      out.push(corner);
+      vertical = !vertical;
+    }
+    if (a && (!near(a.x, p.x) || !near(a.y, p.y))) vertical = near(a.x, p.x);
+    out.push({ ...p });
+  }
+  return out;
+}
+
+/** 重なった点と一直線上の中間点を取り除く（両端は残す） */
+export function simplifyRoute(points: Point[]): Point[] {
+  return simplify(points);
+}
+
+/**
+ * 手で編集した経路（route: スタブの先どうしの間の頂点）から、描く折れ線と編集用の頂点列を求める。
+ * inner は [スタブの先（始点側）, ...route を直交化したもの, スタブの先（終点側）]。
+ */
+export function manualRoute(e: WireEndpoints, route: Point[]): { points: Point[]; inner: Point[] } {
+  const { p0, p1, p3, p4 } = skeleton(e);
+  const inner = orthogonalize([p1, ...route, p3], isVertical(e.sSide));
+  return { points: simplify([p0, ...inner, p4]), inner };
+}
+
+/** 自動の経路の編集用の頂点列（スタブの先と中間セグメントの両端） */
+export function autoInner(e: WireEndpoints, offset: number): Point[] {
+  const { p1, p3 } = skeleton(e);
+  const r = routeWire(e, offset);
+  return [p1, r.midA, r.midB, p3];
+}
+
+/** 折れ線の始点から距離 d の位置 */
+export function pointAtLength(points: Point[], d: number): Point {
+  let acc = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (acc + len >= d) {
+      const t = len ? (d - acc) / len : 0;
+      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    }
+    acc += len;
+  }
+  return points[points.length - 1] ?? { x: 0, y: 0 };
+}

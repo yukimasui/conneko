@@ -449,14 +449,27 @@ textarea {
   border-radius: 4px;
 }
 .wire-grip.is-horizontal {
-  width: 22px;
-  height: 10px;
+  width: 18px;
+  height: 8px;
   cursor: ns-resize;
 }
 .wire-grip.is-vertical {
-  width: 10px;
-  height: 22px;
+  width: 8px;
+  height: 18px;
   cursor: ew-resize;
+}
+
+.wire-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid #fff;
+  pointer-events: all;
+  cursor: pointer;
 }
 
 .toast {

@@ -22,6 +22,8 @@ export interface WireEdgeData extends Record<string, unknown> {
   sizeSq: number;
   wireType: string;
   bend?: number;
+  /** 手で編集した経路（DiagramWire.route） */
+  route?: { x: number; y: number }[];
 }
 
 export type DeviceFlowNode = Node<DeviceNodeData, 'device'>;
@@ -56,6 +58,7 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
         wireType: w.wireType,
         ...(w.wireNo ? { wireNo: w.wireNo } : {}),
         ...(w.bend ? { bend: w.bend } : {}),
+        ...(w.route ? { route: w.route } : {}),
       },
     })),
   };
@@ -83,6 +86,7 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sh
       wireType: e.data?.wireType ?? 'KIV',
       ...(e.data?.wireNo ? { wireNo: e.data.wireNo } : {}),
       ...(e.data?.bend ? { bend: e.data.bend } : {}),
+      ...(e.data?.route ? { route: e.data.route } : {}),
     })),
   };
 }

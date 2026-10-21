@@ -350,12 +350,13 @@ export function Inspector(props: Props) {
         ) : (
           <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
         )}
-        {data.bend ? (
-          <button type="button" onClick={() => props.onWireChange(edge.id, { bend: undefined })}>
-            曲がり位置を自動に戻す
+        <p className="muted small">
+          つまみをドラッグすると線分を動かせます。つまみをダブルクリックで曲がりを増やし、角の点をダブルクリックで減らします。
+        </p>
+        {(data.bend || data.route) && (
+          <button type="button" onClick={() => props.onWireChange(edge.id, { bend: undefined, route: undefined })}>
+            曲がりを自動に戻す
           </button>
-        ) : (
-          <p className="muted small">中央のつまみをドラッグすると曲がり位置を調整できます</p>
         )}
         <div className="field">
           <span>チェック</span>

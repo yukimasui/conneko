@@ -65,7 +65,7 @@ function worst(map: Map<string, Severity>, id: string, s: Severity) {
 
 /** 位置を除いた図面の内容（チェック結果の再計算を、機器の移動中に行わないためのキー） */
 function topologyKey(d: Diagram) {
-  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments]), d.wires.map((w) => ({ ...w, bend: undefined })), d.settings, d.sheets]);
+  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments]), d.wires.map((w) => ({ ...w, bend: undefined, route: undefined })), d.settings, d.sheets]);
 }
 
 /**
@@ -178,7 +178,7 @@ function Editor() {
       const t = end(e.target, e.targetHandle);
       if (!s || !t) continue;
       geometry.set(e.id, { sStub: s.stub, tStub: t.stub, sConnector: s.connector, tConnector: t.connector });
-      inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend });
+      inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend || !!e.data?.route });
     }
     return { lanes: assignLanes(inputs), geometry };
   }, [nodes, edges, resolvedOf, sheet]);
@@ -572,6 +572,11 @@ function Editor() {
         y: e.clientY,
         items: [
           {
+            label: '曲がりを自動に戻す',
+            disabled: !edge.data?.bend && !edge.data?.route,
+            onClick: () => changeWire(edge.id, { bend: undefined, route: undefined }),
+          },
+          {
             label: 'リンクで分ける（電線を図から消す）',
             disabled: isCable,
             onClick: () => applyDiagram(splitWireWithLinks(diagram, edge.id, getDeviceDefinition), '電線を両端のリンクに置き換えました'),
@@ -580,7 +585,7 @@ function Editor() {
         ],
       });
     },
-    [diagram, applyDiagram, deleteElements],
+    [diagram, applyDiagram, deleteElements, changeWire],
   );
 
   const onPaneContextMenu = useCallback(

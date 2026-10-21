@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignLanes, routeWire } from './routing';
+import { assignLanes, manualRoute, orthogonalize, routeWire } from './routing';
 
 describe('routeWire', () => {
   it('上下の端子を直交配線でつなぐ', () => {
@@ -39,5 +39,27 @@ describe('routeWire（同じ向きの端子）', () => {
     expect(Math.min(...points.map((p) => p.y))).toBe(-20);
     // 始点側の機器を下向きに横切らない
     expect(points.filter((p) => p.x === 0).every((p) => p.y <= 0)).toBe(true);
+  });
+});
+
+describe('手で編集した経路', () => {
+  it('そろっていない点の間に角を入れて直交にする', () => {
+    expect(orthogonalize([{ x: 0, y: 0 }, { x: 10, y: 20 }], true)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 20 },
+    ]);
+  });
+
+  it('スタブの先から経路の頂点を通り、直交の折れ線になる', () => {
+    const e = { sx: 0, sy: 0, sSide: 'bottom' as const, tx: 100, ty: 0, tSide: 'bottom' as const, sStub: 30, tStub: 30 };
+    const { points } = manualRoute(e, [{ x: 0, y: 80 }, { x: 100, y: 80 }]);
+    expect(points).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 80 },
+      { x: 100, y: 80 },
+      { x: 100, y: 0 },
+    ]);
+    for (let i = 1; i < points.length; i++) expect(points[i].x === points[i - 1].x || points[i].y === points[i - 1].y).toBe(true);
   });
 });
