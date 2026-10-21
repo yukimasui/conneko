@@ -1569,3 +1569,21 @@ textarea {
   flex: none;
   margin-top: 2px;
 }
+
+/* --- 電線の端子から出す向き --- */
+.side-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.side-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.side-pick span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

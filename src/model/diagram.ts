@@ -5,7 +5,7 @@
  * 電線は from/to に { device, terminal } を持つ単純な構造にしている。
  */
 import { DEFAULT_WIRE } from '../data/wires';
-import type { ParamValues } from '../devices/types';
+import type { ParamValues, TerminalSide } from '../devices/types';
 
 export const DIAGRAM_FORMAT = 'conneko-diagram';
 export const DIAGRAM_VERSION = 1;
@@ -67,6 +67,9 @@ export interface DiagramWire {
    * 指定すると自動の経路の代わりに、これを直交につないだ折れ線で描く
    */
   route?: { x: number; y: number }[];
+  /** 端子から電線を出す向き（from 側・to 側）。省略時は自動（端子の向き。相手がリンクなら左右はリンクの側） */
+  fromSide?: TerminalSide;
+  toSide?: TerminalSide;
 }
 
 /** 図面全体の設定 */
@@ -135,11 +138,15 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       wireType: w.wireType,
       ...(w.bend ? { bend: Math.round(w.bend) } : {}),
       ...(w.route ? { route: w.route.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })) } : {}),
+      ...(w.fromSide ? { fromSide: w.fromSide } : {}),
+      ...(w.toSide ? { toSide: w.toSide } : {}),
     })),
   };
 }
 
 export class DiagramParseError extends Error {}
+
+const isSide = (v: unknown): v is TerminalSide => v === 'top' || v === 'bottom' || v === 'left' || v === 'right';
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -217,6 +224,8 @@ export function parseDiagram(input: string | unknown): Diagram {
       sizeSq: typeof w.sizeSq === 'number' ? w.sizeSq : DEFAULT_WIRE.sizeSq,
       wireType: typeof w.wireType === 'string' ? w.wireType : DEFAULT_WIRE.wireType,
       ...(typeof w.bend === 'number' ? { bend: w.bend } : {}),
+      ...(isSide(w.fromSide) ? { fromSide: w.fromSide } : {}),
+      ...(isSide(w.toSide) ? { toSide: w.toSide } : {}),
       ...(Array.isArray(w.route)
         ? { route: w.route.filter((p): p is { x: number; y: number } => isObj(p) && typeof p.x === 'number' && typeof p.y === 'number').map((p) => ({ x: p.x, y: p.y })) }
         : {}),

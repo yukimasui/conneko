@@ -64,7 +64,12 @@ function worst(map: Map<string, Severity>, id: string, s: Severity) {
 
 /** 位置を除いた図面の内容（チェック結果の再計算を、機器の移動中に行わないためのキー） */
 function topologyKey(d: Diagram) {
-  return JSON.stringify([d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments, x.note]), d.wires.map((w) => ({ ...w, bend: undefined, route: undefined })), d.settings, d.sheets]);
+  return JSON.stringify([
+    d.devices.map((x) => [x.id, x.type, x.params, x.mount, x.sheet, x.comments, x.note]),
+    d.wires.map((w) => ({ ...w, bend: undefined, route: undefined, fromSide: undefined, toSide: undefined })),
+    d.settings,
+    d.sheets,
+  ]);
 }
 
 /**
@@ -197,24 +202,48 @@ function Editor() {
     const byId = new Map(nodes.filter((n) => n.data.sheet === sheet).map((n) => [n.id, n]));
     const inputs: LaneInput[] = [];
     const geometry = new Map<string, WireGeometry>();
+    const linkDef = getDeviceDefinition(LINK_TYPE);
     for (const e of edges) {
-      const end = (nodeId: string, handle?: string | null) => {
+      const raw = (nodeId: string, handle?: string | null) => {
         const n = byId.get(nodeId);
         const def = n && getDeviceDefinition(n.data.deviceType);
         const t = n && handle ? resolvedOf(n.id, n.data.deviceType)?.terminal(handle) : undefined;
-        if (!n || !def || !t) return null;
-        const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[t.side];
+        return n && def && t ? { n, def, t, x: n.position.x + t.x, y: n.position.y + t.y } : null;
+      };
+      const a = raw(e.source, e.sourceHandle);
+      const b = raw(e.target, e.targetHandle);
+      if (!a || !b) continue;
+      /** 電線を出す向き: 手動の指定、なければ相手がリンクで左右に出る端子ならリンクのある側 */
+      const sideOf = (me: NonNullable<typeof a>, other: NonNullable<typeof a>, manual?: TerminalSide): TerminalSide => {
+        if (manual) return manual;
+        const horizontal = me.t.side === 'left' || me.t.side === 'right';
+        if (horizontal && !me.t.connector && other.n.data.deviceType === LINK_TYPE && me.n.data.deviceType !== LINK_TYPE && linkDef) {
+          return other.n.position.x + linkDef.width / 2 < me.x ? 'left' : 'right';
+        }
+        return me.t.side;
+      };
+      const end = (me: NonNullable<typeof a>, side: TerminalSide) => {
+        const { t, def } = me;
+        const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[side];
         // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
         // 正面向きのコネクタは、プラグの端からケーブルが出る
         const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 - HANDLE_DEPTH / 2 : 12;
         const stub = t.connector ? Math.max(stubLength(toEdge), FAN_LENGTH + 8 + exit) : stubLength(toEdge);
-        return { x: n.position.x + t.x, y: n.position.y + t.y, side: t.side as TerminalSide, stub, connector: t.connector };
+        return { side, stub, connector: t.connector };
       };
-      const s = end(e.source, e.sourceHandle);
-      const t = end(e.target, e.targetHandle);
-      if (!s || !t) continue;
-      geometry.set(e.id, { sStub: s.stub, tStub: t.stub, sConnector: s.connector, tConnector: t.connector });
-      inputs.push({ id: e.id, sx: s.x, sy: s.y, sSide: s.side, sStub: s.stub, tx: t.x, ty: t.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend || !!e.data?.route });
+      const s = end(a, sideOf(a, b, e.data?.fromSide));
+      const t = end(b, sideOf(b, a, e.data?.toSide));
+      geometry.set(e.id, {
+        sStub: s.stub,
+        tStub: t.stub,
+        sSide: s.side,
+        tSide: t.side,
+        sCenter: { x: a.x, y: a.y },
+        tCenter: { x: b.x, y: b.y },
+        sConnector: s.connector,
+        tConnector: t.connector,
+      });
+      inputs.push({ id: e.id, sx: a.x, sy: a.y, sSide: s.side, sStub: s.stub, tx: b.x, ty: b.y, tSide: t.side, tStub: t.stub, manual: !!e.data?.bend || !!e.data?.route });
     }
     return { lanes: assignLanes(inputs), geometry };
   }, [nodes, edges, resolvedOf, sheet]);

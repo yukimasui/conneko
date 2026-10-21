@@ -1,11 +1,17 @@
 import { createContext, useContext } from 'react';
 import type { CheckIssue, Severity } from '../check/checkDiagram';
-import type { ConnectorSpec, ParamValues } from '../devices/types';
+import type { ConnectorSpec, ParamValues, TerminalSide } from '../devices/types';
 
 /** 電線の両端の形状情報 */
 export interface WireGeometry {
   sStub: number;
   tStub: number;
+  /** 端子から電線を出す向き（自動の判定や手動の指定を反映したもの） */
+  sSide: TerminalSide;
+  tSide: TerminalSide;
+  /** 端子の中心（キャンバス上の座標） */
+  sCenter: { x: number; y: number };
+  tCenter: { x: number; y: number };
   /** 両端がコネクタならケーブルとして描く */
   sConnector?: ConnectorSpec;
   tConnector?: ConnectorSpec;

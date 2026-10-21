@@ -2,7 +2,7 @@
  * React Flow のノード/エッジと図面データ（Diagram）の相互変換。
  */
 import type { Edge, Node } from '@xyflow/react';
-import type { ParamValues } from '../devices/types';
+import type { ParamValues, TerminalSide } from '../devices/types';
 import { sheetOf, type Diagram, type Mount } from '../model/diagram';
 
 export interface DeviceNodeData extends Record<string, unknown> {
@@ -26,6 +26,9 @@ export interface WireEdgeData extends Record<string, unknown> {
   bend?: number;
   /** 手で編集した経路（DiagramWire.route） */
   route?: { x: number; y: number }[];
+  /** 端子から電線を出す向き（DiagramWire.fromSide / toSide。source が from） */
+  fromSide?: TerminalSide;
+  toSide?: TerminalSide;
 }
 
 export type DeviceFlowNode = Node<DeviceNodeData, 'device'>;
@@ -62,6 +65,8 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
         ...(w.wireNo ? { wireNo: w.wireNo } : {}),
         ...(w.bend ? { bend: w.bend } : {}),
         ...(w.route ? { route: w.route } : {}),
+        ...(w.fromSide ? { fromSide: w.fromSide } : {}),
+        ...(w.toSide ? { toSide: w.toSide } : {}),
       },
     })),
   };
@@ -91,6 +96,8 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sh
       ...(e.data?.wireNo ? { wireNo: e.data.wireNo } : {}),
       ...(e.data?.bend ? { bend: e.data.bend } : {}),
       ...(e.data?.route ? { route: e.data.route } : {}),
+      ...(e.data?.fromSide ? { fromSide: e.data.fromSide } : {}),
+      ...(e.data?.toSide ? { toSide: e.data.toSide } : {}),
     })),
   };
 }

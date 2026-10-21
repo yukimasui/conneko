@@ -364,6 +364,35 @@ export function Inspector(props: Props) {
         ) : (
           <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
         )}
+        {data.wireType !== CABLE_WIRE_TYPE && (
+          <div className="field">
+            <span>端子から出す向き</span>
+            <div className="side-row">
+              {(
+                [
+                  ['fromSide', edge.source, edge.sourceHandle],
+                  ['toSide', edge.target, edge.targetHandle],
+                ] as const
+              ).map(([key, dev, term]) => (
+                <label key={key} className="side-pick">
+                  <span className="muted small">
+                    {dev}.{term}
+                  </span>
+                  <select
+                    value={data[key] ?? ''}
+                    onChange={(e) => props.onWireChange(edge.id, { [key]: (e.target.value || undefined) as WireEdgeData['fromSide'] })}
+                  >
+                    <option value="">自動</option>
+                    <option value="top">上</option>
+                    <option value="bottom">下</option>
+                    <option value="left">左</option>
+                    <option value="right">右</option>
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <p className="muted small">
           つまみをドラッグすると線分を動かせます。つまみをダブルクリックで曲がりを増やし、角の点をダブルクリックで減らします。
         </p>

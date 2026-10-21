@@ -45,13 +45,18 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
   const lane = bend ? 0 : (lanes.get(id) ?? 0);
   const offset = lane + bend;
 
+  // 端子から電線を出す向き。端子の向きと違う向きに出す場合は、端子の中心から出す
+  const sSide = geo?.sSide ?? SIDE[sourcePosition];
+  const tSide = geo?.tSide ?? SIDE[targetPosition];
+  const sPt = geo && sSide !== SIDE[sourcePosition] ? geo.sCenter : { x: sourceX, y: sourceY };
+  const tPt = geo && tSide !== SIDE[targetPosition] ? geo.tCenter : { x: targetX, y: targetY };
   const ends = {
-    sx: sourceX,
-    sy: sourceY,
-    sSide: SIDE[sourcePosition],
-    tx: targetX,
-    ty: targetY,
-    tSide: SIDE[targetPosition],
+    sx: sPt.x,
+    sy: sPt.y,
+    sSide,
+    tx: tPt.x,
+    ty: tPt.y,
+    tSide,
     sStub: geo?.sStub,
     tStub: geo?.tStub,
   };
@@ -134,7 +139,7 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
   // ダブルクリックした角を取り除く（その次の頂点と一緒に消して段をなくす）
   const removeCorner = (j: number) => {
     const work = inner.filter((_, i) => i !== j && !(i === j + 1 && j + 1 < inner.length - 1));
-    setRoute(simplifyRoute(orthogonalize(work, SIDE[sourcePosition] === 'top' || SIDE[sourcePosition] === 'bottom')).slice(1, -1));
+    setRoute(simplifyRoute(orthogonalize(work, sSide === 'top' || sSide === 'bottom')).slice(1, -1));
   };
 
   const width = 2 + Math.min(data?.sizeSq ?? 2, 8) * 0.25;
@@ -146,8 +151,8 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
       {isCable ? (
         <CableGraphics
           points={points}
-          source={{ point: { x: sourceX, y: sourceY }, side: SIDE[sourcePosition], connector: geo!.sConnector! }}
-          target={{ point: { x: targetX, y: targetY }, side: SIDE[targetPosition], connector: geo!.tConnector! }}
+          source={{ point: sPt, side: sSide, connector: geo!.sConnector! }}
+          target={{ point: tPt, side: tSide, connector: geo!.tConnector! }}
         />
       ) : (
         <>
@@ -164,8 +169,8 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
           !isCable &&
           showMarkers &&
           ([
-            [sourceX, sourceY, SIDE[sourcePosition]],
-            [targetX, targetY, SIDE[targetPosition]],
+            [sPt.x, sPt.y, sSide],
+            [tPt.x, tPt.y, tSide],
           ] as const).map(([x, y, side], i) => (
             // 実物のマークチューブのように、端子の近くに線番を表示する
             <div
