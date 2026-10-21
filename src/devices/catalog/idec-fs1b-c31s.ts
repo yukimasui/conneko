@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SafetyChannelGroup, SupplySpec, TerminalDef } from '../types';
 
 /**
  * IDEC セーフティコントローラ SafetyOne FS1B-C31S（ロジック選択式、プッシュイン式コネクタ 2 個）。
@@ -154,6 +154,10 @@ const svg = `
 `;
 
 const power = { system: 'DC' as const, minVoltage: 20.4, maxVoltage: 28.8 };
+/** 安全入力用パルス出力 */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test' };
+/** 安全出力（各 500mA） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 0.5 };
 
 const labelOf = (id: string): string => {
   const n = Number(id.slice(1));
@@ -168,8 +172,21 @@ const labelOf = (id: string): string => {
 const terminal = (id: string, x: number, y: number, side: 'left' | 'right'): TerminalDef => {
   if (id === 'V+') return { id, label: 'V+（+24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
   if (id === 'V-') return { id, label: 'V−（0V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-  return { id, label: labelOf(id), x, y, side, role: 'signal', optional: true };
+  const n = Number(id.slice(1));
+  const base = { id, label: labelOf(id), x, y, side, optional: true };
+  // 安全入力は Tn → Xn の組で、偶数番号が CH1、奇数番号が CH2
+  const channel = n % 2 === 0 ? 1 : 2;
+  if (id.startsWith('T')) return { ...base, role: 'supply', supply: TEST, function: 'test-output', channel };
+  if (id === 'X16' || id === 'X17') return { ...base, role: 'signal', function: 'reset' };
+  if (id.startsWith('X')) return { ...base, role: 'signal', function: 'safety-input', channel };
+  if (n <= 3) return { ...base, role: 'supply', supply: OSSD, function: 'ossd', channel };
+  // Y17/Y20 はソレノイド・ランプの駆動出力、それ以外はモニタ出力（非安全）
+  if (id === 'Y17' || id === 'Y20') return { ...base, role: 'signal' };
+  return { ...base, role: 'signal', function: 'aux-output' };
 };
+
+/** 入力番号（8 進。T0〜T7、T10〜T15） */
+const IN_NOS = [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 15];
 
 const def: DeviceDefinition = {
   type: 'idec.fs1b-c31s',
@@ -192,6 +209,22 @@ const def: DeviceDefinition = {
       ...(r ? [terminal(r, OUT_R, rowY(OUT_Y0, i), 'right')] : []),
     ]),
   ],
+  // 入力の組（X0/X1、X2/X3 …）と出力の組（Y0/Y1、Y2/Y3）。入力の使い方は選んだロジックで決まる
+  safetyChannels: [
+    ...Array.from({ length: IN_NOS.length / 2 }, (_, k): SafetyChannelGroup => {
+      const [a, b] = [IN_NOS[k * 2], IN_NOS[k * 2 + 1]];
+      return {
+        id: `X${a}-X${b}`,
+        label: `安全入力 X${a}/X${b}（T${a}→X${a}、T${b}→X${b}）`,
+        kind: 'input',
+        mode: 'nc-nc',
+        channels: [{ source: `T${a}`, input: `X${a}` }, { source: `T${b}`, input: `X${b}` }],
+      };
+    }),
+    { id: 'Y0-Y1', label: '安全出力 Y0/Y1', kind: 'output', channels: [{ output: 'Y0' }, { output: 'Y1' }] },
+    { id: 'Y2-Y3', label: '安全出力 Y2/Y3', kind: 'output', channels: [{ output: 'Y2' }, { output: 'Y3' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // 無負荷時 6W / 24V（出力の負荷電流は別途）
   loadCurrent: 0.25,
 };

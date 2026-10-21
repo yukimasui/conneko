@@ -1,4 +1,4 @@
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { DeviceDefinition, SafetyChannelGroup, SupplySpec, TerminalDef } from '../types';
 
 /**
  * 三菱電機 MELSEC-WS 安全コントローラ（CPU ユニット WS0-CPU0 ＋ メモリプラグ WS0-MPL0 ＋ 安全入出力複合ユニット WS0-XTIO）。
@@ -135,6 +135,11 @@ const svg = `
 
 const power = { system: 'DC' as const, minVoltage: 16.8, maxVoltage: 30 };
 
+/** テスト出力（PNP、各 120mA。X1 と X2 は別々のパルス発生器） */
+const TEST: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'test', limitCurrent: 0.12 };
+/** 安全出力（PNP、各 2A） */
+const OSSD: SupplySpec = { system: 'DC', voltage: 24, conductor: '+', kind: 'ossd', limitCurrent: 2 };
+
 const LABEL: Record<string, string> = {
   X1: 'X1（テスト出力 1）',
   X2: 'X2（テスト出力 2）',
@@ -149,7 +154,13 @@ const ioRow = (ids: string[], y: number, side: 'top' | 'bottom'): TerminalDef[] 
     const x = IO_XS[i];
     if (id === 'A1') return { id, label: 'A1（出力 Q1〜Q4 用 +24V）', x, y, side, role: 'input', accepts: { ...power, conductors: ['+'] } };
     if (id === 'A2') return { id, label: 'A2（出力 Q1〜Q4 用 GND）', x, y, side, role: 'input', accepts: { ...power, conductors: ['-'] } };
-    return { id, label: LABEL[id] ?? `${id}（安全入力）`, x, y, side, role: 'signal', optional: true };
+    const n = Number(id.slice(1));
+    // 奇数番号が CH1、偶数番号が CH2（X1→I1、X2→I2 など）
+    const channel = n % 2 === 1 ? 1 : 2;
+    const base = { id, label: LABEL[id] ?? `${id}（安全入力）`, x, y, side, optional: true };
+    if (id.startsWith('X')) return { ...base, role: 'supply', supply: TEST, function: 'test-output', channel };
+    if (id.startsWith('Q')) return { ...base, role: 'supply', supply: OSSD, function: 'ossd', channel };
+    return { ...base, role: 'signal', function: 'safety-input', channel };
   });
 
 const def: DeviceDefinition = {
@@ -175,6 +186,19 @@ const def: DeviceDefinition = {
     ...ioRow(BOT_IN, Y_BOT_IN, 'bottom'),
     ...ioRow(BOT_OUT, Y_BOT_OUT, 'bottom'),
   ],
+  // 既定の配線: 奇数の入力に X1、偶数の入力に X2 を戻す（入力の組と種類は設定ツールで割り付ける）
+  safetyChannels: [
+    ...[1, 3, 5, 7].map((n): SafetyChannelGroup => ({
+      id: `I${n}-I${n + 1}`,
+      label: `安全入力 I${n}/I${n + 1}（X1→I${n}、X2→I${n + 1}）`,
+      kind: 'input',
+      mode: 'nc-nc',
+      channels: [{ source: 'X1', input: `I${n}` }, { source: 'X2', input: `I${n + 1}` }],
+    })),
+    { id: 'Q1-Q2', label: '安全出力 Q1/Q2', kind: 'output', channels: [{ output: 'Q1' }, { output: 'Q2' }] },
+    { id: 'Q3-Q4', label: '安全出力 Q3/Q4', kind: 'output', channels: [{ output: 'Q3' }, { output: 'Q4' }] },
+  ],
+  safety: { pl: 'e', category: '4', sil: 3, standards: ['ISO 13849-1', 'IEC 61508', 'IEC 62061'] },
   // CPU 2.5W + XTIO 内部 1W / 24V（出力負荷は別途）
   loadCurrent: 0.15,
 };
