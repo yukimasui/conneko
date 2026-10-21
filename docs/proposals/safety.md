@@ -172,5 +172,23 @@ interface DeviceDefinition {
 
 ## 4. 該当する機器（今回追加したもの）
 
-`docs/safety-catalog.md` の一覧を参照。端子の機能・チャンネルは、現時点では各定義ファイルの `label` と
-`description` に書いてあるので、型が入ったらそこから機械的に移せる。
+一覧と出典は `docs/safety-catalog.md`。端子の機能・チャンネルは、現時点では各定義ファイルの `label` と
+`description` に書いてあるので、型が入ったらそこから機械的に移せる。主な対応は次のとおり。
+
+| 型・チェック | 該当する機器（type）と端子 |
+|---|---|
+| 2.2 `safetyChannels`（入力・テスト出力の組） | `omron.g9se-*`: T11→T12 / T21→T22、`omron.g9sa-301`: T11-T12 / T21-T22、`pilz.pnoz-x2-8p`・`pilz.pnoz-s4`: S11-S12 / S21-S22、`idec.hr6s-af`: S11-S12 / S21-S22、`omron.g9sp-n10s`: T0→Si0 / T1→Si1 …、`keyence.gc-1000(r)`: To0→Si0 / To1→Si1 …、`idec.fs1b-c31s`: T0→X0 / T1→X1 …、`mitsubishi.ws0-cpu0-xtio`: X1→I1 / X2→I2 … |
+| 2.2 出力の組 | `keyence.gc-1000`: So0/So1 …、`omron.g9sp-n10s`: So0/So1、`idec.fs1b-c31s`: Y0/Y1・Y2/Y3、`mitsubishi.ws0-cpu0-xtio`: Q1/Q2 …、セーフティリレーの 13-14 / 23-24 |
+| 2.1 `function: 'ossd'` / 2.4 `kind: 'ossd'` | `keyence.gl-r.receiver`・`omron.f3sg-sr.receiver`・`keyence.sz-v32`・`keyence.gs-11p5`: OSSD1/OSSD2。`keyence.gc-1000`: So0〜So5、`omron.g9sp-n10s`: So0〜So3、`idec.fs1b-c31s`: Y0〜Y3、`mitsubishi.ws0-cpu0-xtio`: Q1〜Q4 |
+| 2.1 `function: 'edm'` | `keyence.gl-r.receiver`: EDM（赤/黒）、`keyence.sz-v32`: IN2（赤）、`omron.f3sg-sr.receiver`: RESET（RESET/EDM 兼用）、セーフティリレーのフィードバック T31-T32（G9SE/G9SA）・S12-S34（PNOZ）・Y1-Y2（HR6S） |
+| 2.3 `contact: 'NC'` + `directOpening` | `idec.xw1e-*`: 21-22・41-42、`idec.hs5d-02rn`: 11-12・21-22、`omron.d4n-4c20`: 11-12・21-22、`omron.er6022-021m`: 11-12・21-22、`idec.hs5e-a4403-g`: 11-42、`idec.he1g-l21sm`: 5-6 |
+| 2.3 `contact: 'NO'`（安全入力に使ってはいけない接点） | `omron.d4n-4c20`: 33-34、`omron.er6022-021m`: 33-34、`idec.hs5e-a4403-g`: 23-24・53-54、`mitsubishi.sd-t12.dc24v`: 13-14 |
+| 2.3 `linked: 'mirror'` / `'force-guided'` | `mitsubishi.sd-t12.dc24v`: 21-22、`mitsubishi.sd-t21.dc24v`: 21-22・31-32、`omron.g7sa-3a1b`: 11-12、`idec.rf1v-2a2bl-d24`: 3-4・5-6 |
+| 2.1 `function: 'lock-solenoid'`（チェック 12） | `idec.hs5e-a4403-g`: A2(+)/A1(−)（スプリングロック） |
+| 2.5 `safety` | 全機種（PL e / カテゴリ4 が多い。`keyence.sz-v32` はタイプ3 / PL d / カテゴリ3、`omron.g9se-221-t05` のオフディレー出力は停止カテゴリ1） |
+
+## 5. 作業中に気づいた開発環境の注意
+
+- vitest の変換キャッシュ（`node_modules/.vitest-cache`）が `src/devices/registry.ts` の `import.meta.glob` の結果を保持するため、
+  `catalog` に機器ファイルを追加しても `registry.ts` 自体が変わらない限り、テストから新しい機器が見えないことがあった。
+  機器を追加したらキャッシュを消してからテストする（または vitest の設定でキャッシュを無効にする）とよい。
