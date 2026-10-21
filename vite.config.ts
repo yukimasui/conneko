@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     // サブエージェントの git worktree（.claude/worktrees）のテストは対象外
     exclude: [...configDefaults.exclude, '.claude/**'],
+    // 変換結果のキャッシュは registry.ts の import.meta.glob の結果も保持してしまい、
+    // catalog に機器を追加してもテストから見えないことがあるため使わない（テストは十分速い）
+    fsModuleCache: false,
   },
 });
