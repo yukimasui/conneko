@@ -30,8 +30,8 @@ const cable = sensorCable({
   vmin: 10.8,
   vmax: 26.4,
   leads: [
-    { color: 'BN', label: '（2線式 +側）', role: 'out' },
-    { color: 'BU', label: '（2線式 −側）', role: 'out' },
+    { color: 'BN', label: '（2線式 +側）', role: 'out', signal: { dir: 'out', kind: '2wire' } },
+    { color: 'BU', label: '（2線式 −側）', role: 'out', signal: { dir: 'out', kind: '2wire' } },
   ],
 });
 
@@ -50,12 +50,14 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'sensor',
   description:
-    'KEYENCE の近接センサ EV シリーズ（DC 2線式、N.O.、シールドタイプ、IP67、ケーブル 2m）。サイズは params の size（M8: 検出距離 1.5mm / M12: 2.5mm / M18: 5mm / M30: 10mm）。茶・青の 2 線を PLC の入力回路に直列に入れる: PLC の COM が 0V のときは 茶を +24V、青を入力へ、COM が +24V のときは 茶を入力、青を 0V へ。電源電圧 DC12〜24V、開閉容量 5〜80mA（M8）/ 5〜200mA、もれ電流 1mA 以下、残留電圧 3.6V 以下。2 線は電源線ではなく信号線として扱う（電源チェックの対象外）。',
+    'KEYENCE の近接センサ EV シリーズ（DC 2線式、N.O.、シールドタイプ、IP67、ケーブル 2m）。サイズは params の size（M8: 検出距離 1.5mm / M12: 2.5mm / M18: 5mm / M30: 10mm）。茶・青の 2 線を PLC の入力回路に直列に入れる: PLC の COM が 0V のときは 茶を +24V、青を入力へ、COM が +24V のときは 茶を入力、青を 0V へ。電源電圧 DC12〜24V、開閉容量 5〜80mA（M8）/ 5〜200mA、もれ電流 1mA 以下、残留電圧 3.6V 以下。2 線とも 2 線式センサーの信号線（信号の種類 2wire）で、検出すると茶と青の間が導通する出力として扱う。',
   labelPrefix: 'PX',
   width: W,
   height: H,
   svg,
   terminals: cable.terminals,
+  // 検出すると茶と青の間が導通する（開閉容量 M8: 80mA、M12〜M30: 200mA。残留電圧 3.6V 以下・もれ電流 1mA 以下は表さない）
+  links: (p) => [{ from: 'BN', to: 'BU', switch: 'output', ratedCurrent: Number(p.size) === 8 ? 0.08 : 0.2 }],
   params: [
     {
       key: 'size',

@@ -30,8 +30,8 @@ const cable = sensorCable({
   vmax: 26.4,
   leads: [
     { color: 'BN', label: '+V（DC12〜24V）', role: 'plus' },
-    { color: 'BK', label: '出力1 N.O.（NPN）', role: 'out' },
-    { color: 'WH', label: '出力2 N.C.（NPN）', role: 'out' },
+    { color: 'BK', label: '出力1 N.O.（NPN）', role: 'out', signal: { dir: 'out', kind: 'npn' } },
+    { color: 'WH', label: '出力2 N.C.（NPN）', role: 'out', signal: { dir: 'out', kind: 'npn' } },
     { color: 'BU', label: '0V', role: 'minus' },
   ],
 });
@@ -57,6 +57,11 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: cable.terminals,
+  // NPN オープンコレクタ 100mA。N.C. 出力も「動作（検出）で切り換わる出力」として output で表す
+  links: [
+    { from: 'BK', to: 'BU', switch: 'output', ratedCurrent: 0.1 },
+    { from: 'WH', to: 'BU', switch: 'output', ratedCurrent: 0.1 },
+  ],
   params: [
     {
       key: 'size',

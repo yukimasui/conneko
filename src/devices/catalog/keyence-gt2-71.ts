@@ -1,6 +1,6 @@
 import type { DeviceDefinition } from '../types';
 import { ampBody, ampDefs } from '../keyence/amp';
-import { OUTPUT_PARAM, outName, sensorCable } from '../keyence/sensor-parts';
+import { OUTPUT_PARAM, outName, sensorCable, sensorInput, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /**
  * KEYENCE 高精度接触式デジタルセンサ GT2 シリーズ アンプ GT2-71N / GT2-71P（DIN レール取付・親機、バラ線タイプ）。
@@ -32,16 +32,16 @@ const cable = sensorCable({
   leads: [
     { color: 'BN', label: '+V（DC10〜30V）', role: 'plus' },
     { color: 'BU', label: '0V', role: 'minus' },
-    { color: 'OG', label: 'HH 出力', role: 'out' },
-    { color: 'BK', label: 'HI 出力', role: 'out' },
-    { color: 'GY', label: 'GO 出力', role: 'out' },
-    { color: 'WH', label: 'LO 出力', role: 'out' },
-    { color: 'GN', label: 'LL 出力', role: 'out' },
-    { color: 'PK', label: 'プリセット入力', role: 'in' },
-    { color: 'VT', label: 'バンク A 入力', role: 'in' },
-    { id: 'PKVT', color: 'PKVT', label: 'タイミング入力', role: 'in' },
-    { color: 'YE', label: 'バンク B 入力', role: 'in' },
-    { color: 'RD', label: 'リセット入力', role: 'in' },
+    { color: 'OG', label: 'HH 出力', role: 'out', signal: switchedOut },
+    { color: 'BK', label: 'HI 出力', role: 'out', signal: switchedOut },
+    { color: 'GY', label: 'GO 出力', role: 'out', signal: switchedOut },
+    { color: 'WH', label: 'LO 出力', role: 'out', signal: switchedOut },
+    { color: 'GN', label: 'LL 出力', role: 'out', signal: switchedOut },
+    { color: 'PK', label: 'プリセット入力', role: 'in', signal: sensorInput },
+    { color: 'VT', label: 'バンク A 入力', role: 'in', signal: sensorInput },
+    { id: 'PKVT', color: 'PKVT', label: 'タイミング入力', role: 'in', signal: sensorInput },
+    { color: 'YE', label: 'バンク B 入力', role: 'in', signal: sensorInput },
+    { color: 'RD', label: 'リセット入力', role: 'in', signal: sensorInput },
   ],
 });
 
@@ -62,7 +62,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'sensor',
   description:
-    'KEYENCE の高精度接触式デジタルセンサ GT2 シリーズのアンプ GT2-71（DIN レール取付・親機、12 芯バラ線ケーブル）。センサヘッド（GT2-H12 / GT2-P12 など）は別売。出力形式は params の output で NPN（GT2-71N）/PNP（GT2-71P）を選ぶ。判定出力 HH（橙）・HI（黒）・GO（灰）・LO（白）・LL（緑）はオープンコレクタ（40V 50mA、N.O./N.C. 切換）で PLC の入力へ。制御入力 プリセット（桃）・バンク A（紫）・タイミング（桃/紫）・バンク B（黄）・リセット（赤）は無電圧入力（0V と短絡で ON）。電源 DC10〜30V、消費電力 2.2W 以下（30V 時 73.3mA）。',
+    'KEYENCE の高精度接触式デジタルセンサ GT2 シリーズのアンプ GT2-71（DIN レール取付・親機、12 芯バラ線ケーブル）。センサヘッド（GT2-H12 / GT2-P12 など）は別売。出力形式は params の output で NPN（GT2-71N）/PNP（GT2-71P）を選ぶ。判定出力 HH（橙）・HI（黒）・GO（灰）・LO（白）・LL（緑）はオープンコレクタ（40V 50mA、N.O./N.C. 切換）で PLC の入力へ。制御入力 プリセット（桃）・バンク A（紫）・タイミング（桃/紫）・バンク B（黄）・リセット（赤）は無電圧入力（NPN タイプは 0V と、PNP タイプは +V と短絡で ON）。電源 DC10〜30V、消費電力 2.2W 以下（30V 時 73.3mA）。',
   labelPrefix: 'DS',
   width: W,
   height: H,
@@ -78,6 +78,8 @@ const def: DeviceDefinition = {
   ${ampBody({ x: BX, y: BY, w: BW, h: BH, model: `GT2-71${p.output === 'P' ? 'P' : 'N'}`, top: '1.2345', left: 'head', series: 'GT2' })}
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">接触式センサアンプ 5出力・${outName(p)}</text>`,
   terminals: cable.terminals,
+  // 判定出力はオープンコレクタ 40V 50mA
+  links: sensorOutputLinks(['OG', 'BK', 'GY', 'WH', 'GN'], 0.05),
   params: [OUTPUT_PARAM],
   loadCurrent: 0.074,
 };
