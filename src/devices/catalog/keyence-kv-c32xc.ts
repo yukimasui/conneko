@@ -1,3 +1,4 @@
+import { INPUT_COM_ACCEPTS } from '../keyence/kv-parts';
 import type { DeviceDefinition, PinDef } from '../types';
 
 /**
@@ -36,7 +37,7 @@ const pins: PinDef[] = [];
 for (let k = 1; k <= 34; k++) {
   const id = `CN1#${stdNo(k)}`;
   if (k === 17 || k === 34) {
-    pins.push({ id, label: `COM${k === 17 ? 0 : 1} (No.${k}) ±共用`, role: 'signal', optional: true });
+    pins.push({ id, label: `COM${k === 17 ? 0 : 1} (No.${k}) ±共用`, role: 'input', accepts: INPUT_COM_ACCEPTS, optional: true });
   } else {
     const r = k < 17 ? relay(CH_L, k - 1) : relay(CH_H, k - 18);
     pins.push({ id, label: `${r} (No.${k})`, role: 'signal', optional: true });

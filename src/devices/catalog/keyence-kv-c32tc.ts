@@ -135,7 +135,7 @@ const def: DeviceDefinition = {
   maker: 'KEYENCE',
   category: 'plc',
   description:
-    'KEYENCE KV-8000 シリーズの 32点 トランジスタ出力ユニット（NPN/シンク、コネクタタイプ）。定格負荷 DC30V 0.2A/点、32点 1コモン。出力 ON で負荷電流が出力ピンから COM（負荷電源の 0V）へ流れる。負荷のもう一端は負荷電源の +24V につなぐ。COM0・COM1 は内部で共通。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = R200〜R215、17 = COM0、右列 18〜33 = R300〜R315、34 = COM1）。デバイス番号は CPU の右隣 1 台目に 32点入力ユニット、2 台目にこのユニットを装着し KV STUDIO で自動割付した場合（先頭 R200）の想定で、装着位置・割付設定により変わる。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
+    'KEYENCE KV-8000 シリーズの 32点 トランジスタ出力ユニット（NPN/シンク、コネクタタイプ）。定格負荷 DC30V 0.2A/点、32点 1コモン。出力 ON で負荷電流が出力ピンから COM（負荷電源の 0V）へ流れる。負荷のもう一端は負荷電源の +24V につなぐ。COM0・COM1 は内部で共通。図面上は出力 ON（出力ピンと COM が導通）とみなしてチェックする。外部接続は MIL 規格 34極コネクタ（KEYENCE ピン番号: 左列 1〜16 = R200〜R215、17 = COM0、右列 18〜33 = R300〜R315、34 = COM1）。デバイス番号は CPU の右隣 1 台目に 32点入力ユニット、2 台目にこのユニットを装着し KV STUDIO で自動割付した場合（先頭 R200）の想定で、装着位置・割付設定により変わる。ピンID は MIL 標準の千鳥番号（KEYENCE の k 番 → CN1#(2k-1)、17+k 番 → CN1#2k）。',
   labelPrefix: 'OUT',
   width: W,
   height: H,
@@ -156,6 +156,8 @@ const def: DeviceDefinition = {
   links: [
     // COM0（No.17）と COM1（No.34）は内部で共通
     { from: `CN1#${stdNo(17)}`, to: `CN1#${stdNo(34)}` },
+    // 図面上は出力 ON（出力ピンと COM が導通）とみなしてチェックする（他の出力ユニットと同じ扱い）
+    ...pins.filter((p) => p.role === 'signal').map((p) => ({ from: p.id, to: `CN1#${stdNo(17)}` })),
   ],
 };
 
