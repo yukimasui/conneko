@@ -227,7 +227,7 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
     ],
     loadCurrent: { param: 'inputCurrent' },
     distinctGroups: [['L', 'N']],
-    bus: { kind: IQR_BUS, supply: { '5V': o.output5V } },
+    bus: { kind: IQR_BUS, role: 'power', supply: { '5V': o.output5V } },
   };
 }
 

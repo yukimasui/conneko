@@ -45,6 +45,8 @@ export function busAccepts(host: DeviceDefinition, unit: DeviceDefinition): bool
   return (host.bus.host.accepts ?? [host.bus.kind]).includes(unit.bus.kind);
 }
 
+const ROLE_NAMES: Record<string, string> = { power: '電源ユニット', cpu: 'CPU ユニット' };
+
 const roundUp = (n: number, unit: number) => (unit > 0 ? Math.ceil(n / unit) * unit : n);
 
 const fmt = (n: number) => `${Math.round(n * 1000) / 1000}A`;
@@ -109,6 +111,24 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
       }
     }
 
+    // 専用の位置（電源ユニット・CPU など）
+    const roles = hostSpec.slotRoles ?? {};
+    for (const m of g.members) {
+      const role = lookup(m.type)?.bus?.role;
+      const want = roles[m.mount!.slot];
+      if (want ? role !== want : role && Object.values(roles).includes(role)) {
+        const where = Object.entries(roles).filter(([, r]) => r === role).map(([n]) => n);
+        problems.push({
+          severity: 'warning',
+          rule: 'mount-slot-role',
+          message: want
+            ? `${g.host.id}: 位置 ${m.mount!.slot} は${ROLE_NAMES[want] ?? want}用です（${m.id} は装着できません）`
+            : `${m.id}: ${ROLE_NAMES[role!] ?? role}は位置 ${where.join('・')} に装着します`,
+          devices: [g.host.id, m.id],
+        });
+      }
+    }
+
     // 入出力の先頭番号
     const numbering = hostSpec.numbering;
     if (numbering) {
@@ -117,7 +137,18 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
       const hostOut = roundUp(hostIo?.outputs ?? 0, numbering.unit);
       let cin = numbering.start?.input ?? (numbering.mode === 'shared' ? hostIn + hostOut : hostIn);
       let cout = numbering.start?.output ?? (numbering.mode === 'shared' ? cin : hostOut);
+      // 空きスロットの点数を数える場合は、入出力用の位置のうち装着されていないものを足す
+      const occupied = new Set(g.members.map((m) => m.mount!.slot));
+      let lastSlot = Math.min(...g.members.map((m) => m.mount!.slot)) - 1;
       for (const m of g.members) {
+        if (numbering.emptySlot) {
+          for (let s = lastSlot + 1; s < m.mount!.slot; s++) {
+            if (occupied.has(s) || roles[s]) continue;
+            cin += numbering.emptySlot;
+            if (numbering.mode === 'separate') cout += numbering.emptySlot;
+          }
+          lastSlot = Math.max(lastSlot, m.mount!.slot);
+        }
         const io = lookup(m.type)?.bus?.io;
         if (!io) continue;
         const nIn = roundUp(io.inputs ?? 0, numbering.unit);
@@ -184,8 +215,12 @@ export function mountedPositions(devices: DiagramDevice[], lookup: DefLookup): M
     const hostDef = lookup(g.host.type);
     if (!hostDef) continue;
     const origin = hostDef.bus?.host?.origin ?? { x: hostDef.width, y: 0 };
+    const slotX = hostDef.bus?.host?.slotX;
     let x = g.host.x + origin.x;
     for (const m of g.members) {
+      // スロットの位置が決まっていればその位置、なければ前のユニットの右隣
+      const fixed = slotX?.[m.mount!.slot - 1];
+      if (fixed !== undefined) x = g.host.x + origin.x + fixed;
       out.set(m.id, { x, y: g.host.y + origin.y });
       x += lookup(m.type)?.width ?? 0;
     }

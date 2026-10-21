@@ -125,7 +125,7 @@ export function buildRBase(o: RBaseOptions): DeviceDefinition {
     model: o.model,
     maker: '三菱電機',
     category: 'plc',
-    description: `三菱電機 MELSEC iQ-R シリーズの主ベースユニット（入出力スロット ${o.ioSlots}）。外形 W${o.widthMm} × H101 × D32.5mm、内部消費電流 DC5V ${Math.round(o.load5V * 1000)}mA（電源ユニットから供給）。電源ユニット・CPU ユニット・入出力ユニットを装着する。装着位置（mount の slot）は 1 = 電源ユニット、2 = CPU ユニット、3 以降 = 入出力スロット 0〜${o.ioSlots - 1}（位置 n が入出力スロット n−3）。入出力番号は入出力ユニットに位置の順で 16 点単位に X0/Y0 から割り付ける（入力と出力で共通の並び）。空きスロットは詰めて割り付けるので、実機の初期設定（空きスロット 16 点）に合わせるには空きスロットにブランクカバー RG60 を装着する。外部配線用の端子はない（FG は電源ユニットの端子で接地する）。`,
+    description: `三菱電機 MELSEC iQ-R シリーズの主ベースユニット（入出力スロット ${o.ioSlots}）。外形 W${o.widthMm} × H101 × D32.5mm、内部消費電流 DC5V ${Math.round(o.load5V * 1000)}mA（電源ユニットから供給）。電源ユニット・CPU ユニット・入出力ユニットを装着する。装着位置（mount の slot）は 1 = 電源ユニット、2 = CPU ユニット、3 以降 = 入出力スロット 0〜${o.ioSlots - 1}（位置 n が入出力スロット n−3）。入出力番号は入出力ユニットに位置の順で 16 点単位に X0/Y0 から割り付ける（入力と出力で共通の並び）。空きスロットは実機の初期設定どおり 16 点を占有するものとして割り付ける（位置を空けて装着すればよい。ブランクカバー RG60 を装着しても同じ）。外部配線用の端子はない（FG は電源ユニットの端子で接地する）。`,
     labelPrefix: 'BASE',
     width: W,
     height: H,
@@ -137,7 +137,11 @@ export function buildRBase(o: RBaseOptions): DeviceDefinition {
         // 電源ユニット・CPU ユニットも装着するユニットとして数える
         slots: o.ioSlots + 2,
         origin: { x: ORIGIN_X, y: ORIGIN_Y },
-        numbering: { mode: 'shared', unit: 16, start: { input: 0 } },
+        // 位置 1 = 電源、2 = CPU、3 以降 = 入出力スロット 0〜
+        slotX: [0, PS_W, ...Array.from({ length: o.ioSlots }, (_, i) => PS_W + SLOT_W * (i + 1))],
+        slotRoles: { 1: 'power', 2: 'cpu' },
+        // 空きスロットは初期設定どおり 16 点を占有する
+        numbering: { mode: 'shared', unit: 16, start: { input: 0 }, emptySlot: 16 },
       },
       load: { '5V': o.load5V },
     },

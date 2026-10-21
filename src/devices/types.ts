@@ -296,6 +296,13 @@ export interface BusSpec {
     slots?: number;
     /** 装着したユニットを並べる位置（親の左上からの座標）。省略時は親の右隣 */
     origin?: { x: number; y: number };
+    /**
+     * 位置ごとの x 座標（origin からの距離。slotX[0] が位置 1）。ベースユニットのようにスロットの位置が決まっている場合に書く。
+     * 省略時は、装着したユニットの幅の分だけ詰めて並べる
+     */
+    slotX?: number[];
+    /** 特定の種類のユニット専用の位置（例: { 1: 'power', 2: 'cpu' }）。ほかの位置は入出力などのユニット用 */
+    slotRoles?: Record<number, string>;
     /** 入出力番号の割付け */
     numbering?: {
       /** 'shared': 入力と出力で同じ番号の並び（KV・iQ-R）、'separate': 入力と出力を別々に数える（FX5） */
@@ -304,8 +311,12 @@ export interface BusSpec {
       unit: number;
       /** 最初のユニットの先頭番号（点数）。省略時は親の io の点数の後ろから */
       start?: { input?: number; output?: number };
+      /** 空きスロットが占有する点数（iQ-R の初期設定は 16）。省略時は空きスロットを詰めて数える */
+      emptySlot?: number;
     };
   };
+  /** 専用の位置に装着するユニットの種類（host.slotRoles と対応。例: 'power'、'cpu'） */
+  role?: string;
   /** バスへ供給する内部電源の容量[A]（例: { '5V': 6.5 }） */
   supply?: Record<string, NumOrParam>;
   /** バスから消費する内部電源の電流[A]（例: { '5V': 0.12 }） */

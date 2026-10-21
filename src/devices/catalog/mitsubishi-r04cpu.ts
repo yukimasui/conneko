@@ -133,7 +133,7 @@ const def: DeviceDefinition = {
     },
   ],
   // ベースユニットの CPU スロット（電源ユニットの右隣。図面では位置 2）に装着する。入出力番号は占有しない
-  bus: { kind: IQR_BUS, load: { '5V': 0.67 } },
+  bus: { kind: IQR_BUS, role: 'cpu', load: { '5V': 0.67 } },
   params: [
     {
       key: 'cpuModel',

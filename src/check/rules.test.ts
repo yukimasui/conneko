@@ -470,6 +470,30 @@ describe('装着（バス）', () => {
   });
 });
 
+describe('装着（iQ-R ベースユニット）', () => {
+  it('空きスロットは 16 点を占有し、電源・CPU 専用の位置を守らないと警告する', async () => {
+    const { getDeviceDefinition } = await import('../devices/registry');
+    const { computeBus } = await import('../model/bus');
+    const devices = [
+      dev('BASE', 'mitsubishi.r35b'),
+      dev('PW', 'mitsubishi.r61p', { mount: { device: 'BASE', slot: 1 } }),
+      dev('CPU', 'mitsubishi.r04cpu', { mount: { device: 'BASE', slot: 2 } }),
+      dev('X1', 'mitsubishi.rx40c7', { mount: { device: 'BASE', slot: 3 } }),
+      // 位置 4（入出力スロット 1）は空き
+      dev('Y1', 'mitsubishi.ry10r2', { mount: { device: 'BASE', slot: 5 } }),
+    ];
+    const bus = computeBus(devices, getDeviceDefinition);
+    expect(bus.params.get('X1')).toMatchObject({ ioIn: 0 });
+    expect(bus.params.get('Y1')).toMatchObject({ ioOut: 32 });
+    expect(bus.problems).toEqual([]);
+    const swapped = computeBus(
+      devices.map((d) => (d.id === 'CPU' ? { ...d, mount: { device: 'BASE', slot: 3 } } : d.id === 'X1' ? { ...d, mount: { device: 'BASE', slot: 2 } } : d)),
+      getDeviceDefinition,
+    );
+    expect(swapped.problems.map((p) => p.rule)).toContain('mount-slot-role');
+  });
+});
+
 describe('コネクタ', () => {
   it('mates があれば種類の違うコネクタをケーブルでつなげる', () => {
     const d: Diagram = { devices: [dev('A', 't.fcn'), dev('B', 't.mil')], wires: [{ ...w('A.CN', 'B.CN'), wireType: 'CABLE' }] };
