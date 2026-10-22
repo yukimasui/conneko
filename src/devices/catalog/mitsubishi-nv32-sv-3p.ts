@@ -190,6 +190,7 @@ const def: DeviceDefinition = {
     },
   ],
   protectionCurrent: { param: 'ratedCurrent' },
+  schematic: { earthLeakage: true },
 };
 
 export default def;

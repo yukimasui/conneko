@@ -135,6 +135,7 @@ const def: DeviceDefinition = {
   ],
   // LED 表示灯の代表的な定格電流（DC24V で 10〜20mA 程度）
   loadCurrent: 0.02,
+  schematic: { elements: [{ kind: 'lamp', terminals: ['X1', 'X2'] }] },
 };
 
 export default def;

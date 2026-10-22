@@ -182,6 +182,7 @@ const def: DeviceDefinition = {
   safety: { standards: ['IEC 60947-5-5', 'ISO 13850'] },
   // LED 照光 15mA
   loadCurrent: 0.015,
+  schematic: { actuator: 'emergency', elements: [{ kind: 'lamp', terminals: ['X1', 'X2'] }] },
 };
 
 export default def;

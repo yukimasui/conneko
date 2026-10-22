@@ -53,6 +53,11 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   for (const g of def.distinctGroups ?? []) {
     for (const id of g) if (!ids.has(id)) problems.push(`distinctGroups に存在しない端子: ${id}`);
   }
+  for (const e of def.schematic?.elements ?? []) {
+    for (const id of e.terminals) if (!ids.has(id)) problems.push(`schematic.elements に存在しない端子: ${id}`);
+    const n = e.kind === 'motor' ? [2, 3] : [2];
+    if (!n.includes(e.terminals.length)) problems.push(`schematic.elements の ${e.kind} の端子の数が不正: ${e.terminals.join(', ')}`);
+  }
   for (const c of r.commonLimits) {
     if (!ids.has(c.common)) problems.push(`commonLimits に存在しない端子: ${c.common}`);
   }

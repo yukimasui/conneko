@@ -155,6 +155,7 @@ const def: DeviceDefinition = {
   safety: { standards: ['IEC 60947-5-1', 'ISO 14119'] },
   // ソレノイド 266mA（初期値）＋表示灯 10mA
   loadCurrent: 0.28,
+  schematic: { actuator: 'limit', elements: [{ kind: 'coil', terminals: ['A1', 'A2'] }] },
 };
 
 export default def;

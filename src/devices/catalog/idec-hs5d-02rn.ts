@@ -124,6 +124,7 @@ const def: DeviceDefinition = {
     { from: '21', to: '22', switch: 'NC', directOpening: true },
   ],
   safety: { standards: ['IEC 60947-5-1', 'ISO 14119'] },
+  schematic: { actuator: 'limit' },
 };
 
 export default def;

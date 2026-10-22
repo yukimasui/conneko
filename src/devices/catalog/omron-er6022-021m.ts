@@ -125,6 +125,7 @@ const def: DeviceDefinition = {
     { from: '33', to: '34', switch: 'NO' },
   ],
   safety: { standards: ['IEC 60947-5-5', 'ISO 13850'] },
+  schematic: { actuator: 'pull' },
 };
 
 export default def;

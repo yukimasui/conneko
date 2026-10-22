@@ -58,22 +58,43 @@ DXF
 | PLC 入力点 / 出力点 | `signal.dir: 'in'` のピン・端子 / `switch: 'output'` の経路 | 入力・出力の枠（I/O 番号つき） |
 | 端子 | 端子台の常時導通の経路でつながった端子の組（上下のネジなど） | 端子記号（○と端子番号） |
 | 負荷 | モーター・表示灯など | 電動機・表示灯など |
+| 接地 | `role: 'ground'` の端子 | 接地 |
 | 箱 | 上のどれにも当たらない機器（電源ユニット、IAI のコントローラーなど） | 端子を並べた四角（端子名つき） |
 
+- 実装は `src/schematic/elements.ts`（`deviceElements()`）。切り出しの順と細かな決まりはそのファイルの先頭のコメントにある。
 - 要素の ID は `<機器名>:<キー>`。キーは端子 ID から作り、機器定義の端子 ID が変わらない限り変わらない
-  （例: `MC1:A1-A2`、`MC1:13-14`、`ELB1:main`、`TB1:3`、`PLC1:CN1#1`）。
+  （例: `MC1:A1-A2`、`MC1:13-14`、`ELB1:main`、`TB1:1a`、`PLC1:CN1#1`）。
+- 箱は、ネジ端子の残りで 1 つ、コネクタのピンの残りはコネクタごとに 1 つ作る（PLC のコモン・電源など）。
 - 機器の種類（`category`）や端子だけでは、接点の操作の種類（押しボタンか、リミットスイッチか…）やコイルかどうかを決めきれない。
-  そこで機器定義に任意の `schematic` を追加し、自動の切り出しを補う・上書きできるようにする。
+  そこで機器定義に任意の `schematic` を書いて自動の切り出しを補う（書き方は [device-authoring.md](device-authoring.md)）。
 
   ```ts
-  // 例: 押しボタン。接点の操作の種類を指定する
-  schematic: { actuator: 'pushbutton' },
-  // 例: 自動の切り出しを使わず、要素を明示する
-  schematic: { elements: [{ key: 'A1-A2', kind: 'coil', terminals: ['A1', 'A2'] }, …] },
+  // 例: 照光式の非常停止。接点は非常停止の記号、X1-X2 は表示灯
+  schematic: { actuator: 'emergency', elements: [{ kind: 'lamp', terminals: ['X1', 'X2'] }] },
+  // 例: 漏電遮断器
+  schematic: { earthLeakage: true },
   ```
 
-- 全機器・全パラメータについて切り出しを行うテストを置き、「箱」に落ちた機器の一覧を出せるようにする
-  （機器定義に `schematic` を書くべき機器が分かる）。
+- `src/schematic/elements.test.ts` で全機器・全パラメータの切り出しを検査する（キーの重複・端子の重複・取りこぼし・記号の端子との対応）。
+
+### 記号ライブラリ
+
+`src/schematic/symbols.ts`。すべて左から右へ流れる横向き（ラダー図の段に置く向き）で、縦に使うときは配置で回転する。
+単位は mm、端子は 2.5mm の格子に乗せる。2 端子の記号は端子を (0, 0) と (10, 0) に、多極の記号は極を 5mm 間隔で下へ並べる。
+
+| 記号 ID | 記号 |
+|---|---|
+| `contact-no` / `contact-nc` | a 接点 / b 接点 |
+| `contact-{no,nc}-{pushbutton,emergency,pull,limit,thermal}` | 操作の種類つきの接点（押しボタン・非常停止・引き操作・リミットスイッチ・熱動） |
+| `coil` / `lamp` | コイル（四角）/ 表示灯 |
+| `motor-3p` / `motor-1p` | 電動機 |
+| `breaker-Np` / `elb-Np` / `contactor-Np` / `thermal-Np`（N = 1〜4） | 遮断器 / 漏電遮断器 / 電磁接触器の主接点 / 熱動素子 |
+| `terminal` / `ground` | 端子 / 接地 |
+| `plc-in` / `plc-out` | PLC の入力 / 出力（枠の中に入出力番号） |
+| `box_<機器種別>_<キー>_<ハッシュ>` | 箱（機器ごとに作る） |
+
+記号の属性: `TAG`（機器名）、`T1`, `T2`…（記号の端子 1, 2… の端子番号）、`XREF`（接点の所在）、`ADDR`（入出力番号）、`COMMENT`。
+全記号の一覧は `npm run schematic-sample -- out.json --png` で画像にできる（`tools/dxf/samples/sample.json` の 1 枚目）。
 
 ## 接続（展開図の線）
 
@@ -150,15 +171,18 @@ DXF
   },
   "symbols": {
     "contact-no": {
+      "description": "a 接点",
       "primitives": [
-        { "kind": "line", "points": [[0, 0], [4, 0]] },
-        { "kind": "line", "points": [[4, 0], [9, 2.5]] },
-        { "kind": "line", "points": [[10, 0], [14, 0]] }
+        { "kind": "line", "points": [[0, 0], [3, 0]] },
+        { "kind": "line", "points": [[3, 0], [7.33, 2.5]] },
+        { "kind": "line", "points": [[7, 0], [10, 0]] }
       ],
-      "pins": { "1": [0, 0], "2": [14, 0] },
+      "pins": { "1": [0, 0], "2": [10, 0] },
       "attributes": [
-        { "tag": "TAG", "at": [7, 5], "height": 2.5, "align": "center" },
-        { "tag": "XREF", "at": [7, -4], "height": 2, "align": "center" }
+        { "tag": "T1", "at": [1.5, 1.5], "height": 1.8, "align": "center" },
+        { "tag": "T2", "at": [8.5, 1.5], "height": 1.8, "align": "center" },
+        { "tag": "TAG", "at": [5, -4], "height": 2.5, "align": "center" },
+        { "tag": "XREF", "at": [5, -6.5], "height": 1.8, "align": "center" }
       ]
     }
   },
@@ -169,7 +193,7 @@ DXF
       "paper": { "width": 420, "height": 297 },
       "inserts": [
         { "symbol": "contact-no", "at": [60, 257], "rotation": 0, "layer": "SYMBOL",
-          "attributes": { "TAG": "MC1", "XREF": "12" }, "element": "MC1:13-14" }
+          "attributes": { "TAG": "MC1", "T1": "13", "T2": "14", "XREF": "12" }, "element": "MC1:13-14" }
       ],
       "polylines": [
         { "points": [[20, 257], [60, 257]], "layer": "WIRE", "wire": "W12" }
@@ -194,18 +218,22 @@ DXF
   | `TAG` | 2（黄） | 機器名・端子番号・接点の所在（記号の属性） |
   | `TEXT` | 7（白/黒） | その他の文字（コメントなど） |
 
-- `symbols` は記号の定義（DXF のブロックになる）。図形は `line`（折れ線）/ `circle` / `arc`（中心・半径・開始角・終了角[度]、反時計回り）/
-  `text`（固定の文字）の 4 種類だけにする。`pins` は端子の位置（参照用）、`attributes` は配置ごとに変わる文字（DXF の属性）。
+- `symbols` は記号の定義（DXF のブロックになる）。図形は `line`（折れ線。`closed` で閉じる、`dashed` で破線）/ `circle` /
+  `arc`（中心・半径・開始角・終了角[度]、反時計回り）/ `text`（固定の文字）の 4 種類だけにする。
+  `pins` は端子の位置（参照用）、`attributes` は配置ごとに変わる文字（DXF の属性）。
+- 文字の `at` は文字の高さの中央で、`align`（`left` / `center` / `right`）で左端・中央・右端のどれを合わせるかを決める。
+- 型は `src/schematic/format.ts`。見本は `tools/dxf/samples/sample.json`（`npm run schematic-sample` で作る）。
 - `sheets[].inserts` が記号の配置（DXF の INSERT）、`polylines` が線、`dots` が接続点（T 字の黒丸）、`texts` が線番・行番号・図面枠の文字など。
 - 図面枠・表題欄も `polylines` と `texts` で渡す（Python 側に図面枠の知識を持たせない）。
 - シートごとに 1 つの DXF ファイルを出すか、1 ファイルに並べるかは Python 側のオプションにする。
 
 ## Python スクリプト（`tools/dxf/`）
 
+- 使い方は [tools/dxf/README.md](../tools/dxf/README.md)。
 - `ezdxf` で展開図 JSON を読み、レイヤー → ブロック（`symbols`）→ 各シートの INSERT・線・文字の順に書く。
 - 書き出した DXF は IJCAD で開く。IJCAD は AutoCAD 互換なので、DXF は AutoCAD 2013 形式（R2013。文字は UTF-8）とし、
   文字スタイルは日本語の出る TrueType フォント（MS ゴシック）にする。段階 2 で実際に IJCAD で開いて、文字化け・属性・ブロックの扱いを確かめる。
-- 機器定義・接続・記号の形を一切持たないので、数百行程度に収まる見込み。
+- 機器定義・接続・記号の形を一切持たない（200 行ほど）。
 - 確認: 見本の展開図 JSON から DXF を作り、`ezdxf` の監査（audit）でエラーがないこと、PNG に描画して見た目を確かめる。
   最後に IJCAD で開いて確かめる。
 
@@ -221,13 +249,13 @@ DXF
 
 | 段階 | 内容 | 確認方法 |
 |---|---|---|
-| 1 | 記号ライブラリ（JIS C 0617 の基本記号を図形定義で）と、機器定義からの要素の切り出し。`schematic` を機器定義に追加 | 全機器の切り出しテスト、記号の PNG 描画 |
-| 2 | 展開図 JSON の形式を確定し、`tools/dxf/` の Python スクリプトを作る（手書きの見本 JSON から DXF を作る） | ezdxf の監査、IJCAD で開く |
+| 1 ✅ | 記号ライブラリ（JIS C 0617 の基本記号を図形定義で）と、機器定義からの要素の切り出し。`schematic` を機器定義に追加 | 全機器の切り出しテスト、記号の PNG 描画 |
+| 2 ✅ | 展開図 JSON の形式を確定し、`tools/dxf/` の Python スクリプトを作る（見本 JSON から DXF を作る） | ezdxf の監査・読み戻しのテスト。**IJCAD で開く確認は未** |
 | 3 | エディタ: 手で配置する・線を自動で引く・行番号と接点の所在・展開図 JSON の書き出し | 見本の図面で DXF まで通す |
 | 4 | 自動配置: 母線の間のコイルごとに、そこへ至る接点の直列・並列を段として組む。I/O 割付図は入出力点ごとに 1 段 | 見本の図面で手直しの量を見る |
 | 5 | 端子台接続図（表形式）の自動生成 | |
 
-段階 1 と 2 は互いに独立しているので並行して進められる（段階 2 は手書きの見本 JSON で始める）。
+段階 1 と 2 は済み（✅）。見本の DXF を IJCAD で開いて、文字・属性・ブロック・破線の見え方を確かめてから段階 3 に進む。
 
 ## 決めたこと
 
@@ -242,5 +270,6 @@ DXF
 
 段階 3 で見本の図面を描きながら決める。
 
-- 既定の用紙・格子・段の高さ（たたき台: A3 横、格子 2.5mm、段の高さ 10mm）。
+- 既定の用紙・格子・段の高さ（たたき台: A3 横、格子 2.5mm、段の高さ 15mm。操作部つきの接点は上に 5mm ほど、機器名と接点の所在は下に 7mm ほど出るので 10mm では重なる）。
+- 記号の細部（リミットスイッチ・引き操作の操作部の形、直接開路動作の印、回転した記号の文字の向き）。
 - 線番の表示位置（線の上・端子の横など）と、端子台の端子を展開図に描くかどうか。

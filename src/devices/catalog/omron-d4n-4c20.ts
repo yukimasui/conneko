@@ -118,6 +118,7 @@ const def: DeviceDefinition = {
     { from: '33', to: '34', switch: 'NO' },
   ],
   safety: { standards: ['IEC 60947-5-1 附属書 K', 'ISO 14119'] },
+  schematic: { actuator: 'limit' },
 };
 
 export default def;

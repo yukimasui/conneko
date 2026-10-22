@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "render-device": "tsx scripts/render-device.ts"
+    "render-device": "tsx scripts/render-device.ts",
+    "schematic-sample": "tsx scripts/schematic-sample.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

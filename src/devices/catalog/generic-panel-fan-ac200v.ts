@@ -131,6 +131,7 @@ const def: DeviceDefinition = {
   // □120mm AC200V ファンの代表的な定格電流（50/60Hz で 0.07〜0.1A 程度）
   loadCurrent: 0.1,
   distinctGroups: [['L1', 'L2']],
+  schematic: { elements: [{ kind: 'motor', terminals: ['L1', 'L2'] }] },
 };
 
 export default def;

@@ -103,6 +103,7 @@ const def: DeviceDefinition = {
     { from: '5', to: '6', switch: 'NC', directOpening: true },
   ],
   safety: { standards: ['IEC 60947-5-8', 'IEC 60204-1'] },
+  schematic: { actuator: 'pushbutton' },
 };
 
 export default def;
