@@ -186,7 +186,8 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
         name: `${kind === 'plc-input' ? '入力' : '出力'} ${label}`,
         symbol: kind === 'plc-input' ? 'plc-in' : 'plc-out',
         pinOf: { [id]: '1' },
-        attributes: { ADDR: addr, T1: pin },
+        // ネジ端子の PLC は端子名が入出力番号そのもの（'Y00'）なので、同じなら端子番号を書かない
+        attributes: { ADDR: addr, ...(pin !== addr ? { T1: pin } : {}) },
       });
     };
     for (const l of r.links) if (l.switch === 'output' && free(l.from)) point('plc-output', l.from);

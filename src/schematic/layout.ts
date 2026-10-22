@@ -83,6 +83,30 @@ export interface SchematicBuild {
   railCandidates: RailCandidate[];
   /** シートあたりの段の数 */
   rowsPerSheet: number;
+  /** 端子の網（同じ網の端子は同じ値）。展開図の今の配置で求めたもの */
+  netOf(device: string, terminal: string): string;
+}
+
+/** 端子を入れ替えて置ける記号（端子 1 と 2 だけを持つ記号） */
+export function canFlip(def: SymbolDef): boolean {
+  const pins = Object.keys(def.pins);
+  return pins.length === 2 && pins.includes('1') && pins.includes('2');
+}
+
+const SWAP: Record<string, string> = { '1': '2', '2': '1' };
+
+/** 配置の flip を反映した、端子 → 記号の端子の対応 */
+export function placedPinOf(e: ElementEntry, item: SchematicItem): Record<string, string> {
+  if (!item.flip || !canFlip(e.symbol)) return e.element.pinOf;
+  return Object.fromEntries(Object.entries(e.element.pinOf).map(([t, pin]) => [t, SWAP[pin] ?? pin]));
+}
+
+/** 配置の flip を反映した属性（端子番号 T1 と T2 を入れ替える） */
+function placedAttributes(e: ElementEntry, item: SchematicItem): Record<string, string> {
+  const a = e.element.attributes;
+  if (!item.flip || !canFlip(e.symbol)) return a;
+  const { T1, T2, ...rest } = a;
+  return { ...rest, ...(T2 !== undefined ? { T1: T2 } : {}), ...(T1 !== undefined ? { T2: T1 } : {}) };
 }
 
 const elementCache = new WeakMap<DeviceDefinition, Map<string, SchematicElement[]>>();
@@ -191,6 +215,32 @@ function conflicts(points: Point[], net: string, segments: Segment[]): number {
     }
   }
   return n;
+}
+
+/** 母線への引き出しで、記号の下（上）を回り込むときのずらし[mm]（上向きが正） */
+const RAIL_DETOURS = [-5, -7.5, 5, 7.5, -10, 10, -12.5, 12.5, -2.5, 2.5];
+
+/**
+ * 母線へ横に引き出す線。まっすぐ引くと記号を横切る（端子が母線と反対を向いているなど）場合は、
+ * 端子から出して記号の下（または上）を回り込んでから母線へ引く。
+ */
+function railRoute(p: PinAt, railX: number, net: string, obstacles: Bounds[], segments: Segment[]): Point[] {
+  const straight: Point[] = [p.pos, [railX, p.pos[1]]];
+  const candidates: Point[][] = [straight];
+  for (const len of STUBS) {
+    const s: Point = [p.pos[0] + p.dir[0] * len, p.pos[1] + p.dir[1] * len];
+    for (const dy of RAIL_DETOURS) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
+  }
+  let best = straight;
+  let bestScore = Infinity;
+  candidates.forEach((c, i) => {
+    const score = hits(c, obstacles) * 1000 + conflicts(c, net, segments) + i * 0.01;
+    if (score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  });
+  return best;
 }
 
 /** 端子から出す長さの候補（短い方を優先し、重なるときに伸ばす） */
@@ -353,7 +403,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     const { item } = e.placed;
     const at = up(item.x, item.y);
     const seen = new Set<string>();
-    for (const [t, pin] of Object.entries(e.element.pinOf)) {
+    for (const [t, pin] of Object.entries(placedPinOf(e, item))) {
       const root = uf.find(key(e.device, t));
       const pos = pinPoint(e.symbol, pin, at, item.rotation);
       const id = `${root}@${r3(pos[0])},${r3(pos[1])}`;
@@ -405,7 +455,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
         at: up(it.x, it.y),
         ...(it.rotation ? { rotation: it.rotation } : {}),
         layer: 'SYMBOL',
-        attributes: { ...e.element.attributes, TAG: e.device, ...(xref ? { XREF: xref } : {}), ...(comment ? { COMMENT: comment } : {}) },
+        attributes: { ...placedAttributes(e, it), TAG: e.device, ...(xref ? { XREF: xref } : {}), ...(comment ? { COMMENT: comment } : {}) },
         element: e.id,
       });
     }
@@ -436,13 +486,19 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       if (!rail.root) continue;
       const pins = byNet.get(rail.root) ?? [];
       const no = wireNoOf(rail.root);
+      const ys: number[] = [];
       for (const p of pins) {
         if (r3(p.pos[0]) === r3(rail.x)) continue;
-        draw([p.pos, [rail.x, p.pos[1]]], rail.root);
-        out.dots.push({ at: [rail.x, p.pos[1]], layer: 'WIRE' });
-        if (no) out.texts.push({ at: [(p.pos[0] + rail.x) / 2, p.pos[1] + 1.8], text: no, height: WIRE_NO_TEXT, layer: 'WIRENO' });
+        const pl = railRoute(p, rail.x, rail.root, obstacles, segments);
+        draw(pl, rail.root);
+        const end = pl[pl.length - 1];
+        ys.push(end[1]);
+        out.dots.push({ at: end, layer: 'WIRE' });
+        if (no) {
+          const [a, b] = [pl[pl.length - 2], end];
+          out.texts.push({ at: [(a[0] + b[0]) / 2, b[1] + 1.8], text: no, height: WIRE_NO_TEXT, layer: 'WIRENO' });
+        }
       }
-      const ys = pins.map((p) => p.pos[1]);
       const top = ys.length ? Math.max(...ys) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
       const bottom = ys.length ? Math.min(...ys) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
       draw([[rail.x, top], [rail.x, bottom]], rail.root);
@@ -498,7 +554,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     ),
     sheets,
   };
-  return { doc, elements, byId, rows: rowOf, railCandidates, rowsPerSheet: rows };
+  return { doc, elements, byId, rows: rowOf, railCandidates, rowsPerSheet: rows, netOf: (d, t) => uf.find(key(d, t)) };
 }
 
 /** 図面枠と表題欄 */

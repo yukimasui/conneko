@@ -19,6 +19,8 @@ export interface SchematicItem {
   y: number;
   /** 反時計回りの回転[度] */
   rotation?: Rotation;
+  /** 端子 1 と 2 を入れ替えて置く（記号の向きはそのままで、左右の端子を逆にする。接点・コイルなど 2 端子の記号だけ） */
+  flip?: boolean;
 }
 
 export interface SchematicSheet {
@@ -117,7 +119,13 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
       if (seen.has(it.element) || sheets.some((s) => s.items.some((x) => x.element === it.element))) continue;
       seen.add(it.element);
       const rot = Number(it.rotation);
-      items.push({ element: it.element, x: it.x, y: it.y, ...(rot === 90 || rot === 180 || rot === 270 ? { rotation: rot } : {}) });
+      items.push({
+        element: it.element,
+        x: it.x,
+        y: it.y,
+        ...(rot === 90 || rot === 180 || rot === 270 ? { rotation: rot } : {}),
+        ...(it.flip === true ? { flip: true } : {}),
+      });
     }
     const rails = isObj(v.rails)
       ? {
@@ -143,7 +151,13 @@ export function serializeSchematic(s: Schematic): Schematic {
       ...(sh.rails && (sh.rails.left || sh.rails.right)
         ? { rails: { ...(sh.rails.left ? { left: sh.rails.left } : {}), ...(sh.rails.right ? { right: sh.rails.right } : {}) } }
         : {}),
-      items: sh.items.map((it) => ({ element: it.element, x: r(it.x), y: r(it.y), ...(it.rotation ? { rotation: it.rotation } : {}) })),
+      items: sh.items.map((it) => ({
+        element: it.element,
+        x: r(it.x),
+        y: r(it.y),
+        ...(it.rotation ? { rotation: it.rotation } : {}),
+        ...(it.flip ? { flip: true } : {}),
+      })),
     })),
   };
 }

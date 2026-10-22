@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Point, SymbolDef } from '../schematic/format';
 import { PAPER_SIZES } from '../schematic/format';
-import { defaultRails, RAIL_INSET, ROW_PITCH, ROW_TOP, type ElementEntry, type SchematicBuild } from '../schematic/layout';
+import { autoLayout, nextPosition } from '../schematic/autoLayout';
+import { canFlip, defaultRails, ROW_PITCH, type ElementEntry, type SchematicBuild } from '../schematic/layout';
 import {
   newSchematicSheet,
   paperOf,
@@ -54,33 +55,6 @@ function SymbolPreview({ def }: { def: SymbolDef }) {
       />
     </svg>
   );
-}
-
-/**
- * 要素を置く次の位置。コイル・負荷は右の母線の近く、それ以外は左の母線の近くに置き、
- * 横に重なる記号の外形のいちばん下より下で、置く記号の上への張り出しが重ならない最初の段にする
- * （コイルは左の接点と同じ段に並ぶ）。
- */
-function nextPosition(sheet: SchematicSheet, e: ElementEntry, paper: { width: number; height: number }, byId: Map<string, ElementEntry>): { x: number; y: number } {
-  const { width: W, height: H } = paper;
-  const b = symbolBounds(e.symbol);
-  const right = ['coil', 'lamp', 'motor'].includes(e.element.kind);
-  const x = right ? snap(W - RAIL_INSET - 10 - (b.x2 - b.x1)) : RAIL_INSET + 20;
-  const [x1, x2] = [x + b.x1 - 5, x + b.x2 + 5];
-  // 横に重なる記号の下端（y は下向き）
-  let bottom = -Infinity;
-  for (const it of sheet.items) {
-    const def = byId.get(it.element)?.symbol;
-    if (!def) continue;
-    const pb = placedBounds(def, [it.x, H - it.y], it.rotation);
-    if (pb.x2 < x1 || pb.x1 > x2) continue;
-    bottom = Math.max(bottom, H - pb.y1);
-  }
-  // 置く記号の、基準点より上に出る高さ（記号の座標は y が上向きなので y2）
-  const above = Math.max(0, b.y2);
-  const minY = Number.isFinite(bottom) ? bottom + above + 2.5 : ROW_TOP;
-  const y = ROW_TOP + Math.max(0, Math.ceil((minY - ROW_TOP) / ROW_PITCH)) * ROW_PITCH;
-  return { x, y };
 }
 
 /** 要素を、指定のシートの位置に置く（ほかのシートに置いてあれば移す） */
@@ -139,6 +113,14 @@ export function SchematicEditor(props: Props) {
     [onChange],
   );
 
+  const flip = useCallback(
+    (element: string) => {
+      const e = build.byId.get(element);
+      if (e && canFlip(e.symbol)) onChange((s) => updateItem(s, element, (i) => ({ ...i, flip: !i.flip || undefined })));
+    },
+    [build, onChange],
+  );
+
   const turn = useCallback((element: string, delta: number) => onChange((s) => updateItem(s, element, (i) => ({ ...i, rotation: rotate(i.rotation, delta) }))), [onChange]);
 
   // キー操作（文字の入力中は除く）
@@ -150,6 +132,7 @@ export function SchematicEditor(props: Props) {
       const step = e.shiftKey ? 10 : 2.5;
       const move = (dx: number, dy: number) => onChange((s) => updateItem(s, selected, (i) => ({ ...i, x: snap(i.x + dx), y: snap(i.y + dy) })));
       if (e.key === 'r' || e.key === 'R') turn(selected, e.shiftKey ? -90 : 90);
+      else if (e.key === 'f' || e.key === 'F') flip(selected);
       else if (e.key === 'Delete' || e.key === 'Backspace') remove(selected);
       else if (e.key === 'Escape') setSelected(null);
       else if (e.key === 'ArrowLeft') move(-step, 0);
@@ -161,7 +144,7 @@ export function SchematicEditor(props: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, onChange, turn, remove]);
+  }, [selected, onChange, turn, flip, remove]);
 
   const sheetsMeta = schematic.sheets.map((s) => ({ id: s.id, name: s.name }));
   const counts = useMemo(() => new Map(schematic.sheets.map((s) => [s.id, s.items.length])), [schematic]);
@@ -225,11 +208,25 @@ export function SchematicEditor(props: Props) {
             entry={selectedEntry}
             row={build.rows.get(selectedEntry.id)}
             onTurn={(d) => turn(selectedEntry.id, d)}
+            onFlip={canFlip(selectedEntry.symbol) ? () => flip(selectedEntry.id) : undefined}
             onRemove={() => remove(selectedEntry.id)}
             onShowDevice={() => props.onShowDevice(selectedEntry.device)}
           />
         ) : (
-          current && <SheetSettings build={build} schematic={schematic} sheet={current} onChange={onChange} onExport={props.onExport} />
+          current && (
+            <SheetSettings
+              build={build}
+              schematic={schematic}
+              sheet={current}
+              onChange={onChange}
+              onExport={props.onExport}
+              onAuto={() => {
+                const r = autoLayout(build, schematic, current.id, paper);
+                if (r.placed) onChange(() => r.schematic);
+                return r.placed ? `${r.placed} 個の記号を並べました（元に戻す: Ctrl+Z）` : (r.message ?? '');
+              }}
+            />
+          )
         )}
       </aside>
     </>
@@ -367,7 +364,7 @@ function SheetCanvas(props: {
         <span className="small muted">{Math.round((zoom / 3.78) * 100)}%</span>
         <button type="button" onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z * 1.25))} aria-label="拡大">＋</button>
         <button type="button" onClick={fit}>用紙に合わせる</button>
-        <span className="small muted schem-canvas__hint">ドラッグで移動・R で回転（Shift+R で逆）・矢印キーで 2.5mm・Delete で外す</span>
+        <span className="small muted schem-canvas__hint">ドラッグで移動・R で回転（Shift+R で逆）・F で端子の入れ替え・矢印キーで 2.5mm・Delete で外す</span>
       </div>
       <div
         className="schem-canvas__view"
@@ -439,7 +436,14 @@ function SheetCanvas(props: {
 
 // ---- 右のパネル ----
 
-function ElementInfo(props: { entry: ElementEntry; row?: number; onTurn: (delta: number) => void; onRemove: () => void; onShowDevice: () => void }) {
+function ElementInfo(props: {
+  entry: ElementEntry;
+  row?: number;
+  onTurn: (delta: number) => void;
+  onFlip?: () => void;
+  onRemove: () => void;
+  onShowDevice: () => void;
+}) {
   const { entry: e } = props;
   return (
     <div className="schem-info">
@@ -466,6 +470,11 @@ function ElementInfo(props: { entry: ElementEntry; row?: number; onTurn: (delta:
       <div className="schem-info__actions">
         <button type="button" onClick={() => props.onTurn(90)}>⟲ 90°</button>
         <button type="button" onClick={() => props.onTurn(-90)}>⟳ 90°</button>
+        {props.onFlip && (
+          <button type="button" onClick={props.onFlip} title="記号の向きはそのままで、左右の端子を入れ替えます（F）">
+            ⇄ 端子を入れ替え
+          </button>
+        )}
         <button type="button" onClick={props.onShowDevice}>概念図で表示</button>
         <button type="button" className="danger" onClick={props.onRemove}>
           展開図から外す
@@ -481,8 +490,11 @@ function SheetSettings(props: {
   sheet: SchematicSheet;
   onChange: (update: (s: Schematic) => Schematic) => void;
   onExport: () => void;
+  /** 自動で並べ、結果の説明を返す */
+  onAuto: () => string;
 }) {
   const { sheet, build } = props;
+  const [autoMessage, setAutoMessage] = useState('');
   const setRail = (side: 'left' | 'right', ref: string) =>
     props.onChange((s) => ({
       ...s,
@@ -519,6 +531,13 @@ function SheetSettings(props: {
         </select>
       </label>
       <p className="small muted">母線にした電位につながる端子は、線を個別に引かず横にまっすぐ母線へ引き出します。</p>
+      <button type="button" onClick={() => setAutoMessage(props.onAuto())} disabled={!sheet.rails?.left}>
+        自動で並べる（未配置の段）
+      </button>
+      <p className="small muted">
+        {autoMessage ||
+          '左の母線から接点・コイル・表示灯・PLC の入出力点をたどり、コイルなどごとに 1 段にして並べます（自己保持などの枝は下の段）。置いた記号は動かしません。'}
+      </p>
       <label className="field">
         <span>用紙（全シート共通）</span>
         <select
