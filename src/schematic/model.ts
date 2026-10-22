@@ -39,19 +39,32 @@ export interface Rails {
 export interface SchematicSheet {
   id: string;
   name: string;
-  /** シートの種類。省略時は展開接続図（記号を置く）。'terminal' は端子台接続図（端子台ごとの表を自動で作る。items は使わない） */
-  kind?: 'terminal';
+  /**
+   * シートの種類。省略時は展開接続図（記号を置く。母線がなければ主回路）。ほかは内容を概念図から自動で作り、items は使わない:
+   * 'terminal' 端子台接続図 / 'io' PLC の I/O 図 / 'rack' PLC のユニット構成図 / 'bom' 部品表 / 'cover' 表紙・図面目次
+   */
+  kind?: SheetKind;
+  /** このシートの用紙（省略時は settings.paper） */
+  paper?: PaperSize;
   /** 端子台接続図にする端子台の機器名（省略時は図面のすべての端子台） */
   blocks?: string[];
+  /** I/O 図・ユニット構成図の PLC（CPU・ベースユニットなど親の機器名。省略時は図面の最初の PLC） */
+  plc?: string;
+  /** I/O 図にするユニットの機器名（省略時は PLC のすべての I/O ユニット） */
+  units?: string[];
   /** 母線 */
   rails?: Rails;
   items: SchematicItem[];
 }
 
 export interface SchematicSettings {
-  /** 用紙（横置き）。既定は A3 */
+  /** 用紙（横置き）の既定。既定は A3。シートごとに SchematicSheet.paper で変えられる */
   paper?: PaperSize;
 }
+
+/** 内容を自動で作るシートの種類 */
+export type SheetKind = 'terminal' | 'io' | 'rack' | 'bom' | 'cover';
+export const SHEET_KINDS: SheetKind[] = ['terminal', 'io', 'rack', 'bom', 'cover'];
 
 export interface Schematic {
   settings?: SchematicSettings;
@@ -63,8 +76,8 @@ export const SCHEMATIC_GRID = 2.5;
 
 export const snap = (v: number) => Math.round(v / SCHEMATIC_GRID) * SCHEMATIC_GRID;
 
-export function paperOf(s: Schematic | undefined): { width: number; height: number } {
-  return PAPER_SIZES[s?.settings?.paper ?? 'A3'];
+export function paperOf(s: Schematic | undefined, sheet?: SchematicSheet): { width: number; height: number } {
+  return PAPER_SIZES[sheet?.paper ?? s?.settings?.paper ?? 'A3'];
 }
 
 /** 要素 ID を機器名とキーに分ける */
@@ -98,6 +111,8 @@ export function renameSchematicDevice(s: Schematic | undefined, from: string, to
       ...sh,
       ...(sh.rails ? { rails: rails(sh.rails) } : {}),
       ...(sh.blocks ? { blocks: sh.blocks.map((b) => (b === from ? to : b)) } : {}),
+      ...(sh.plc ? { plc: sh.plc === from ? to : sh.plc } : {}),
+      ...(sh.units ? { units: sh.units.map((b) => (b === from ? to : b)) } : {}),
       items: sh.items.map((it) => ({ ...it, element: el(it.element) })),
     })),
   };
@@ -113,10 +128,13 @@ export function pruneSchematic(s: Schematic | undefined, devices: Set<string>): 
     const rails = sh.rails ? { ...sh.rails, supply: keep(sh.rails.supply), common: keep(sh.rails.common) } : undefined;
     const railsChanged = !!sh.rails && (rails?.supply !== sh.rails.supply || rails?.common !== sh.rails.common);
     const blocks = sh.blocks?.filter((b) => devices.has(b));
-    const blocksChanged = !!sh.blocks && blocks!.length !== sh.blocks.length;
-    if (items.length === sh.items.length && !railsChanged && !blocksChanged) return sh;
+    const units = sh.units?.filter((b) => devices.has(b));
+    const plcGone = !!sh.plc && !devices.has(sh.plc);
+    const listsChanged = (!!sh.blocks && blocks!.length !== sh.blocks.length) || (!!sh.units && units!.length !== sh.units.length);
+    if (items.length === sh.items.length && !railsChanged && !listsChanged && !plcGone) return sh;
     changed = true;
-    return { ...sh, items, ...(rails ? { rails } : {}), ...(blocks ? { blocks } : {}) };
+    const { plc: _, ...rest } = sh;
+    return { ...(plcGone ? rest : sh), items, ...(rails ? { rails } : {}), ...(blocks ? { blocks } : {}), ...(units ? { units } : {}) };
   });
   return changed ? { ...s, sheets } : s;
 }
@@ -160,13 +178,19 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
           }).filter(([, x]) => x !== undefined),
         )
       : undefined;
-    const kind = v.kind === 'terminal' ? ('terminal' as const) : undefined;
-    const blocks = Array.isArray(v.blocks) ? v.blocks.filter((b): b is string => typeof b === 'string' && !!b) : undefined;
+    const kind = SHEET_KINDS.find((k) => k === v.kind);
+    const strings = (x: unknown) => (Array.isArray(x) ? x.filter((b): b is string => typeof b === 'string' && !!b) : undefined);
+    const blocks = strings(v.blocks);
+    const units = strings(v.units);
+    const paper = typeof v.paper === 'string' && v.paper in PAPER_SIZES ? (v.paper as PaperSize) : undefined;
     sheets.push({
       id,
       name,
       ...(kind ? { kind } : {}),
-      ...(kind && blocks ? { blocks } : {}),
+      ...(paper ? { paper } : {}),
+      ...(kind === 'terminal' && blocks ? { blocks } : {}),
+      ...((kind === 'io' || kind === 'rack') && typeof v.plc === 'string' && v.plc ? { plc: v.plc } : {}),
+      ...(kind === 'io' && units ? { units } : {}),
       ...(rails && Object.keys(rails).length ? { rails } : {}),
       items: kind ? [] : items,
     });
@@ -185,7 +209,10 @@ export function serializeSchematic(s: Schematic): Schematic {
       id: sh.id,
       name: sh.name,
       ...(sh.kind ? { kind: sh.kind } : {}),
-      ...(sh.kind && sh.blocks ? { blocks: sh.blocks } : {}),
+      ...(sh.paper ? { paper: sh.paper } : {}),
+      ...(sh.kind === 'terminal' && sh.blocks ? { blocks: sh.blocks } : {}),
+      ...((sh.kind === 'io' || sh.kind === 'rack') && sh.plc ? { plc: sh.plc } : {}),
+      ...(sh.kind === 'io' && sh.units ? { units: sh.units } : {}),
       ...(sh.rails && (sh.rails.supply || sh.rails.common)
         ? {
             rails: {

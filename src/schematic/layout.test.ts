@@ -212,7 +212,7 @@ describe('展開図の組み立て', () => {
       ],
     };
     const b = build(circuit(s));
-    const perSheet = b.rowsPerSheet;
+    const perSheet = b.rowsOf("D1");
     expect(b.doc.sheets[0].texts.map((t) => t.text)).toContain(`→${perSheet + 3}`);
     expect(b.doc.sheets[1].texts.map((t) => t.text)).toContain('→1');
   });
