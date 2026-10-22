@@ -6,6 +6,7 @@
  */
 import { DEFAULT_WIRE } from '../data/wires';
 import type { ParamValues, TerminalSide } from '../devices/types';
+import { parseSchematic, serializeSchematic, type Schematic } from '../schematic/model';
 
 export const DIAGRAM_FORMAT = 'conneko-diagram';
 export const DIAGRAM_VERSION = 1;
@@ -88,6 +89,8 @@ export interface Diagram {
   settings?: DiagramSettings;
   /** シート。省略時は 1 枚（DEFAULT_SHEET） */
   sheets?: Sheet[];
+  /** 展開図の配置（src/schematic/model.ts）。展開図を作っていなければ省略 */
+  schematic?: Schematic;
 }
 
 export const DEFAULT_SHEET: Sheet = { id: 'S1', name: 'シート1' };
@@ -145,6 +148,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       ...(w.fromSide ? { fromSide: w.fromSide } : {}),
       ...(w.toSide ? { toSide: w.toSide } : {}),
     })),
+    ...(diagram.schematic?.sheets.length ? { schematic: serializeSchematic(diagram.schematic) } : {}),
   };
 }
 
@@ -254,11 +258,13 @@ export function parseDiagram(input: string | unknown): Diagram {
       if (!sheets.some((s) => s.id === id)) sheets.push({ id, name });
     });
   }
+  const schematic = parseSchematic(raw.schematic);
   return {
     devices,
     wires,
     ...(Object.keys(settings).length ? { settings } : {}),
     ...(sheets.length ? { sheets } : {}),
+    ...(schematic ? { schematic } : {}),
   };
 }
 

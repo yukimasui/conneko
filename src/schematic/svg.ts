@@ -65,9 +65,10 @@ export function symbolSvg(def: SymbolDef, attributes: Record<string, string> = {
 /** レイヤーの色（画面用。AutoCAD の色番号のうち使うものだけ） */
 const LAYER_COLORS: Record<number, string> = { 1: '#d00', 2: '#b58900', 3: '#1a8f3a', 4: '#0aa', 5: '#22c', 6: '#b0b', 7: '#111' };
 
-export function sheetSvg(doc: SchematicExport, sheet: SchematicSheetOut): string {
+/** シートの図形（viewBox = "0 0 用紙の幅 高さ" の <svg> の中に入れる <g>）。y は下向きの画面の座標にして描く */
+export function sheetSvgBody(doc: SchematicExport, sheet: SchematicSheetOut): string {
   const color = (layer: string) => LAYER_COLORS[doc.layers[layer]?.color ?? 7] ?? '#111';
-  const { width, height } = sheet.paper;
+  const { height } = sheet.paper;
   const parts: string[] = [];
   for (const pl of sheet.polylines) {
     parts.push(`<g stroke="${color(pl.layer)}">${primitiveSvg({ kind: 'line', points: pl.points, closed: pl.closed, dashed: pl.dashed })}</g>`);
@@ -85,10 +86,19 @@ export function sheetSvg(doc: SchematicExport, sheet: SchematicSheetOut): string
   for (const d of sheet.dots) parts.push(`<circle cx="${n(d.at[0])}" cy="${n(d.at[1])}" r="0.6" fill="${color(d.layer)}" stroke="none"/>`);
   for (const t of sheet.texts) parts.push(textSvg(t.at, t.text, t.height, t.align, t.rotation, color(t.layer)));
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}mm" height="${height}mm">` +
-    `<rect width="100%" height="100%" fill="#fff"/>` +
     `<g transform="translate(0 ${height}) scale(1 -1)" fill="none" stroke-width="${STROKE}" stroke-linecap="round" stroke-linejoin="round" font-family="${FONT}">` +
     parts.join('') +
-    '</g></svg>'
+    '</g>'
+  );
+}
+
+/** シートを 1 枚の SVG にする（白い背景つき） */
+export function sheetSvg(doc: SchematicExport, sheet: SchematicSheetOut): string {
+  const { width, height } = sheet.paper;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}mm" height="${height}mm">` +
+    `<rect width="100%" height="100%" fill="#fff"/>` +
+    sheetSvgBody(doc, sheet) +
+    '</svg>'
   );
 }
