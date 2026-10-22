@@ -151,12 +151,15 @@ function changeover(actuator?: ContactActuator): SymbolDef {
 
 type PoleStyle = 'breaker' | 'contactor';
 
+/** 縦向きの記号（主回路）の極の間隔。端子番号（'1/L1' など）を極の間に書けるよう横向きより広くする */
+const POLE_V = 7.5;
+
 /** 多極の記号の端子（極 i の一次側が 2i-1、二次側が 2i）と端子番号の属性 */
-function polePins(poles: number): { pins: Record<string, Point>; attributes: AttributeDef[] } {
+function polePins(poles: number, pitch = POLE): { pins: Record<string, Point>; attributes: AttributeDef[] } {
   const pins: Record<string, Point> = {};
   const attributes: AttributeDef[] = [];
   for (let i = 0; i < poles; i++) {
-    const y = -i * POLE;
+    const y = -i * pitch;
     pins[2 * i + 1] = [0, y];
     pins[2 * i + 2] = [LEN, y];
     attributes.push(attr(`T${2 * i + 1}`, [1.5, y + 1.5], PIN_TEXT), attr(`T${2 * i + 2}`, [8.5, y + 1.5], PIN_TEXT));
@@ -164,10 +167,10 @@ function polePins(poles: number): { pins: Record<string, Point>; attributes: Att
   return { pins, attributes };
 }
 
-function switchPoles(poles: number, style: PoleStyle, earthLeakage = false): SymbolDef {
+function switchPoles(poles: number, style: PoleStyle, earthLeakage = false, pitch = POLE): SymbolDef {
   const primitives: Primitive[] = [];
   for (let i = 0; i < poles; i++) {
-    const y = -i * POLE;
+    const y = -i * pitch;
     primitives.push(...makeContactPole(y));
     if (style === 'breaker') {
       // 遮断器: 固定接点に ×
@@ -177,13 +180,13 @@ function switchPoles(poles: number, style: PoleStyle, earthLeakage = false): Sym
       primitives.push({ kind: 'arc', center: [FIXED_AT, y], r: 0.6, start: 90, end: 270 });
     }
   }
-  const bottom = -(poles - 1) * POLE;
+  const bottom = -(poles - 1) * pitch;
   if (poles > 1) primitives.push(dashed([LINK_X, MAKE_BLADE_AT_LINK], [LINK_X, bottom + MAKE_BLADE_AT_LINK]));
   if (earthLeakage) {
     // 漏電検出: 1 極目の上に IΔ の枠を置き、破線で連動させる
     primitives.push(dashed([LINK_X, MAKE_BLADE_AT_LINK], [LINK_X, 3.5]), rect(3.25, 3.5, 6.75, 6.5), text([LINK_X, 5], 'IΔ', PIN_TEXT));
   }
-  const { pins, attributes } = polePins(poles);
+  const { pins, attributes } = polePins(poles, pitch);
   const name = style === 'breaker' ? (earthLeakage ? '漏電遮断器' : '遮断器') : '電磁接触器の主接点';
   return {
     description: `${name}（${poles} 極）`,
@@ -194,15 +197,15 @@ function switchPoles(poles: number, style: PoleStyle, earthLeakage = false): Sym
 }
 
 /** サーマルリレーの熱動素子（多極） */
-function thermalElement(poles: number): SymbolDef {
+function thermalElement(poles: number, pitch = POLE): SymbolDef {
   const primitives: Primitive[] = [];
   for (let i = 0; i < poles; i++) {
-    const y = -i * POLE;
+    const y = -i * pitch;
     primitives.push(line([0, y], [3.5, y], [3.5, y + 1.5], [6.5, y + 1.5], [6.5, y], [LEN, y]));
   }
-  const bottom = -(poles - 1) * POLE;
+  const bottom = -(poles - 1) * pitch;
   primitives.push(rect(2.5, 2.5, 7.5, bottom - 1.25));
-  const { pins, attributes } = polePins(poles);
+  const { pins, attributes } = polePins(poles, pitch);
   return {
     description: `サーマルリレーの熱動素子（${poles} 極）`,
     primitives,
@@ -243,19 +246,23 @@ function lamp(): SymbolDef {
   };
 }
 
-/** 電動機。端子は左に 5mm 間隔で並べ、右の円につなぐ */
-function motor(phases: 1 | 3): SymbolDef {
+/** 電動機。端子は左に並べ（間隔 pitch）、右の円の中心へ向けてつなぐ */
+function motor(phases: 1 | 3, pitch = POLE): SymbolDef {
   const n = phases === 3 ? 3 : 2;
   const r = phases === 3 ? 6 : 5;
-  const cy = (-(n - 1) * POLE) / 2;
+  const cy = (-(n - 1) * pitch) / 2;
   const cx = phases === 3 ? 14 : 12;
   const primitives: Primitive[] = [{ kind: 'circle', center: [cx, cy], r }];
   const pins: Record<string, Point> = {};
   const attributes: AttributeDef[] = [];
   for (let i = 0; i < n; i++) {
-    const y = -i * POLE;
-    const dy = y - cy;
-    primitives.push(line([0, y], [cx - Math.sqrt(r * r - dy * dy), y]));
+    const y = -i * pitch;
+    // 端子からまっすぐ 3mm 出し、円の中心へ向けて円周まで
+    const bend: Point = [3, y];
+    const [vx, vy] = [bend[0] - cx, bend[1] - cy];
+    const len = Math.hypot(vx, vy);
+    const edge: Point = [cx + (vx / len) * r, cy + (vy / len) * r];
+    primitives.push(Math.abs(vy) < 0.01 ? line([0, y], edge) : line([0, y], bend, edge));
     pins[i + 1] = [0, y];
     attributes.push(attr(`T${i + 1}`, [1.5, y + 1.5], PIN_TEXT));
   }
@@ -266,6 +273,84 @@ function motor(phases: 1 | 3): SymbolDef {
     pins,
     attributes: [...attributes, attr('TAG', [cx, cy + r + 2], TAG_TEXT)],
   };
+}
+
+// ---- 一次電源（受電の端子） ----
+
+/** 一次電源の端子（R・S・T など）を ○ で並べる。横向きは端子を右に出し、縦向きは ○ の上に端子名、下に端子を出す */
+function source(n: number, vertical: boolean): SymbolDef {
+  const primitives: Primitive[] = [];
+  const pins: Record<string, Point> = {};
+  const pinDirs: Record<string, Point> = {};
+  const attributes: AttributeDef[] = [];
+  for (let i = 0; i < n; i++) {
+    if (vertical) {
+      const x = i * POLE_V;
+      primitives.push({ kind: 'circle', center: [x, -1.25], r: 1.25 });
+      pins[i + 1] = [x, -2.5];
+      pinDirs[i + 1] = [0, -1];
+      attributes.push(attr(`T${i + 1}`, [x, 1.5], TAG_TEXT));
+    } else {
+      const y = -i * POLE;
+      primitives.push({ kind: 'circle', center: [1.25, y], r: 1.25 });
+      pins[i + 1] = [2.5, y];
+      pinDirs[i + 1] = [1, 0];
+      attributes.push(attr(`T${i + 1}`, [-0.8, y], TAG_TEXT, 'right'));
+    }
+  }
+  const tagAt: Point = vertical ? [(n - 1) * POLE_V + 3, -1.25] : [1.25, -(n - 1) * POLE - 4];
+  return {
+    description: `一次電源（${n} 端子）`,
+    primitives,
+    pins,
+    pinDirs,
+    attributes: [...attributes, attr('TAG', tagAt, PIN_TEXT, vertical ? 'left' : 'center')],
+  };
+}
+
+// ---- 縦向き（主回路） ----
+
+/**
+ * 横向きの記号を縦向き（上から下へ流れる）にする。y = −x の直線で映す（x, y）→（−y, −x）ので、
+ * 端子 1 側が上、極は左から右へ並び、接点の傾きは JIS の縦向きの形になる。文字は回さず横書きのまま置く。
+ * 端子番号（T1, T2…）は線の左に右寄せ、機器名は記号の右に左寄せで書く。
+ */
+function vertical(def: SymbolDef): SymbolDef {
+  const t = ([x, y]: Point): Point => [-y, -x];
+  const norm = (a: number) => ((a % 360) + 360) % 360;
+  const primitives = def.primitives.map((p): Primitive => {
+    switch (p.kind) {
+      case 'line':
+        return { ...p, points: p.points.map(t) };
+      case 'circle':
+        return { ...p, center: t(p.center) };
+      case 'arc':
+        // 映すと回る向きが逆になるので、始まりと終わりを入れ替える
+        return { ...p, center: t(p.center), start: norm(-90 - p.end), end: norm(-90 - p.start) };
+      case 'text':
+        return { ...p, at: t(p.at) };
+    }
+  });
+  const pins = Object.fromEntries(Object.entries(def.pins).map(([k, v]) => [k, t(v)]));
+  const pinDirs = Object.fromEntries(
+    Object.entries(def.pins).map(([k, v]) => {
+      const d = def.pinDirs?.[k] ?? (v[0] <= 0.01 ? [-1, 0] : [1, 0]);
+      return [k, t(d as Point)];
+    }),
+  );
+  const attributes = def.attributes.map((a) => ({
+    ...a,
+    at: t(a.at),
+    align: /^T\d+$/.test(a.tag) ? ('right' as const) : a.tag === 'TAG' ? ('left' as const) : a.align,
+  }));
+  // 端子番号は線の左に寄せる（映すと線の上だった位置が線の左になる）
+  for (const a of attributes) if (/^T\d+$/.test(a.tag)) a.at = [a.at[0] - 0.3, a.at[1]];
+  // 機器名は記号の右へ
+  const xs = primitives.flatMap((p) => (p.kind === 'line' ? p.points.map((q) => q[0]) : p.kind === 'text' ? [] : [p.center[0] + p.r]));
+  const right = Math.max(...xs, ...Object.values(pins).map((q) => q[0]));
+  const ys = Object.values(pins).map((q) => q[1]);
+  for (const a of attributes) if (a.tag === 'TAG') a.at = [right + 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  return { description: `${def.description}（縦）`, primitives, pins, pinDirs, attributes };
 }
 
 // ---- 端子・接地 ----
@@ -379,7 +464,11 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   'lamp',
   'motor-3p',
   'motor-1p',
+  'motor-3p-v',
+  'motor-1p-v',
   ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p`, `elb-${n}p`, `contactor-${n}p`, `thermal-${n}p`]),
+  ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p-v`, `elb-${n}p-v`, `contactor-${n}p-v`, `thermal-${n}p-v`]),
+  ...[2, 3, 4].flatMap((n) => [`source-${n}p`, `source-${n}p-v`]),
   'terminal',
   'ground',
   'plc-in',
@@ -410,11 +499,27 @@ function buildSymbol(id: string): SymbolDef | undefined {
     if (c[1] === 'c') return changeover(actuator);
     return contact(c[1] === 'no' ? 'NO' : 'NC', actuator);
   }
-  const p = /^(breaker|elb|contactor|thermal)-([1-4])p$/.exec(id);
+  const p = /^(breaker|elb|contactor|thermal)-([1-4])p(-v)?$/.exec(id);
   if (p) {
     const n = Number(p[2]);
-    if (p[1] === 'thermal') return thermalElement(n);
-    return switchPoles(n, p[1] === 'contactor' ? 'contactor' : 'breaker', p[1] === 'elb');
+    const pitch = p[3] ? POLE_V : POLE;
+    const def = p[1] === 'thermal' ? thermalElement(n, pitch) : switchPoles(n, p[1] === 'contactor' ? 'contactor' : 'breaker', p[1] === 'elb', pitch);
+    return p[3] ? vertical(def) : def;
+  }
+  const src = /^source-([1-4])p(-v)?$/.exec(id);
+  if (src) return source(Number(src[1]), !!src[2]);
+  const m = /^motor-(3|1)p-v$/.exec(id);
+  if (m) {
+    const def = vertical(motor(m[1] === '3' ? 3 : 1, POLE_V));
+    // 円の中の文字は縦向きでも「M」の下に相の数を置く
+    const circle = def.primitives.find((p) => p.kind === 'circle');
+    if (circle?.kind === 'circle') {
+      const [cx, cy] = circle.center;
+      def.primitives = def.primitives.map((p) =>
+        p.kind !== 'text' ? p : { ...p, at: p.text === 'M' ? [cx, cy + 1.2] : [cx, cy - 2.2] },
+      );
+    }
+    return def;
   }
   switch (id) {
     case 'coil':

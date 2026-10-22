@@ -63,7 +63,7 @@ function sampleAttributes(def: SymbolDef): Record<string, string> {
 }
 
 const cells: { id: string; label: string; rotation?: number }[] = [
-  ...LIBRARY_SYMBOL_IDS.map((id) => ({ id, label: id })),
+  ...LIBRARY_SYMBOL_IDS.filter((id) => !id.endsWith('-v')).map((id) => ({ id, label: id })),
   { id: 'elb-3p', label: 'elb-3p（270° 回転）', rotation: 270 },
   { id: 'box_sample', label: '箱（機器ごとに作る）' },
 ];
@@ -86,6 +86,18 @@ cells.forEach((c, i) => {
   const at: Point = c.rotation ? [x + 20, top - 10] : [x + 10, top - 14];
   catalog.inserts.push({ symbol: c.id, at, rotation: c.rotation, layer: 'SYMBOL', attributes: sampleAttributes(def) });
   catalog.texts.push({ at: [x + 2, top - CELL_H + 4], text: c.label, height: 2, align: 'left', layer: 'TEXT' });
+});
+
+// ---- 3 枚目: 縦向き（主回路）の記号の一覧 ----
+
+const verticalCatalog: SchematicSheetOut = { id: 'D3', name: '記号一覧（縦）', paper: { width: W, height: H }, inserts: [], polylines: [], dots: [], texts: [] };
+frame(verticalCatalog, '記号一覧（縦向き・主回路）');
+LIBRARY_SYMBOL_IDS.filter((id) => id.endsWith('-v')).forEach((id, i) => {
+  const def = use(id);
+  const x = 15 + (i % COLS) * CELL_W;
+  const top = H - 15 - Math.floor(i / COLS) * CELL_H;
+  verticalCatalog.inserts.push({ symbol: id, at: [x + 12, top - 8], layer: 'SYMBOL', attributes: sampleAttributes(def) });
+  verticalCatalog.texts.push({ at: [x + 2, top - CELL_H + 4], text: id, height: 2, align: 'left', layer: 'TEXT' });
 });
 
 // ---- 2 枚目: 段の見本（自己保持回路） ----
@@ -160,7 +172,7 @@ const doc: SchematicExport = {
   revision: 'A',
   layers: SCHEMATIC_LAYERS,
   symbols,
-  sheets: [catalog, ladder],
+  sheets: [catalog, ladder, verticalCatalog],
 };
 
 /** 数値を丸め、座標の [x, y] は 1 行に収めた JSON */

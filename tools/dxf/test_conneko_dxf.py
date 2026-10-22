@@ -75,7 +75,7 @@ class ConvertTest(unittest.TestCase):
     def test_シートごとに分ける(self) -> None:
         out = self.dir / "sample.dxf"
         written = conneko_dxf.convert(self.schematic, out, split=True)
-        self.assertEqual([p.name for p in written], ["sample-D1.dxf", "sample-D2.dxf"])
+        self.assertEqual([p.name for p in written], ["sample-D1.dxf", "sample-D2.dxf", "sample-D3.dxf"])
         for p in written:
             self.assertFalse(ezdxf.readfile(p).audit().has_errors)
 

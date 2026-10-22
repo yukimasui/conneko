@@ -9,10 +9,11 @@
  * - 経路を逆向きに通る記号は、端子を入れ替えて（flip）左右の向きを合わせる。
  * - 接点でたどれない PLC の入出力点（3 線式センサーの出力につながる入力など）は、
  *   つながった機器の箱（電源を母線からもらうもの）を左に、入出力点を右端に置いて 1 段にする（I/O 割付図）。
+ * 母線（電源側）を選んでいないシートは主回路として並べる（autoLayoutMain）。
  * すでに置いた記号は動かさない。
  */
 import type { SymbolDef } from './format';
-import { canFlip, RAIL_INSET, ROW_PITCH, ROW_TOP, type ElementEntry, type SchematicBuild } from './layout';
+import { canBeVertical, canFlip, itemSymbol, RAIL_INSET, ROW_PITCH, ROW_TOP, type ElementEntry, type SchematicBuild } from './layout';
 import { snap, splitRail, type Schematic, type SchematicItem, type SchematicSheet } from './model';
 import { pinPoint, placedBounds, symbolBounds } from './place';
 
@@ -22,8 +23,9 @@ type Paper = { width: number; height: number };
 function bottomOf(items: SchematicItem[], byId: Map<string, ElementEntry>, paper: Paper, range?: [number, number]): number {
   let bottom = -Infinity;
   for (const it of items) {
-    const def = byId.get(it.element)?.symbol;
-    if (!def) continue;
+    const e = byId.get(it.element);
+    if (!e) continue;
+    const def = itemSymbol(e, it);
     const pb = placedBounds(def, [it.x, paper.height - it.y], it.rotation);
     if (range && (pb.x2 < range[0] || pb.x1 > range[1])) continue;
     bottom = Math.max(bottom, paper.height - pb.y1);
@@ -89,9 +91,9 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
     const r = ref ? splitRail(ref) : undefined;
     return r ? build.netOf(r.device, r.terminal) : undefined;
   };
-  const left = railNet(sheet.rails?.left);
-  const right = railNet(sheet.rails?.right);
-  if (!left) return { schematic, placed: 0, message: '左の母線（電源側）を選んでから自動で並べてください' };
+  const left = railNet(sheet.rails?.supply);
+  const right = railNet(sheet.rails?.common);
+  if (!left) return autoLayoutMain(build, schematic, sheetId, paper);
 
   // --- 経路のグラフ（網を頂点、記号を辺とする） ---
   const adjacency = new Map<string, Edge[]>();
@@ -240,5 +242,130 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
         : '左の母線から右の母線・PLC の入出力点へ、接点・コイル・表示灯だけでたどれる段が見つかりません',
     };
   }
+  return { schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) }, placed };
+}
+
+// ---- 主回路 ----
+
+/** 主回路の機器の種類（極ごとに一次側から二次側へ流れるもの） */
+const MAIN_KINDS = new Set(['source', 'breaker', 'contactor', 'thermal', 'motor']);
+/** 主回路の機器どうしの縦の間隔[mm] */
+const MAIN_GAP = 10;
+/** 主回路の 1 列目（1 極目）の x */
+const MAIN_X = 60;
+
+interface MainNode {
+  entry: ElementEntry;
+  /** 一次側の端子（極の順）の網 */
+  ins: string[];
+  /** 二次側の端子（極の順）の網 */
+  outs: string[];
+  children: MainNode[];
+  depth: number;
+}
+
+/**
+ * 主回路を並べる。一次電源（なければ、ほかの主回路の機器から給電されていない機器）から始め、
+ * すべての極が前の機器の二次側につながる機器をたどって縦に 1 列に並べる（いちばん長く続く枝を本線にする）。
+ * 本線から分かれる機器（制御電源のサーキットプロテクタなど）は、横向きで本線の右に、分かれる位置の下に置く。
+ */
+export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, sheetId: string, paper: Paper): AutoLayoutResult {
+  const sheet = schematic.sheets.find((s) => s.id === sheetId)!;
+  const placedIds = new Set(schematic.sheets.flatMap((s) => s.items.map((i) => i.element)));
+  const terminalsOf = (e: ElementEntry, pins: string[]) =>
+    pins.map((pin) => Object.entries(e.element.pinOf).find(([, p]) => p === pin)?.[0]).filter((t): t is string => !!t);
+  const nodes: MainNode[] = [];
+  for (const e of build.elements) {
+    if (!MAIN_KINDS.has(e.element.kind) || placedIds.has(e.id)) continue;
+    const n = Object.keys(e.element.pinOf).length;
+    const pins = Array.from({ length: n }, (_, i) => String(i + 1));
+    let ins: string[] = [];
+    let outs: string[] = [];
+    if (e.element.kind === 'source') outs = pins;
+    else if (e.element.kind === 'motor') ins = pins;
+    else {
+      ins = pins.filter((p) => Number(p) % 2 === 1);
+      outs = pins.filter((p) => Number(p) % 2 === 0);
+    }
+    const net = (ps: string[]) => terminalsOf(e, ps).map((t) => build.circuitNetOf(e.device, t));
+    nodes.push({ entry: e, ins: net(ins), outs: net(outs), children: [], depth: 1 });
+  }
+  // 親子: 子のすべての一次側が、親の二次側の網にある
+  const parentOf = new Map<MainNode, MainNode>();
+  for (const child of nodes) {
+    if (!child.ins.length) continue;
+    const parent = nodes.find((p) => p !== child && p.outs.length && child.ins.every((n) => p.outs.includes(n)));
+    if (parent) {
+      parent.children.push(child);
+      parentOf.set(child, parent);
+    }
+  }
+  const depth = (n: MainNode, seen = new Set<MainNode>()): number => {
+    if (seen.has(n)) return 0;
+    seen.add(n);
+    n.depth = 1 + Math.max(0, ...n.children.map((c) => depth(c, seen)));
+    return n.depth;
+  };
+  const roots = nodes.filter((n) => !parentOf.has(n) && (n.entry.element.kind === 'source' || n.children.length));
+  if (!roots.length) {
+    return {
+      schematic,
+      placed: 0,
+      message: '母線を選んでいないシートは主回路として並べます。置いていない一次電源・遮断器・電磁接触器などが見つかりません（制御回路は母線を選んでから並べてください）',
+    };
+  }
+  for (const r of roots) depth(r);
+
+  const H = paper.height;
+  const items = [...sheet.items];
+  let placed = 0;
+  /** 要素の極 1 の端子（pin）が (x, y) に来るように置く（y は下向き）。置いた記号の端子の y を返す */
+  const put = (n: MainNode, vertical: boolean, x: number, y: number, anchorPin: string) => {
+    const item: SchematicItem = { element: n.entry.id, x: 0, y: 0, ...(vertical ? { vertical: true } : {}) };
+    const def = itemSymbol(n.entry, item);
+    const p = def.pins[anchorPin];
+    item.x = snap(x - p[0]);
+    item.y = snap(y + p[1]);
+    items.push(item);
+    placed++;
+    const yOf = (pin: string) => item.y - (def.pins[pin]?.[1] ?? 0);
+    return { item, def, yOf };
+  };
+  // 既に置いた記号の右から始める
+  let x0 = MAIN_X;
+  for (const it of sheet.items) {
+    const e = build.byId.get(it.element);
+    if (e) x0 = Math.max(x0, snap(placedBounds(itemSymbol(e, it), [it.x, H - it.y], it.rotation).x2 + 30));
+  }
+
+  const layoutChain = (root: MainNode, x: number) => {
+    let node: MainNode | undefined = root;
+    let y = 25;
+    let first = true;
+    while (node) {
+      const vertical = canBeVertical(node.entry);
+      // 端子 1（一次電源は 1 番目の端子、ほかは 1 極目の一次側）を本線の列にそろえる
+      if (!first) y += MAIN_GAP;
+      const { def, yOf } = put(node, vertical, x, y, '1');
+      first = false;
+      // 二次側の端子の高さ（なければ記号の下端）
+      const outPin = node.entry.element.kind === 'source' ? '1' : node.entry.element.kind === 'motor' ? undefined : '2';
+      y = outPin ? yOf(outPin) : y + 20;
+      // 分かれる機器（本線でない子）は横向きで右に、分かれる位置の下に並べる
+      const sorted: MainNode[] = [...node.children].sort((a, b) => b.depth - a.depth);
+      const main: MainNode | undefined = sorted[0];
+      const branches = sorted.slice(1);
+      const width = vertical ? Math.max(...Object.values(def.pins).map((q) => q[0])) - def.pins['1'][0] : 0;
+      for (const b of branches) {
+        y += 7.5;
+        const r = put(b, false, x + width + 25, y, '1');
+        const lastIn = String(2 * (b.ins.length - 1) + 1);
+        y = Math.max(y, r.yOf(lastIn)) + 2.5;
+      }
+      node = main;
+    }
+  };
+  roots.forEach((r, i) => layoutChain(r, x0 + i * 80));
+
   return { schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) }, placed };
 }

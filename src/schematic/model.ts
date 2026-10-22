@@ -21,6 +21,19 @@ export interface SchematicItem {
   rotation?: Rotation;
   /** 端子 1 と 2 を入れ替えて置く（記号の向きはそのままで、左右の端子を逆にする。接点・コイルなど 2 端子の記号だけ） */
   flip?: boolean;
+  /** 縦向きの記号で置く（主回路の遮断器・電磁接触器・熱動素子・電動機・一次電源。上から下へ流れ、極は左から右へ並ぶ） */
+  vertical?: boolean;
+}
+
+/**
+ * 母線。supply が電源側（P24・R など）、common が戻り側（N24・S など）の網（`機器名.端子ID`。その端子とつながった網全体）。
+ * layout は並べ方: 'left'（既定。左に電源側・戻り側の順に並べ、段の終わりから段の下を通って戻り側へ戻す）/
+ * 'sides'（左に電源側、右に戻り側。ラダー図の形）
+ */
+export interface Rails {
+  supply?: string;
+  common?: string;
+  layout?: 'left' | 'sides';
 }
 
 export interface SchematicSheet {
@@ -30,8 +43,8 @@ export interface SchematicSheet {
   kind?: 'terminal';
   /** 端子台接続図にする端子台の機器名（省略時は図面のすべての端子台） */
   blocks?: string[];
-  /** 左右の母線にする網（`機器名.端子ID`。その端子とつながった網全体）。左が電源側、右が戻り側 */
-  rails?: { left?: string; right?: string };
+  /** 母線 */
+  rails?: Rails;
   items: SchematicItem[];
 }
 
@@ -78,11 +91,12 @@ export function renameSchematicDevice(s: Schematic | undefined, from: string, to
   if (!s) return s;
   const el = (id: string) => (splitElementId(id).device === from ? `${to}:${splitElementId(id).key}` : id);
   const rail = (ref?: string) => (ref && splitRail(ref)?.device === from ? `${to}.${splitRail(ref)!.terminal}` : ref);
+  const rails = (r: Rails): Rails => ({ ...r, supply: rail(r.supply), common: rail(r.common) });
   return {
     ...s,
     sheets: s.sheets.map((sh) => ({
       ...sh,
-      ...(sh.rails ? { rails: { left: rail(sh.rails.left), right: rail(sh.rails.right) } } : {}),
+      ...(sh.rails ? { rails: rails(sh.rails) } : {}),
       ...(sh.blocks ? { blocks: sh.blocks.map((b) => (b === from ? to : b)) } : {}),
       items: sh.items.map((it) => ({ ...it, element: el(it.element) })),
     })),
@@ -96,8 +110,8 @@ export function pruneSchematic(s: Schematic | undefined, devices: Set<string>): 
   const sheets = s.sheets.map((sh) => {
     const items = sh.items.filter((it) => devices.has(splitElementId(it.element).device));
     const keep = (ref?: string) => (ref && devices.has(splitRail(ref)?.device ?? '') ? ref : undefined);
-    const rails = sh.rails ? { left: keep(sh.rails.left), right: keep(sh.rails.right) } : undefined;
-    const railsChanged = !!sh.rails && (rails?.left !== sh.rails.left || rails?.right !== sh.rails.right);
+    const rails = sh.rails ? { ...sh.rails, supply: keep(sh.rails.supply), common: keep(sh.rails.common) } : undefined;
+    const railsChanged = !!sh.rails && (rails?.supply !== sh.rails.supply || rails?.common !== sh.rails.common);
     const blocks = sh.blocks?.filter((b) => devices.has(b));
     const blocksChanged = !!sh.blocks && blocks!.length !== sh.blocks.length;
     if (items.length === sh.items.length && !railsChanged && !blocksChanged) return sh;
@@ -132,13 +146,19 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
         y: it.y,
         ...(rot === 90 || rot === 180 || rot === 270 ? { rotation: rot } : {}),
         ...(it.flip === true ? { flip: true } : {}),
+        ...(it.vertical === true ? { vertical: true } : {}),
       });
     }
-    const rails = isObj(v.rails)
-      ? {
-          ...(typeof v.rails.left === 'string' && v.rails.left ? { left: v.rails.left } : {}),
-          ...(typeof v.rails.right === 'string' && v.rails.right ? { right: v.rails.right } : {}),
-        }
+    // 母線は supply / common（以前の形式の left / right も受け付ける）
+    const str = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
+    const rails: Rails | undefined = isObj(v.rails)
+      ? Object.fromEntries(
+          Object.entries({
+            supply: str(v.rails.supply) ?? str(v.rails.left),
+            common: str(v.rails.common) ?? str(v.rails.right),
+            layout: v.rails.layout === 'sides' || (v.rails.layout === undefined && str(v.rails.right) && !str(v.rails.common)) ? ('sides' as const) : undefined,
+          }).filter(([, x]) => x !== undefined),
+        )
       : undefined;
     const kind = v.kind === 'terminal' ? ('terminal' as const) : undefined;
     const blocks = Array.isArray(v.blocks) ? v.blocks.filter((b): b is string => typeof b === 'string' && !!b) : undefined;
@@ -166,8 +186,14 @@ export function serializeSchematic(s: Schematic): Schematic {
       name: sh.name,
       ...(sh.kind ? { kind: sh.kind } : {}),
       ...(sh.kind && sh.blocks ? { blocks: sh.blocks } : {}),
-      ...(sh.rails && (sh.rails.left || sh.rails.right)
-        ? { rails: { ...(sh.rails.left ? { left: sh.rails.left } : {}), ...(sh.rails.right ? { right: sh.rails.right } : {}) } }
+      ...(sh.rails && (sh.rails.supply || sh.rails.common)
+        ? {
+            rails: {
+              ...(sh.rails.supply ? { supply: sh.rails.supply } : {}),
+              ...(sh.rails.common ? { common: sh.rails.common } : {}),
+              ...(sh.rails.layout === 'sides' ? { layout: 'sides' as const } : {}),
+            },
+          }
         : {}),
       items: sh.items.map((it) => ({
         element: it.element,
@@ -175,6 +201,7 @@ export function serializeSchematic(s: Schematic): Schematic {
         y: r(it.y),
         ...(it.rotation ? { rotation: it.rotation } : {}),
         ...(it.flip ? { flip: true } : {}),
+        ...(it.vertical ? { vertical: true } : {}),
       })),
     })),
   };

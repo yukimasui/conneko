@@ -4,6 +4,7 @@
  * 展開図では 1 台の機器が複数の記号に分かれる（電磁接触器ならコイル・主接点・補助接点）。
  * 端子・ピン・内部経路（links）から次の順に切り出し、どれにも当たらない端子は機器ごとの「箱」にまとめる。
  *
+ * 0. 一次電源（電源の出力の端子を ○ で並べる）
  * 1. 機器定義の schematic.elements（明示した要素）
  * 2. 電磁接触器・リレーのコイル（受電端子がちょうど 2 つ）
  * 3. 保護の経路（遮断器の極、サーマルリレーの熱動素子）と、電磁接触器の主接点。極をまとめて 1 要素
@@ -30,6 +31,7 @@ export type ElementKind =
   | 'ground'
   | 'motor'
   | 'lamp'
+  | 'source'
   | 'box';
 
 export interface SchematicElement {
@@ -126,6 +128,22 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
     });
     return { key: 'main', kind, name, symbol, pinOf, attributes };
   };
+
+  // 0. 一次電源
+  if (def.category === 'power-source') {
+    // 接地（PE）は電源の端子に入れず、接地の記号にする（下の 7）
+    const outs = r.terminals.filter((t) => t.role === 'supply' && t.supply?.conductor !== 'PE' && free(t.id)).slice(0, 4);
+    if (outs.length >= 2) {
+      add({
+        key: 'main',
+        kind: 'source',
+        name: `一次電源 ${outs.map((t) => t.id).join('・')}`,
+        symbol: `source-${outs.length}p`,
+        pinOf: Object.fromEntries(outs.map((t, i) => [t.id, String(i + 1)])),
+        attributes: Object.fromEntries(outs.map((t, i) => [`T${i + 1}`, t.label ?? t.id])),
+      });
+    }
+  }
 
   // 1. 明示した要素
   for (const e of hint.elements ?? []) {
@@ -240,7 +258,8 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
 
   // 7. 接地端子
   for (const t of r.terminals) {
-    if (t.role !== 'ground' || !free(t.id)) continue;
+    const pe = t.role === 'ground' || (t.role === 'supply' && t.supply?.conductor === 'PE');
+    if (!pe || !free(t.id)) continue;
     add({ key: t.id, kind: 'ground', name: `接地 ${t.id}`, symbol: 'ground', pinOf: { [t.id]: '1' }, attributes: { T1: t.id } });
   }
 
