@@ -196,6 +196,7 @@ const def: DeviceDefinition = {
   ],
   loadCurrent: { param: 'ratedCurrent' },
   distinctGroups: [['U', 'V', 'W']],
+  schematic: { elements: [{ kind: 'motor', terminals: ['U', 'V', 'W'] }] },
 };
 
 export default def;

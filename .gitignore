@@ -5,3 +5,5 @@ dist/
 .vite/
 *.preview.png
 .claude/worktrees/
+.venv/
+__pycache__/

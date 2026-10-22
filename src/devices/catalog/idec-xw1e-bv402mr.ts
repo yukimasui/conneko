@@ -144,6 +144,7 @@ const def: DeviceDefinition = {
   links: BLOCKS.map((b) => ({ from: b.top, to: b.bottom, switch: 'NC' as const, directOpening: true })),
   // 非常停止スイッチ単体には PL の定めがない（B10d と組み合わせる安全回路の構成で決まる）
   safety: { standards: ['IEC 60947-5-5', 'ISO 13850'] },
+  schematic: { actuator: 'emergency' },
 };
 
 export default def;

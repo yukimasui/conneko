@@ -423,6 +423,27 @@ export interface DeviceDefinition {
    * 書いた機器（または説明・端子の説明に「推定」とある機器）は、画面・部品表・チェック結果に「推定を含む」と表示する
    */
   estimated?: string;
+  /** 展開図の記号に切り出すときの補足（自動の切り出しで決めきれない機器だけに書く。src/schematic/elements.ts） */
+  schematic?: SchematicHint;
+}
+
+/**
+ * 接点の操作の種類（展開図で接点の記号を描き分ける）。
+ * - pushbutton: 押しボタン（イネーブルスイッチを含む）
+ * - emergency: 非常停止（きのこ形の押しボタン）
+ * - pull: 引き操作（ロープ式非常停止スイッチ）
+ * - limit: リミットスイッチ・インタロックスイッチ（機械的に操作される）
+ * - thermal: 熱動（サーマルリレーの接点。サーマルリレーは指定しなくてもこれになる）
+ */
+export type ContactActuator = 'pushbutton' | 'emergency' | 'pull' | 'limit' | 'thermal';
+
+export interface SchematicHint {
+  /** この機器の a 接点・b 接点の操作の種類。省略時はリレー・電磁接触器の接点 */
+  actuator?: ContactActuator;
+  /** 遮断器の極に漏電検出を付けて描く（漏電遮断器） */
+  earthLeakage?: boolean;
+  /** 明示する要素（コイル・表示灯・電動機）。ここに書いた端子は自動の切り出しに使わない */
+  elements?: { kind: 'coil' | 'lamp' | 'motor'; terminals: string[] }[];
 }
 
 export type ParamValues = Record<string, number | string>;
