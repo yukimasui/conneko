@@ -26,6 +26,10 @@ export interface SchematicItem {
 export interface SchematicSheet {
   id: string;
   name: string;
+  /** シートの種類。省略時は展開接続図（記号を置く）。'terminal' は端子台接続図（端子台ごとの表を自動で作る。items は使わない） */
+  kind?: 'terminal';
+  /** 端子台接続図にする端子台の機器名（省略時は図面のすべての端子台） */
+  blocks?: string[];
   /** 左右の母線にする網（`機器名.端子ID`。その端子とつながった網全体）。左が電源側、右が戻り側 */
   rails?: { left?: string; right?: string };
   items: SchematicItem[];
@@ -79,6 +83,7 @@ export function renameSchematicDevice(s: Schematic | undefined, from: string, to
     sheets: s.sheets.map((sh) => ({
       ...sh,
       ...(sh.rails ? { rails: { left: rail(sh.rails.left), right: rail(sh.rails.right) } } : {}),
+      ...(sh.blocks ? { blocks: sh.blocks.map((b) => (b === from ? to : b)) } : {}),
       items: sh.items.map((it) => ({ ...it, element: el(it.element) })),
     })),
   };
@@ -93,9 +98,11 @@ export function pruneSchematic(s: Schematic | undefined, devices: Set<string>): 
     const keep = (ref?: string) => (ref && devices.has(splitRail(ref)?.device ?? '') ? ref : undefined);
     const rails = sh.rails ? { left: keep(sh.rails.left), right: keep(sh.rails.right) } : undefined;
     const railsChanged = !!sh.rails && (rails?.left !== sh.rails.left || rails?.right !== sh.rails.right);
-    if (items.length === sh.items.length && !railsChanged) return sh;
+    const blocks = sh.blocks?.filter((b) => devices.has(b));
+    const blocksChanged = !!sh.blocks && blocks!.length !== sh.blocks.length;
+    if (items.length === sh.items.length && !railsChanged && !blocksChanged) return sh;
     changed = true;
-    return { ...sh, items, ...(rails ? { rails } : {}) };
+    return { ...sh, items, ...(rails ? { rails } : {}), ...(blocks ? { blocks } : {}) };
   });
   return changed ? { ...s, sheets } : s;
 }
@@ -133,7 +140,16 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
           ...(typeof v.rails.right === 'string' && v.rails.right ? { right: v.rails.right } : {}),
         }
       : undefined;
-    sheets.push({ id, name, ...(rails && Object.keys(rails).length ? { rails } : {}), items });
+    const kind = v.kind === 'terminal' ? ('terminal' as const) : undefined;
+    const blocks = Array.isArray(v.blocks) ? v.blocks.filter((b): b is string => typeof b === 'string' && !!b) : undefined;
+    sheets.push({
+      id,
+      name,
+      ...(kind ? { kind } : {}),
+      ...(kind && blocks ? { blocks } : {}),
+      ...(rails && Object.keys(rails).length ? { rails } : {}),
+      items: kind ? [] : items,
+    });
   });
   if (!sheets.length) return undefined;
   const paper = isObj(raw.settings) && typeof raw.settings.paper === 'string' && raw.settings.paper in PAPER_SIZES ? (raw.settings.paper as PaperSize) : undefined;
@@ -148,6 +164,8 @@ export function serializeSchematic(s: Schematic): Schematic {
     sheets: s.sheets.map((sh) => ({
       id: sh.id,
       name: sh.name,
+      ...(sh.kind ? { kind: sh.kind } : {}),
+      ...(sh.kind && sh.blocks ? { blocks: sh.blocks } : {}),
       ...(sh.rails && (sh.rails.left || sh.rails.right)
         ? { rails: { ...(sh.rails.left ? { left: sh.rails.left } : {}), ...(sh.rails.right ? { right: sh.rails.right } : {}) } }
         : {}),
