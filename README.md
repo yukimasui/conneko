@@ -24,8 +24,11 @@
   - 三菱電機: ブレーカー類（漏電遮断器・ノーヒューズ遮断器・サーキットプロテクタ）、電磁接触器、サーマルリレー、MELSEC iQ-R（ベースユニット含む）/ iQ-F
   - KEYENCE: KV-8000 / KV-X と増設ユニット、VT5、光電センサ（PZ-G・PR-G・PZ-V/M・PR-M/F・LR シリーズ・ファイバアンプなど）ほか各種センサー
   - 安全機器: 安全コントローラー、セーフティリレー、非常停止、ドアスイッチ、ライトカーテン など（KEYENCE・オムロン・IDEC・Pilz・三菱電機）
-  - IAI: ロボシリンダのコントローラー（PCON/ACON/DCON/SCON、MCON、RCON とユニット）、プログラムコントローラー（XSEL/MSEL/PSEL/ASEL/RSEL）、電源 PSA-24、PIO ケーブル（[一覧](docs/iai-catalog.md)）
+  - IAI: ロボシリンダのコントローラー（PCON/ACON/DCON/SCON、MCON、RCON とユニット）、プログラムコントローラー（XSEL/MSEL/PSEL/ASEL/RSEL）、電源 PSA-24、PIO ケーブル、
+    アクチュエーター（RCP6・RCA2・RCD・RCS4、エレシリンダー EC。適応コントローラーとだけケーブルでつながる）（[一覧](docs/iai-catalog.md)）
   - 東洋技研: コネクタ端子台（ネジ式 PCN7、プッシュイン PCX / PCXV / PCV5 / PCW。MIL・FCN、KEYENCE・三菱電機対応品）、コモン端子台、レール用端子台（[一覧](docs/toyogiken-catalog.md)）
+  - 制御機器: 汎用リレー（オムロン MY2N/MY4N、IDEC RU・RJ）、タイマー H3Y、SSR G3NA、押しボタン・照光押しボタン・セレクタ・表示灯（オムロン A22N/M22N）、
+    ブザー、近接センサ E2E、リミットスイッチ WL、電磁弁（SMC SY）（[一覧](docs/generic-catalog.md)）
   - 汎用品: 一次電源、DC24V電源、端子台、MIL 変換端子台、モーター、ファン、表示灯、産業用スイッチングハブ（5/8/16ポート）
 - MIL コネクタ間は多芯ケーブル、LAN は LAN ケーブル、M8/M12 はセンサーケーブルとして描画し、ピン単位で導通をチェック
 - PLC エディタ（PLC を右クリック）

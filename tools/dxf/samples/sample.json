@@ -257,6 +257,90 @@
         }
       ]
     },
+    "contact-c": {
+      "description": "c 接点",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
     "contact-no-pushbutton": {
       "description": "a 接点（押しボタン）",
       "primitives": [
@@ -405,6 +489,107 @@
         {
           "tag": "XREF",
           "at": [5, -6.5],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
+    "contact-c-pushbutton": {
+      "description": "c 接点（押しボタン）",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [5, -0.87],
+            [5, 4.5]
+          ],
+          "dashed": true
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3.5, 3.8],
+            [3.5, 4.5],
+            [6.5, 4.5],
+            [6.5, 3.8]
+          ]
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
           "height": 1.8,
           "align": "center"
         }
@@ -573,6 +758,112 @@
         }
       ]
     },
+    "contact-c-emergency": {
+      "description": "c 接点（非常停止）",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [5, -0.87],
+            [5, 4.5]
+          ],
+          "dashed": true
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3.2, 4.5],
+            [6.8, 4.5]
+          ]
+        },
+        {
+          "kind": "arc",
+          "center": [5, 4.5],
+          "r": 1.8,
+          "start": 0,
+          "end": 180
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
     "contact-no-pull": {
       "description": "a 接点（引き操作）",
       "primitives": [
@@ -721,6 +1012,107 @@
         {
           "tag": "XREF",
           "at": [5, -6.5],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
+    "contact-c-pull": {
+      "description": "c 接点（引き操作）",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [5, -0.87],
+            [5, 4.5]
+          ],
+          "dashed": true
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3.5, 5.2],
+            [3.5, 4.5],
+            [6.5, 4.5],
+            [6.5, 5.2]
+          ]
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
           "height": 1.8,
           "align": "center"
         }
@@ -879,6 +1271,107 @@
         }
       ]
     },
+    "contact-c-limit": {
+      "description": "c 接点（リミットスイッチ）",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [5, -0.87],
+            [5, 4]
+          ],
+          "dashed": true
+        },
+        {
+          "kind": "line",
+          "points": [
+            [4, 5.5],
+            [6, 5.5],
+            [5, 4]
+          ],
+          "closed": true
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
     "contact-no-thermal": {
       "description": "a 接点（熱動）",
       "primitives": [
@@ -1031,6 +1524,109 @@
         {
           "tag": "XREF",
           "at": [5, -6.5],
+          "height": 1.8,
+          "align": "center"
+        }
+      ]
+    },
+    "contact-c-thermal": {
+      "description": "c 接点（熱動）",
+      "primitives": [
+        {
+          "kind": "line",
+          "points": [
+            [0, 0],
+            [3, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 0],
+            [7.6, -2]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [10, 0]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 0],
+            [7, -2.3]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [10, 5]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [7, 5],
+            [7, 3.8]
+          ]
+        },
+        {
+          "kind": "line",
+          "points": [
+            [5, -0.87],
+            [5, 4.5]
+          ],
+          "dashed": true
+        },
+        {
+          "kind": "line",
+          "points": [
+            [3, 4.5],
+            [4, 4.5],
+            [4, 5.7],
+            [6, 5.7],
+            [6, 4.5],
+            [7, 4.5]
+          ]
+        }
+      ],
+      "pins": {
+        "1": [0, 0],
+        "2": [10, 0],
+        "3": [10, 5]
+      },
+      "attributes": [
+        {
+          "tag": "T1",
+          "at": [1.5, 1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T2",
+          "at": [8.8, -1.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "T3",
+          "at": [8.8, 6.5],
+          "height": 1.8,
+          "align": "center"
+        },
+        {
+          "tag": "TAG",
+          "at": [5, -4.5],
+          "height": 2.5,
+          "align": "center"
+        },
+        {
+          "tag": "XREF",
+          "at": [5, -7],
           "height": 1.8,
           "align": "center"
         }
@@ -3615,7 +4211,7 @@
           }
         },
         {
-          "symbol": "contact-no-pushbutton",
+          "symbol": "contact-c",
           "at": [135, 268],
           "layer": "SYMBOL",
           "attributes": {
@@ -3624,11 +4220,12 @@
             "XREF": "12",
             "COMMENT": "コメント",
             "T1": "1",
-            "T2": "2"
+            "T2": "2",
+            "T3": "3"
           }
         },
         {
-          "symbol": "contact-nc-pushbutton",
+          "symbol": "contact-no-pushbutton",
           "at": [190, 268],
           "layer": "SYMBOL",
           "attributes": {
@@ -3641,7 +4238,7 @@
           }
         },
         {
-          "symbol": "contact-no-emergency",
+          "symbol": "contact-nc-pushbutton",
           "at": [245, 268],
           "layer": "SYMBOL",
           "attributes": {
@@ -3654,7 +4251,7 @@
           }
         },
         {
-          "symbol": "contact-nc-emergency",
+          "symbol": "contact-c-pushbutton",
           "at": [300, 268],
           "layer": "SYMBOL",
           "attributes": {
@@ -3663,11 +4260,12 @@
             "XREF": "12",
             "COMMENT": "コメント",
             "T1": "1",
-            "T2": "2"
+            "T2": "2",
+            "T3": "3"
           }
         },
         {
-          "symbol": "contact-no-pull",
+          "symbol": "contact-no-emergency",
           "at": [355, 268],
           "layer": "SYMBOL",
           "attributes": {
@@ -3680,7 +4278,7 @@
           }
         },
         {
-          "symbol": "contact-nc-pull",
+          "symbol": "contact-nc-emergency",
           "at": [25, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3693,7 +4291,7 @@
           }
         },
         {
-          "symbol": "contact-no-limit",
+          "symbol": "contact-c-emergency",
           "at": [80, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3702,11 +4300,12 @@
             "XREF": "12",
             "COMMENT": "コメント",
             "T1": "1",
-            "T2": "2"
+            "T2": "2",
+            "T3": "3"
           }
         },
         {
-          "symbol": "contact-nc-limit",
+          "symbol": "contact-no-pull",
           "at": [135, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3719,7 +4318,7 @@
           }
         },
         {
-          "symbol": "contact-no-thermal",
+          "symbol": "contact-nc-pull",
           "at": [190, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3732,7 +4331,7 @@
           }
         },
         {
-          "symbol": "contact-nc-thermal",
+          "symbol": "contact-c-pull",
           "at": [245, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3741,11 +4340,12 @@
             "XREF": "12",
             "COMMENT": "コメント",
             "T1": "1",
-            "T2": "2"
+            "T2": "2",
+            "T3": "3"
           }
         },
         {
-          "symbol": "coil",
+          "symbol": "contact-no-limit",
           "at": [300, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3758,7 +4358,7 @@
           }
         },
         {
-          "symbol": "lamp",
+          "symbol": "contact-nc-limit",
           "at": [355, 226],
           "layer": "SYMBOL",
           "attributes": {
@@ -3771,7 +4371,7 @@
           }
         },
         {
-          "symbol": "motor-3p",
+          "symbol": "contact-c-limit",
           "at": [25, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3785,7 +4385,7 @@
           }
         },
         {
-          "symbol": "motor-1p",
+          "symbol": "contact-no-thermal",
           "at": [80, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3798,7 +4398,7 @@
           }
         },
         {
-          "symbol": "breaker-1p",
+          "symbol": "contact-nc-thermal",
           "at": [135, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3811,7 +4411,7 @@
           }
         },
         {
-          "symbol": "elb-1p",
+          "symbol": "contact-c-thermal",
           "at": [190, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3820,11 +4420,12 @@
             "XREF": "12",
             "COMMENT": "コメント",
             "T1": "1",
-            "T2": "2"
+            "T2": "2",
+            "T3": "3"
           }
         },
         {
-          "symbol": "contactor-1p",
+          "symbol": "coil",
           "at": [245, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3837,7 +4438,7 @@
           }
         },
         {
-          "symbol": "thermal-1p",
+          "symbol": "lamp",
           "at": [300, 184],
           "layer": "SYMBOL",
           "attributes": {
@@ -3850,8 +4451,87 @@
           }
         },
         {
-          "symbol": "breaker-2p",
+          "symbol": "motor-3p",
           "at": [355, 184],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2",
+            "T3": "3"
+          }
+        },
+        {
+          "symbol": "motor-1p",
+          "at": [25, 142],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2"
+          }
+        },
+        {
+          "symbol": "breaker-1p",
+          "at": [80, 142],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2"
+          }
+        },
+        {
+          "symbol": "elb-1p",
+          "at": [135, 142],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2"
+          }
+        },
+        {
+          "symbol": "contactor-1p",
+          "at": [190, 142],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2"
+          }
+        },
+        {
+          "symbol": "thermal-1p",
+          "at": [245, 142],
+          "layer": "SYMBOL",
+          "attributes": {
+            "TAG": "X1",
+            "ADDR": "X000",
+            "XREF": "12",
+            "COMMENT": "コメント",
+            "T1": "1",
+            "T2": "2"
+          }
+        },
+        {
+          "symbol": "breaker-2p",
+          "at": [300, 142],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3866,7 +4546,7 @@
         },
         {
           "symbol": "elb-2p",
-          "at": [25, 142],
+          "at": [355, 142],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3881,7 +4561,7 @@
         },
         {
           "symbol": "contactor-2p",
-          "at": [80, 142],
+          "at": [25, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3896,7 +4576,7 @@
         },
         {
           "symbol": "thermal-2p",
-          "at": [135, 142],
+          "at": [80, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3911,7 +4591,7 @@
         },
         {
           "symbol": "breaker-3p",
-          "at": [190, 142],
+          "at": [135, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3928,7 +4608,7 @@
         },
         {
           "symbol": "elb-3p",
-          "at": [245, 142],
+          "at": [190, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3945,7 +4625,7 @@
         },
         {
           "symbol": "contactor-3p",
-          "at": [300, 142],
+          "at": [245, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3962,7 +4642,7 @@
         },
         {
           "symbol": "thermal-3p",
-          "at": [355, 142],
+          "at": [300, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3979,7 +4659,7 @@
         },
         {
           "symbol": "breaker-4p",
-          "at": [25, 100],
+          "at": [355, 100],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -3998,7 +4678,7 @@
         },
         {
           "symbol": "elb-4p",
-          "at": [80, 100],
+          "at": [25, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4017,7 +4697,7 @@
         },
         {
           "symbol": "contactor-4p",
-          "at": [135, 100],
+          "at": [80, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4036,7 +4716,7 @@
         },
         {
           "symbol": "thermal-4p",
-          "at": [190, 100],
+          "at": [135, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4055,7 +4735,7 @@
         },
         {
           "symbol": "terminal",
-          "at": [245, 100],
+          "at": [190, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4068,7 +4748,7 @@
         },
         {
           "symbol": "ground",
-          "at": [300, 100],
+          "at": [245, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4080,7 +4760,7 @@
         },
         {
           "symbol": "plc-in",
-          "at": [355, 100],
+          "at": [300, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4092,7 +4772,7 @@
         },
         {
           "symbol": "plc-out",
-          "at": [25, 58],
+          "at": [355, 58],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4104,7 +4784,7 @@
         },
         {
           "symbol": "elb-3p",
-          "at": [90, 62],
+          "at": [35, 20],
           "rotation": 270,
           "layer": "SYMBOL",
           "attributes": {
@@ -4122,7 +4802,7 @@
         },
         {
           "symbol": "box_sample",
-          "at": [135, 58],
+          "at": [80, 16],
           "layer": "SYMBOL",
           "attributes": {
             "TAG": "X1",
@@ -4191,251 +4871,293 @@
         },
         {
           "at": [127, 244],
-          "text": "contact-no-pushbutton",
+          "text": "contact-c",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [182, 244],
-          "text": "contact-nc-pushbutton",
+          "text": "contact-no-pushbutton",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [237, 244],
-          "text": "contact-no-emergency",
+          "text": "contact-nc-pushbutton",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [292, 244],
-          "text": "contact-nc-emergency",
+          "text": "contact-c-pushbutton",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [347, 244],
-          "text": "contact-no-pull",
+          "text": "contact-no-emergency",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [17, 202],
-          "text": "contact-nc-pull",
+          "text": "contact-nc-emergency",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [72, 202],
-          "text": "contact-no-limit",
+          "text": "contact-c-emergency",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [127, 202],
-          "text": "contact-nc-limit",
+          "text": "contact-no-pull",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [182, 202],
-          "text": "contact-no-thermal",
+          "text": "contact-nc-pull",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [237, 202],
-          "text": "contact-nc-thermal",
+          "text": "contact-c-pull",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [292, 202],
-          "text": "coil",
+          "text": "contact-no-limit",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [347, 202],
-          "text": "lamp",
+          "text": "contact-nc-limit",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [17, 160],
-          "text": "motor-3p",
+          "text": "contact-c-limit",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [72, 160],
-          "text": "motor-1p",
+          "text": "contact-no-thermal",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [127, 160],
-          "text": "breaker-1p",
+          "text": "contact-nc-thermal",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [182, 160],
-          "text": "elb-1p",
+          "text": "contact-c-thermal",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [237, 160],
-          "text": "contactor-1p",
+          "text": "coil",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [292, 160],
-          "text": "thermal-1p",
+          "text": "lamp",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [347, 160],
-          "text": "breaker-2p",
+          "text": "motor-3p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [17, 118],
-          "text": "elb-2p",
+          "text": "motor-1p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [72, 118],
-          "text": "contactor-2p",
+          "text": "breaker-1p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [127, 118],
-          "text": "thermal-2p",
+          "text": "elb-1p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [182, 118],
-          "text": "breaker-3p",
+          "text": "contactor-1p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [237, 118],
-          "text": "elb-3p",
+          "text": "thermal-1p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [292, 118],
-          "text": "contactor-3p",
+          "text": "breaker-2p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [347, 118],
-          "text": "thermal-3p",
+          "text": "elb-2p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [17, 76],
-          "text": "breaker-4p",
+          "text": "contactor-2p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [72, 76],
-          "text": "elb-4p",
+          "text": "thermal-2p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [127, 76],
-          "text": "contactor-4p",
+          "text": "breaker-3p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [182, 76],
-          "text": "thermal-4p",
+          "text": "elb-3p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [237, 76],
-          "text": "terminal",
+          "text": "contactor-3p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [292, 76],
-          "text": "ground",
+          "text": "thermal-3p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [347, 76],
-          "text": "plc-in",
+          "text": "breaker-4p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [17, 34],
-          "text": "plc-out",
+          "text": "elb-4p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [72, 34],
-          "text": "elb-3p（270° 回転）",
+          "text": "contactor-4p",
           "height": 2,
           "align": "left",
           "layer": "TEXT"
         },
         {
           "at": [127, 34],
+          "text": "thermal-4p",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [182, 34],
+          "text": "terminal",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [237, 34],
+          "text": "ground",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [292, 34],
+          "text": "plc-in",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [347, 34],
+          "text": "plc-out",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [17, -8],
+          "text": "elb-3p（270° 回転）",
+          "height": 2,
+          "align": "left",
+          "layer": "TEXT"
+        },
+        {
+          "at": [72, -8],
           "text": "箱（機器ごとに作る）",
           "height": 2,
           "align": "left",
