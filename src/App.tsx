@@ -34,6 +34,7 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { SchematicEditor } from './editor/SchematicEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
 import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
@@ -56,6 +57,8 @@ import {
   type Sheet,
 } from './model/diagram';
 import { sampleDiagram } from './model/sample';
+import { buildSchematic, defaultRails } from './schematic/layout';
+import { newSchematicSheet, pruneSchematic, renameSchematicDevice, type Schematic } from './schematic/model';
 
 const nodeTypes = { device: DeviceNode };
 const edgeTypes = { wire: WireEdge };
@@ -129,6 +132,10 @@ function Editor() {
   const [settings, setSettings] = useState<DiagramSettings>(sampleDiagram.settings ?? {});
   const [sheets, setSheets] = useState<Sheet[]>(() => sheetsOf(sampleDiagram));
   const [sheet, setSheet] = useState<string>(() => sheetsOf(sampleDiagram)[0].id);
+  // 展開図（配置）と、表示中のモード・展開図のシート
+  const [schematic, setSchematic] = useState<Schematic | undefined>(sampleDiagram.schematic);
+  const [mode, setMode] = useState<'diagram' | 'schematic'>('diagram');
+  const [schematicSheet, setSchematicSheet] = useState<string>(() => sampleDiagram.schematic?.sheets[0]?.id ?? '');
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
   const [about, setAbout] = useState(false);
@@ -166,7 +173,10 @@ function Editor() {
   }, []);
 
   // --- チェック ---
-  const diagram = useMemo(() => ({ ...flowToDiagram(nodes, edges, sheets), settings }), [nodes, edges, settings, sheets]);
+  const diagram = useMemo<Diagram>(
+    () => ({ ...flowToDiagram(nodes, edges, sheets), settings, ...(schematic ? { schematic } : {}) }),
+    [nodes, edges, settings, sheets, schematic],
+  );
   const topo = topologyKey(diagram);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const issues = useMemo(() => checkDiagram(diagram, getDeviceDefinition), [topo]);
@@ -364,8 +374,10 @@ function Editor() {
       skipPromote.current = true;
       applyDiagram(d);
       setSettings(d.settings ?? {});
+      setSchematic(d.schematic);
       const ss = sheetsOf(d);
       setSheet((cur) => (ss.some((x) => x.id === cur) ? cur : ss[0].id));
+      setSchematicSheet((cur) => (d.schematic?.sheets.some((x) => x.id === cur) ? cur : (d.schematic?.sheets[0]?.id ?? '')));
     },
     [applyDiagram],
   );
@@ -390,6 +402,37 @@ function Editor() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [undo, redo]);
+
+  // --- 展開図 ---
+  // 機器を消したら、その要素の配置も消す
+  const deviceIdsKey = nodes.map((n) => n.id).join('\n');
+  useEffect(() => {
+    const ids = new Set(deviceIdsKey.split('\n').filter(Boolean));
+    setSchematic((s) => pruneSchematic(s, ids));
+  }, [deviceIdsKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const schematicBuild = useMemo(() => (mode === 'schematic' && schematic ? buildSchematic(diagram, getDeviceDefinition) : null), [topo, schematic, mode]);
+
+  /** 展開図のモードにする（展開図がなければ 1 枚作り、母線を電源の出力から選んでおく） */
+  const openSchematic = useCallback(() => {
+    if (!schematic?.sheets.length) {
+      const rails = defaultRails(buildSchematic({ ...diagram, schematic: undefined }, getDeviceDefinition).railCandidates);
+      const first = { ...newSchematicSheet(undefined), rails };
+      setSchematic({ sheets: [first] });
+      setSchematicSheet(first.id);
+    } else if (!schematic.sheets.some((x) => x.id === schematicSheet)) {
+      setSchematicSheet(schematic.sheets[0].id);
+    }
+    setMode('schematic');
+  }, [schematic, schematicSheet, diagram]);
+
+  const exportSchematic = useCallback(() => {
+    if (!schematic?.sheets.length) return;
+    const doc = (schematicBuild ?? buildSchematic(diagram, getDeviceDefinition)).doc;
+    download(JSON.stringify(doc, null, 1), 'schematic', 'json', 'application/json');
+    notify('展開図 JSON を書き出しました。tools/dxf の Python スクリプトで DXF に変換できます');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schematic, schematicBuild, diagram, notify]);
 
   // --- シートの編集 ---
   const addSheet = useCallback(() => {
@@ -556,6 +599,7 @@ function Editor() {
       setEdges((es) =>
         es.map((e) => ({ ...e, source: e.source === oldId ? newId : e.source, target: e.target === oldId ? newId : e.target })),
       );
+      setSchematic((s) => renameSchematicDevice(s, oldId, newId));
       return null;
     },
     [nodes, setNodes, setEdges],
@@ -705,7 +749,10 @@ function Editor() {
       setEdges(flow.edges);
       setSettings(d.settings ?? {});
       setSheets(sheetsOf(d));
+      setSchematic(d.schematic);
+      setSchematicSheet(d.schematic?.sheets[0]?.id ?? '');
       setPlcEditor(null);
+      setMode('diagram');
       showSheet(sheetsOf(d)[0].id);
     },
     [setNodes, setEdges, showSheet],
@@ -772,6 +819,13 @@ function Editor() {
           separator: true,
           onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, `sheet${sheets.findIndex((s) => s.id === sheet) + 1}`, 'svg', 'image/svg+xml'),
         },
+        {
+          label: '展開図 JSON（DXF 用）',
+          hint: schematic?.sheets.length ? `${schematic.sheets.length} 枚` : '展開図なし',
+          separator: true,
+          disabled: !schematic?.sheets.length,
+          onClick: exportSchematic,
+        },
       ],
     });
   };
@@ -806,6 +860,14 @@ function Editor() {
             <span>Conneko</span>
             <button type="button" className="brand__version" onClick={() => setAbout(true)} title="バージョン・ライセンス">
               v{__APP_VERSION__}
+            </button>
+          </div>
+          <div className="mode-switch" role="tablist" aria-label="表示">
+            <button type="button" role="tab" aria-selected={mode === 'diagram'} className={mode === 'diagram' ? 'is-active' : ''} onClick={() => setMode('diagram')}>
+              概念図
+            </button>
+            <button type="button" role="tab" aria-selected={mode === 'schematic'} className={mode === 'schematic' ? 'is-active' : ''} onClick={openSchematic} title="接続から展開接続図を起こし、記号を並べて DXF 用に書き出します">
+              展開図
             </button>
           </div>
           <div className="toolbar__group">
@@ -877,6 +939,21 @@ function Editor() {
             }}
           />
         </header>
+        {mode === 'schematic' && schematic && schematicBuild ? (
+          <SchematicEditor
+            build={schematicBuild}
+            schematic={schematic}
+            onChange={(update) => setSchematic((s) => (s ? update(s) : s))}
+            sheet={schematicSheet}
+            onSheet={setSchematicSheet}
+            onShowDevice={(id) => {
+              setMode('diagram');
+              focusDevice(id);
+            }}
+            onExport={exportSchematic}
+          />
+        ) : (
+        <>
         <Palette onAdd={(type) => addDevice(type)} />
         <main className={`canvas${connecting ? ' is-connecting' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <SheetTabs
@@ -947,6 +1024,8 @@ function Editor() {
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
+        </>
+        )}
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
       {about && <AboutDialog onClose={() => setAbout(false)} />}
