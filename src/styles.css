@@ -78,8 +78,9 @@ textarea {
 .app {
   display: grid;
   height: 100%;
-  grid-template-columns: 240px 1fr 300px;
-  grid-template-rows: auto 1fr auto;
+  /* 真ん中の列は中身（用紙・ツールの行など）より狭くできるようにし、右のパネルが画面の外へ押し出されないようにする */
+  grid-template-columns: 240px minmax(0, 1fr) 300px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'toolbar toolbar toolbar'
     'palette canvas inspector'
@@ -96,8 +97,11 @@ textarea {
 .toolbar {
   grid-area: toolbar;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
+  row-gap: 6px;
+  min-width: 0;
   padding: 8px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -1908,15 +1912,29 @@ textarea {
   margin-left: auto;
 }
 .schem-canvas__view {
+  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 16px;
+  overflow: hidden;
   background: #cfd6df;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.schem-canvas__view.is-panning {
+  cursor: grabbing;
+}
+.schem-canvas__pages {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  transform-origin: 0 0;
 }
 .schem-paper {
   display: block;
-  margin: 0 auto;
+  flex: none;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.25);
 }
 .schem-hit {
@@ -1974,6 +1992,35 @@ textarea {
   min-width: 0;
   overflow-x: hidden;
 }
-.schem-paper--more {
-  margin-top: 16px;
+
+/* パネルは中身より狭くできるようにする（はみ出した分はパネルの中でスクロール・折り返し） */
+.app > * {
+  min-width: 0;
+}
+.schem-canvas__tools {
+  flex-wrap: wrap;
+}
+.schem-canvas__hint {
+  min-width: 0;
+}
+
+/* 狭い画面では左右のパネルを細くする */
+@media (max-width: 1280px) {
+  .app {
+    grid-template-columns: 200px minmax(0, 1fr) 260px;
+  }
+  .toolbar {
+    gap: 10px;
+  }
+  .toolbar__group {
+    padding-left: 10px;
+  }
+}
+@media (max-width: 1000px) {
+  .app {
+    grid-template-columns: 170px minmax(0, 1fr) 230px;
+  }
+  .schem-canvas__hint {
+    display: none;
+  }
 }
