@@ -78,7 +78,7 @@ function safeName(s: string): string {
 }
 
 /** 端子番号として書く文字（コネクタのピンは '#' の後ろの番号） */
-function pinNumber(id: string): string {
+export function pinNumber(id: string): string {
   const i = id.indexOf('#');
   return i >= 0 ? id.slice(i + 1) : id;
 }

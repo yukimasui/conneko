@@ -12,7 +12,7 @@
  */
 import { buildModel, key, supplyLabel, UnionFind, type DefLookup } from '../check/model';
 import type { Conductor, DeviceDefinition, ParamValues } from '../devices/types';
-import type { Diagram } from '../model/diagram';
+import type { Diagram, DiagramSettings } from '../model/diagram';
 import { deviceElements, elementId, elementSymbol, type SchematicElement } from './elements';
 import {
   SCHEMATIC_FORMAT,
@@ -24,8 +24,15 @@ import {
   type SymbolDef,
 } from './format';
 import { paperOf, splitRail, type Rails, type SchematicItem } from './model';
-import { pinDirection, pinPoint, placedBounds, type Bounds, type Direction } from './place';
-import { librarySymbol, textWidth } from './symbols';
+import { pinDirection, pinPoint, placedBounds } from './place';
+import { librarySymbol } from './symbols';
+import { bomPages } from './sheets/bom';
+import { coverPageCount, coverPages, type CoverEntry } from './sheets/cover';
+import { ioPages, ioPlcHosts } from './sheets/io';
+import { rackHosts, rackPages } from './sheets/rack';
+import { ioSystem } from '../model/io';
+import { terminalPages } from './sheets/terminal';
+import { junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, wireNoAt, type PinAt, type Segment } from './wiring';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -37,8 +44,6 @@ const ROW_BOTTOM = 45;
 export const RAIL_INSET = 40;
 /** 行番号の位置（用紙の左端から）[mm] */
 const ROW_NO_X = 25;
-/** 端子から線を出す長さ（曲げる前にまっすぐ出す）[mm] */
-const STUB = 5;
 /** 線番・行番号の文字の高さ */
 const WIRE_NO_TEXT = 2.5;
 const REF_TEXT = 2;
@@ -106,8 +111,8 @@ export interface SchematicBuild {
   rows: Map<string, number>;
   /** 母線にできる網（電源出力の端子） */
   railCandidates: RailCandidate[];
-  /** シートあたりの段の数 */
-  rowsPerSheet: number;
+  /** シートの段の数（用紙で変わる） */
+  rowsOf(sheetId: string): number;
   /** 端子の網（同じ網の端子は同じ値）。展開図の今の配置で求めたもの */
   netOf(device: string, terminal: string): string;
   /**
@@ -115,6 +120,10 @@ export interface SchematicBuild {
    * 配置によらない（主回路を並べるときに、機器の一次側と二次側を分けて見るため）
    */
   circuitNetOf(device: string, terminal: string): string;
+  /** I/O 図にできる PLC（I/O を持つ親）と、そのユニット */
+  ioHosts: { id: string; model: string; units: { id: string; model: string }[] }[];
+  /** ユニット構成図にできる PLC（ユニットを装着できる親） */
+  rackHosts: { id: string; model: string }[];
 }
 
 /** 端子を入れ替えて置ける記号（端子 1 と 2 だけを持つ記号） */
@@ -160,227 +169,12 @@ export function localRow(y: number, rows: number): number {
   return Math.min(rows - 1, Math.max(0, Math.round((y - ROW_TOP) / ROW_PITCH)));
 }
 
-const r3 = (v: number) => Math.round(v * 1000) / 1000;
-const same = (a: Point, b: Point) => r3(a[0]) === r3(b[0]) && r3(a[1]) === r3(b[1]);
-
-/** 連続する同じ点と、一直線上の途中の点を除く */
-function simplify(points: Point[]): Point[] {
-  const out: Point[] = [];
-  for (const p of points) {
-    if (out.length && same(out[out.length - 1], p)) continue;
-    if (out.length >= 2) {
-      const [a, b] = [out[out.length - 2], out[out.length - 1]];
-      const collinear = (r3(a[0]) === r3(b[0]) && r3(b[0]) === r3(p[0])) || (r3(a[1]) === r3(b[1]) && r3(b[1]) === r3(p[1]));
-      if (collinear) out.pop();
-    }
-    out.push(p);
-  }
-  return out;
-}
-
-interface PinAt {
-  pos: Point;
-  dir: Direction;
-}
-
-/** 軸に平行な線分が四角の内側を通るか（縁に沿う・縁で止まるのは通らないとみなす） */
-function crosses(a: Point, b: Point, r: Bounds): boolean {
-  const e = 0.05;
-  const [x1, x2] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
-  const [y1, y2] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
-  return x2 > r.x1 + e && x1 < r.x2 - e && y2 > r.y1 + e && y1 < r.y2 - e;
-}
-
-/** 折れ線が横切る記号の数 */
-function hits(points: Point[], obstacles: Bounds[]): number {
-  let n = 0;
-  for (const r of obstacles) if (points.slice(1).some((p, i) => crosses(points[i], p, r))) n++;
-  return n;
-}
-
-/** シートに引いた線分（網ごと）。別の網の線と重ならないように経路を選ぶ */
-interface Segment {
-  a: Point;
-  b: Point;
-  net: string;
-}
-
-/** 2 つの線分が一直線上で重なる長さ（重ならなければ 0） */
-function overlap(p: Point, q: Point, s: Point, t: Point): number {
-  if (r3(p[1]) === r3(q[1]) && r3(s[1]) === r3(t[1]) && r3(p[1]) === r3(s[1])) {
-    return Math.min(Math.max(p[0], q[0]), Math.max(s[0], t[0])) - Math.max(Math.min(p[0], q[0]), Math.min(s[0], t[0]));
-  }
-  if (r3(p[0]) === r3(q[0]) && r3(s[0]) === r3(t[0]) && r3(p[0]) === r3(s[0])) {
-    return Math.min(Math.max(p[1], q[1]), Math.max(s[1], t[1])) - Math.max(Math.min(p[1], q[1]), Math.min(s[1], t[1]));
-  }
-  return 0;
-}
-
-/** 点が線分の上（端を含む）にあるか */
-const touches = (p: Point, a: Point, b: Point) => same(p, a) || same(p, b) || onSegment(p, a, b);
-
-/** 縦と横の線分が、互いの途中で交わるか */
-function crossing(p: Point, q: Point, s: Point, t: Point): boolean {
-  const vertical = (a: Point, b: Point) => r3(a[0]) === r3(b[0]);
-  const pair: Point[] | undefined = vertical(p, q) && !vertical(s, t) ? [p, q, s, t] : vertical(s, t) && !vertical(p, q) ? [s, t, p, q] : undefined;
-  if (!pair) return false;
-  const [v1, v2, h1, h2] = pair;
-  const x = v1[0];
-  const y = h1[1];
-  return x > Math.min(h1[0], h2[0]) && x < Math.max(h1[0], h2[0]) && y > Math.min(v1[1], v2[1]) && y < Math.max(v1[1], v2[1]);
-}
-
-/**
- * 折れ線と別の網の線との干渉の点数。重なる・T 字に触れる（つながって見える）は 10、交差は 1。
- */
-function conflicts(points: Point[], net: string, segments: Segment[]): number {
-  let n = 0;
-  for (let i = 0; i + 1 < points.length; i++) {
-    const [p, q] = [points[i], points[i + 1]];
-    for (const s of segments) {
-      if (s.net === net) continue;
-      if (overlap(p, q, s.a, s.b) > 0.01) n += 10;
-      else if (touches(s.a, p, q) || touches(s.b, p, q) || touches(p, s.a, s.b) || touches(q, s.a, s.b)) n += 10;
-      else if (crossing(p, q, s.a, s.b)) n += 1;
-    }
-  }
-  return n;
-}
-
-/** 母線への引き出しで、記号の下（上）を回り込むときのずらし[mm]（上向きが正） */
-const RAIL_DETOURS = [-5, -7.5, 5, 7.5, -10, 10, -12.5, 12.5, -2.5, 2.5];
-
-/**
- * 母線へ横に引き出す線。まっすぐ引くと記号を横切る（端子が母線と反対を向いているなど）場合は、
- * 端子から出して記号の下（または上）を回り込んでから母線へ引く。
- */
-function railRoute(p: PinAt, railX: number, net: string, obstacles: Bounds[], segments: Segment[], detours = RAIL_DETOURS): Point[] {
-  const straight: Point[] = [p.pos, [railX, p.pos[1]]];
-  const candidates: Point[][] = [straight];
-  for (const len of STUBS) {
-    const s: Point = [p.pos[0] + p.dir[0] * len, p.pos[1] + p.dir[1] * len];
-    for (const dy of detours) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
-  }
-  let best = straight;
-  let bestScore = Infinity;
-  candidates.forEach((c, i) => {
-    const score = hits(c, obstacles) * 1000 + conflicts(c, net, segments) + i * 0.01;
-    if (score < bestScore) {
-      best = c;
-      bestScore = score;
-    }
-  });
-  return best;
-}
-
-/** 端子から出す長さの候補（短い方を優先し、重なるときに伸ばす） */
-const STUBS = [STUB, STUB + 2.5, STUB + 5, STUB + 7.5, STUB - 2.5, STUB + 10];
-
-/**
- * 2 つの端子を直角の折れ線でつなぐ。端子からまっすぐ出し、L 字に曲げてつなぐ。
- * 出す長さと曲げ方の組み合わせのうち、記号を横切らず、別の網の線と重ならないものを選ぶ。
- */
-function route(a: PinAt, b: PinAt, net: string, obstacles: Bounds[], segments: Segment[]): Point[] {
-  const [ax, ay] = a.pos;
-  const [bx, by] = b.pos;
-  // 同じ高さで向かい合っている（a の右に b があり、a は右へ・b は左へ出す）ならまっすぐ
-  const facing =
-    (r3(ay) === r3(by) && (bx - ax) * a.dir[0] > 0 && (ax - bx) * b.dir[0] > 0) ||
-    (r3(ax) === r3(bx) && (by - ay) * a.dir[1] > 0 && (ay - by) * b.dir[1] > 0);
-  const candidates: Point[][] = facing ? [[a.pos, b.pos]] : [];
-  for (const len of STUBS) {
-    const sa: Point = [ax + a.dir[0] * len, ay + a.dir[1] * len];
-    const sb: Point = [bx + b.dir[0] * len, by + b.dir[1] * len];
-    const first: Point = a.dir[0] !== 0 ? [sa[0], sb[1]] : [sb[0], sa[1]];
-    const second: Point = a.dir[0] !== 0 ? [sb[0], sa[1]] : [sa[0], sb[1]];
-    candidates.push(simplify([a.pos, sa, first, sb, b.pos]), simplify([a.pos, sa, second, sb, b.pos]));
-  }
-  // 記号を横切らないこと > 別の網と重ならないこと > 候補の順（短い出し方・まっすぐを優先）
-  let best = candidates[0];
-  let bestScore = Infinity;
-  candidates.forEach((c, i) => {
-    const score = hits(c, obstacles) * 1000 + conflicts(c, net, segments) + i * 0.01;
-    if (score < bestScore) {
-      best = c;
-      bestScore = score;
-    }
-  });
-  return best;
-}
-
-/** 置いた端子どうしを結ぶ最小全域木（Prim 法。距離は縦横の和）の辺 */
-function spanningTree(pins: PinAt[]): [number, number][] {
-  const n = pins.length;
-  const dist = (i: number, j: number) => Math.abs(pins[i].pos[0] - pins[j].pos[0]) + Math.abs(pins[i].pos[1] - pins[j].pos[1]);
-  const inTree = new Array<boolean>(n).fill(false);
-  const best = new Array<number>(n).fill(Infinity);
-  const from = new Array<number>(n).fill(-1);
-  const edges: [number, number][] = [];
-  best[0] = 0;
-  for (let k = 0; k < n; k++) {
-    let u = -1;
-    for (let i = 0; i < n; i++) if (!inTree[i] && (u < 0 || best[i] < best[u])) u = i;
-    inTree[u] = true;
-    if (from[u] >= 0) edges.push([from[u], u]);
-    for (let v = 0; v < n; v++) {
-      if (inTree[v]) continue;
-      const d = dist(u, v);
-      if (d < best[v]) {
-        best[v] = d;
-        from[v] = u;
-      }
-    }
-  }
-  return edges;
-}
-
-/** 線の分かれ目（3 本以上の線が集まる点）。点を通り抜ける線は 2 本と数える */
-function junctions(polylines: Point[][]): Point[] {
-  const segs: [Point, Point][] = polylines.flatMap((pl) => pl.slice(1).map((p, i) => [pl[i], p] as [Point, Point]));
-  const candidates = new Map<string, Point>();
-  for (const [a, b] of segs) for (const p of [a, b]) candidates.set(`${r3(p[0])},${r3(p[1])}`, p);
-  const out: Point[] = [];
-  for (const p of candidates.values()) {
-    let degree = 0;
-    for (const [a, b] of segs) {
-      if (same(a, p) || same(b, p)) degree += 1;
-      else if (onSegment(p, a, b)) degree += 2;
-    }
-    if (degree >= 3) out.push(p);
-  }
-  return out;
-}
-
-function onSegment(p: Point, a: Point, b: Point): boolean {
-  const [x, y] = [r3(p[0]), r3(p[1])];
-  if (r3(a[0]) === r3(b[0])) return x === r3(a[0]) && y > Math.min(r3(a[1]), r3(b[1])) && y < Math.max(r3(a[1]), r3(b[1]));
-  if (r3(a[1]) === r3(b[1])) return y === r3(a[1]) && x > Math.min(r3(a[0]), r3(b[0])) && x < Math.max(r3(a[0]), r3(b[0]));
-  return false;
-}
-
-/** 線番を書く位置（いちばん長い横の区間の中央の上。横の区間がなければ最初の区間の右） */
-function wireNoAt(polylines: Point[][]): { at: Point; align: 'center' | 'left' } | undefined {
-  let best: { at: Point; len: number } | undefined;
-  for (const pl of polylines) {
-    for (let i = 0; i + 1 < pl.length; i++) {
-      const [a, b] = [pl[i], pl[i + 1]];
-      if (r3(a[1]) !== r3(b[1])) continue;
-      const len = Math.abs(b[0] - a[0]);
-      if (!best || len > best.len) best = { at: [(a[0] + b[0]) / 2, a[1] + 1.8], len };
-    }
-  }
-  if (best) return { at: best.at, align: 'center' };
-  const pl = polylines.find((x) => x.length >= 2);
-  return pl ? { at: [(pl[0][0] + pl[1][0]) / 2 + 1, (pl[0][1] + pl[1][1]) / 2], align: 'left' } : undefined;
-}
-
 export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBuild {
   const model = buildModel(diagram, lookup, () => {});
   const schematic = diagram.schematic ?? { sheets: [] };
-  const paper = paperOf(schematic);
-  const { width: W, height: H } = paper;
-  const rows = rowsPerSheet(H);
-  const up = (x: number, y: number): Point => [x, H - y];
+  // 用紙はシートごと
+  const paperBySheet = new Map(schematic.sheets.map((s) => [s.id, paperOf(schematic, s)]));
+  const rowsBySheet = new Map(schematic.sheets.map((s) => [s.id, rowsPerSheet(paperBySheet.get(s.id)!.height)]));
 
   // --- 要素と配置 ---
   const elements: ElementEntry[] = [];
@@ -393,16 +187,21 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     }
   }
   const byId = new Map(elements.map((e) => [e.id, e]));
-  // 行番号は展開接続図のシートだけで通し番号にする
-  const ladderSheets = schematic.sheets.filter((s) => s.kind !== 'terminal');
-  const sheetIndex = new Map(ladderSheets.map((s, i) => [s.id, i]));
+  // 行番号は展開接続図のシートだけで通し番号にする（シートごとの段の数を足していく）
+  const ladderSheets = schematic.sheets.filter((s) => !s.kind);
+  const rowBase = new Map<string, number>();
+  let base = 0;
+  for (const sh of ladderSheets) {
+    rowBase.set(sh.id, base);
+    base += rowsBySheet.get(sh.id)!;
+  }
   const rowOf = new Map<string, number>();
   for (const sh of ladderSheets) {
     for (const it of sh.items) {
       const e = byId.get(it.element);
       if (!e || e.placed) continue;
       e.placed = { sheet: sh.id, item: it };
-      rowOf.set(e.id, sheetIndex.get(sh.id)! * rows + localRow(it.y, rows) + 1);
+      rowOf.set(e.id, rowBase.get(sh.id)! + localRow(it.y, rowsBySheet.get(sh.id)!) + 1);
     }
   }
 
@@ -445,7 +244,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
   for (const e of elements) {
     if (!e.placed) continue;
     const { item } = e.placed;
-    const at = up(item.x, item.y);
+    const at: Point = [item.x, paperBySheet.get(e.placed.sheet)!.height - item.y];
     const seen = new Set<string>();
     for (const [t, pin] of Object.entries(placedPinOf(e, item))) {
       const root = uf.find(key(e.device, t));
@@ -484,10 +283,12 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
 
   // --- シート ---
   const ladderOut = (sh: (typeof ladderSheets)[number]): SchematicSheetOut => {
-    const index = sheetIndex.get(sh.id)!;
+    const paper = paperBySheet.get(sh.id)!;
+    const { width: W, height: H } = paper;
+    const up = (x: number, y: number): Point => [x, H - y];
     const out: SchematicSheetOut = { id: sh.id, name: sh.name, source: sh.id, paper, inserts: [], polylines: [], dots: [], texts: [] };
-    for (let r = 0; r < rows; r++) {
-      out.texts.push({ at: up(ROW_NO_X, ROW_TOP + r * ROW_PITCH), text: String(index * rows + r + 1), height: WIRE_NO_TEXT, layer: 'FRAME' });
+    for (let r = 0; r < rowsBySheet.get(sh.id)!; r++) {
+      out.texts.push({ at: up(ROW_NO_X, ROW_TOP + r * ROW_PITCH), text: String(rowBase.get(sh.id)! + r + 1), height: WIRE_NO_TEXT, layer: 'FRAME' });
     }
 
     // 記号
@@ -589,10 +390,58 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     return out;
   };
 
-  const sheets: SchematicSheetOut[] = schematic.sheets.flatMap((sh) =>
-    sh.kind === 'terminal' ? terminalPages(sh, diagram, model, elements, paper) : [ladderOut(sh)],
-  );
-  sheets.forEach((out, i) => drawFrame(out, diagram.settings?.title, diagram.settings?.revision, i, sheets.length));
+  // --- 内容を自動で作るシート ---
+  const extraSymbols = new Map<string, SymbolDef>();
+  const circuitWireNos = new Map<string, Set<string>>();
+  for (const w of model.wires) {
+    if (!w.wireNo) continue;
+    const root = circuit.find(key(w.from.device, w.from.terminal));
+    circuitWireNos.set(root, (circuitWireNos.get(root) ?? new Set()).add(w.wireNo));
+  }
+  const ioContext = {
+    diagram,
+    lookup,
+    model,
+    elements,
+    netOf: (d: string, t: string) => circuit.find(key(d, t)),
+    wireNoOf: (net: string) => [...(circuitWireNos.get(net) ?? [])].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })).join(','),
+    addSymbol: (id: string, def: SymbolDef) => extraSymbols.set(id, def),
+  };
+  const generated = schematic.sheets.map((sh): SchematicSheetOut[] | null => {
+    const p = paperBySheet.get(sh.id)!;
+    switch (sh.kind) {
+      case undefined:
+        return [ladderOut(sh)];
+      case 'terminal':
+        return terminalPages(sh, diagram, model, elements, p);
+      case 'io':
+        return ioPages(sh, ioContext, p);
+      case 'rack':
+        return rackPages(sh, model, lookup, p);
+      case 'bom':
+        return bomPages(sh, diagram, lookup, p);
+      case 'cover':
+        return null;
+    }
+  });
+  // 表紙: 目次のページ番号は表紙のページ数で変わるので、ページ数が落ち着くまで数え直す
+  const otherPages = generated.reduce((n, g) => n + (g?.length ?? 0), 0);
+  const coverCounts: number[] = schematic.sheets.map((sh) => (sh.kind === 'cover' ? 1 : 0));
+  for (let k = 0; k < 3; k++) {
+    const total = otherPages + coverCounts.reduce((a, b) => a + b, 0);
+    schematic.sheets.forEach((sh, i) => {
+      if (sh.kind === 'cover') coverCounts[i] = coverPageCount(total, paperBySheet.get(sh.id)!);
+    });
+  }
+  const entries: CoverEntry[] = [];
+  let pageNo = 1;
+  schematic.sheets.forEach((sh, i) => {
+    const pages = generated[i];
+    const count = pages ? pages.length : coverCounts[i];
+    for (let j = 0; j < count; j++) entries.push({ page: pageNo++, name: pages ? pages[j].name : j ? `${sh.name}（${j + 1}）` : sh.name, kind: sheetKindName(sh) });
+  });
+  const sheets: SchematicSheetOut[] = schematic.sheets.flatMap((sh, i) => generated[i] ?? coverPages(sh, diagram.settings, entries, paperBySheet.get(sh.id)!));
+  sheets.forEach((out, i) => drawFrame(out, diagram.settings, i, sheets.length));
 
   // --- 母線にできる網 ---
   const railCandidates: RailCandidate[] = [...model.supplies.entries()].map(([k, s]) => {
@@ -608,179 +457,24 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     ...(diagram.settings?.revision ? { revision: diagram.settings.revision } : {}),
     layers: SCHEMATIC_LAYERS,
     symbols: Object.fromEntries(
-      sheets.flatMap((s) => s.inserts).map((ins) => [ins.symbol, symbolOfInsert(ins.symbol, byId.get(ins.element!)!)] as const),
+      sheets
+        .flatMap((s) => s.inserts)
+        .map((ins) => [ins.symbol, ins.element ? symbolOfInsert(ins.symbol, byId.get(ins.element)!) : extraSymbols.get(ins.symbol)!] as const),
     ),
     sheets,
   };
-  return { doc, elements, byId, rows: rowOf, railCandidates, rowsPerSheet: rows, netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
+  const modelOf = (id: string) => model.devices.get(id)?.def.model ?? id;
+  const ioHosts = ioPlcHosts(diagram, lookup).map((id) => ({
+    id,
+    model: modelOf(id),
+    units: (ioSystem(diagram, id, lookup)?.units ?? []).map((u) => ({ id: u.device.id, model: u.def.model })),
+  }));
+  const racks = rackHosts(model).map((id) => ({ id, model: modelOf(id) }));
+  return { doc, elements, byId, rows: rowOf, ioHosts, rackHosts: racks, railCandidates, rowsOf: (id) => rowsBySheet.get(id) ?? rowsPerSheet(paperOf(schematic).height), netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
 }
 
-// ---- 端子台接続図 ----
-
-/** 表の列の幅[mm]: 接続先・線番・端子・線番・接続先 */
-const TB_COLUMNS = [52, 20, 12, 20, 52];
-const TB_WIDTH = TB_COLUMNS.reduce((a, b) => a + b, 0);
-const TB_ROW = 6;
-const TB_TITLE = 8;
-const TB_GAP = 12;
-/** 表を並べる範囲（y は下向き）。下は表題欄の上まで */
-const TB_TOP = 20;
-const TB_LEFT = 20;
-const TB_TEXT = 2.5;
-
-interface TerminalRow {
-  no: string;
-  left: { to: string; wireNo: string };
-  right: { to: string; wireNo: string };
-}
-
-/**
- * 端子台接続図のページ。端子台ごとに、端子番号と、その端子の両側（端子 1 側 = 上段・ネジ、端子 2 側 = 下段・コネクタ）の
- * 接続先と線番の表を作り、列・ページに流して並べる。
- */
-function terminalPages(
-  sh: { id: string; name: string; blocks?: string[] },
-  diagram: Diagram,
-  model: ReturnType<typeof buildModel>,
-  elements: ElementEntry[],
-  paper: { width: number; height: number },
-): SchematicSheetOut[] {
-  const { width: W, height: H } = paper;
-  const up = (x: number, y: number): Point => [x, H - y];
-  const blocks = [...new Set(elements.filter((e) => e.def.category === 'terminal').map((e) => e.device))].filter(
-    (d) => !sh.blocks || sh.blocks.includes(d),
-  );
-  const cableName = (a: string, b: string) => {
-    const [da, ta] = a.split(':');
-    const [db, tb] = b.split(':');
-    const ca = ta.split('#')[0];
-    const cb = tb.split('#')[0];
-    const w = diagram.wires.find(
-      (x) =>
-        (x.from.device === da && x.from.terminal === ca && x.to.device === db && x.to.terminal === cb) ||
-        (x.to.device === da && x.to.terminal === ca && x.from.device === db && x.from.terminal === cb),
-    );
-    return w?.wireNo ?? '';
-  };
-  /** 接続先の名前（リンクはリンクの名前。長すぎるときは端子 ID だけ） */
-  const nameOf = (k: string) => {
-    const info = model.terminals.get(k);
-    if (!info) return k.replace(':', '.');
-    if (info.def.netLabel) return `リンク「${String(info.device.params?.[info.def.netLabel.param] ?? '').trim()}」`;
-    const base = `${info.device.id}.${info.terminal.id}`;
-    const label = info.terminal.label;
-    const full = label && label !== info.terminal.id ? `${base}（${label}）` : base;
-    return textWidth(full, TB_TEXT) <= TB_COLUMNS[0] - 4 ? full : base;
-  };
-  const side = (keys: string[]) => {
-    const to: string[] = [];
-    const nos: string[] = [];
-    for (const k of keys) {
-      for (const w of model.wiresAt.get(k) ?? []) {
-        const other = key(w.from.device, w.from.terminal) === k ? key(w.to.device, w.to.terminal) : key(w.from.device, w.from.terminal);
-        to.push(nameOf(other));
-        if (w.wireNo) nos.push(w.wireNo);
-      }
-      for (const [a, b] of model.cablePairs) {
-        if (a !== k && b !== k) continue;
-        const other = a === k ? b : a;
-        to.push(nameOf(other));
-        const c = cableName(a, b);
-        if (c) nos.push(c);
-      }
-    }
-    return { to: [...new Set(to)].join(' / '), wireNo: [...new Set(nos)].join(',') };
-  };
-
-  const pages: SchematicSheetOut[] = [];
-  const newPage = () => {
-    const n = pages.length;
-    const page: SchematicSheetOut = { id: n ? `${sh.id}-${n + 1}` : sh.id, name: n ? `${sh.name}（${n + 1}）` : sh.name, source: sh.id, paper, inserts: [], polylines: [], dots: [], texts: [] };
-    pages.push(page);
-    return page;
-  };
-  const columns = Math.max(1, Math.floor((W - 2 * TB_LEFT + TB_GAP) / (TB_WIDTH + TB_GAP)));
-  const bottom = H - 40;
-  let page = newPage();
-  let column = 0;
-  let y = TB_TOP;
-  const nextColumn = () => {
-    column++;
-    y = TB_TOP;
-    if (column >= columns) {
-      page = newPage();
-      column = 0;
-    }
-  };
-  const x0 = () => TB_LEFT + column * (TB_WIDTH + TB_GAP);
-  /** 表の見出し（端子台の名前と列の名前）を書き、表の上端の y を返す */
-  const header = (title: string) => {
-    const x = x0();
-    page.texts.push({ at: up(x, y + TB_TITLE / 2), text: title, height: 3, align: 'left', layer: 'TAG' });
-    y += TB_TITLE;
-    const top = y;
-    const names = ['接続先', '線番', '端子', '線番', '接続先'];
-    let cx = x;
-    names.forEach((n, i) => {
-      page.texts.push({ at: up(cx + TB_COLUMNS[i] / 2, y + TB_ROW / 2), text: n, height: TB_TEXT, layer: 'TEXT' });
-      cx += TB_COLUMNS[i];
-    });
-    y += TB_ROW;
-    return top;
-  };
-  /** 表の枠と罫線（top から今の y まで） */
-  const grid = (top: number) => {
-    const x = x0();
-    page.polylines.push({ points: [up(x, top), up(x + TB_WIDTH, top), up(x + TB_WIDTH, y), up(x, y)], closed: true, layer: 'FRAME' });
-    let cx = x;
-    for (const w of TB_COLUMNS.slice(0, -1)) {
-      cx += w;
-      page.polylines.push({ points: [up(cx, top), up(cx, y)], layer: 'FRAME' });
-    }
-    for (let ry = top + TB_ROW; ry < y - 0.01; ry += TB_ROW) page.polylines.push({ points: [up(x, ry), up(x + TB_WIDTH, ry)], layer: 'FRAME' });
-  };
-
-  if (!blocks.length) {
-    page.texts.push({ at: up(TB_LEFT, TB_TOP + 4), text: '図面に端子台がありません', height: 3.5, align: 'left', layer: 'TEXT' });
-    return pages;
-  }
-  for (const device of blocks) {
-    const entries = elements.filter((e) => e.device === device && e.element.kind === 'terminal');
-    if (!entries.length) continue;
-    const def = entries[0].def;
-    const rowsData: TerminalRow[] = entries.map((e) => {
-      const byPin = (pin: string) => Object.entries(e.element.pinOf).filter(([, p]) => p === pin).map(([t]) => key(device, t));
-      return { no: e.element.attributes.T1 ?? e.element.key, left: side(byPin('1')), right: side(byPin('2')) };
-    });
-    const title = `${device}  ${def.name}（${def.model}）`;
-    if (y + TB_TITLE + 2 * TB_ROW > bottom) nextColumn();
-    let top = header(title);
-    for (const r of rowsData) {
-      if (y + TB_ROW > bottom) {
-        grid(top);
-        nextColumn();
-        top = header(`${title}（続き）`);
-      }
-      const x = x0();
-      const cy = y + TB_ROW / 2;
-      const cells: [number, string, 'left' | 'center' | 'right'][] = [
-        [x + TB_COLUMNS[0] - 1, r.left.to, 'right'],
-        [x + TB_COLUMNS[0] + TB_COLUMNS[1] / 2, r.left.wireNo, 'center'],
-        [x + TB_COLUMNS[0] + TB_COLUMNS[1] + TB_COLUMNS[2] / 2, r.no, 'center'],
-        [x + TB_WIDTH - TB_COLUMNS[4] - TB_COLUMNS[3] / 2, r.right.wireNo, 'center'],
-        [x + TB_WIDTH - TB_COLUMNS[4] + 1, r.right.to, 'left'],
-      ];
-      for (const [cx, text, align] of cells) if (text) page.texts.push({ at: up(cx, cy), text, height: TB_TEXT, align, layer: 'TEXT' });
-      y += TB_ROW;
-    }
-    grid(top);
-    y += TB_GAP / 2;
-  }
-  return pages;
-}
-
-/** 図面枠と表題欄 */
-function drawFrame(out: SchematicSheetOut, title: string | undefined, revision: string | undefined, index: number, count: number) {
+/** 図面枠と表題欄（図面名・作成者・版・シート名・ページ） */
+function drawFrame(out: SchematicSheetOut, settings: DiagramSettings | undefined, index: number, count: number) {
   const { width: W, height: H } = out.paper;
   const x1 = W - 130;
   out.polylines.push(
@@ -789,12 +483,31 @@ function drawFrame(out: SchematicSheetOut, title: string | undefined, revision: 
     { points: [[x1, 20], [W - 10, 20]], layer: 'FRAME' },
     { points: [[W - 35, 10], [W - 35, 30]], layer: 'FRAME' },
   );
+  const author = settings?.author ? `　作成 ${settings.author}` : '';
   out.texts.push(
-    { at: [x1 + 3, 25], text: title || 'Conneko', height: 3, align: 'left', layer: 'FRAME' },
+    { at: [x1 + 3, 25], text: `${settings?.title || 'Conneko'}${author}`, height: 3, align: 'left', layer: 'FRAME' },
     { at: [x1 + 3, 15], text: out.name, height: 3, align: 'left', layer: 'FRAME' },
-    { at: [W - 22.5, 25], text: revision ? `版 ${revision}` : '', height: 2.5, layer: 'FRAME' },
+    { at: [W - 22.5, 25], text: settings?.revision ? `版 ${settings.revision}` : '', height: 2.5, layer: 'FRAME' },
     { at: [W - 22.5, 15], text: `${index + 1} / ${count}`, height: 2.5, layer: 'FRAME' },
   );
+}
+
+/** シートの種類の名前（表紙の目次・エディタ） */
+export function sheetKindName(sh: { kind?: string; rails?: Rails }): string {
+  switch (sh.kind) {
+    case 'terminal':
+      return '端子台接続図';
+    case 'io':
+      return 'PLC の I/O 図';
+    case 'rack':
+      return 'PLC のユニット構成図';
+    case 'bom':
+      return '部品表';
+    case 'cover':
+      return '表紙・図面目次';
+    default:
+      return sh.rails?.supply ? '展開接続図（制御回路）' : '展開接続図（主回路）';
+  }
 }
 
 /** 配置した記号の ID から記号の定義（箱は要素が持つ定義、ほかはライブラリ） */

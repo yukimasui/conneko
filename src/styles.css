@@ -2024,3 +2024,46 @@ textarea {
     display: none;
   }
 }
+
+/* --- 展開図のシートの追加 --- */
+.schem-new {
+  width: min(640px, 92vw);
+}
+.schem-new__kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.schem-new__kind {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.schem-new__kind input {
+  width: auto;
+  margin-top: 3px;
+}
+.schem-new__kind > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.schem-new__kind.is-active {
+  border-color: var(--accent);
+  background: #eef3fb;
+}
+.schem-new__fields {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.schem-settings .field input[type='text'] {
+  width: 100%;
+}

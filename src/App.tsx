@@ -951,6 +951,8 @@ function Editor() {
               focusDevice(id);
             }}
             onExport={exportSchematic}
+            settings={settings}
+            onSettings={(patch) => setSettings((x) => ({ ...x, ...patch }))}
           />
         ) : (
         <>

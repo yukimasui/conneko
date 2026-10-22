@@ -6,21 +6,12 @@
  * 右: 選んだ要素の情報と、シートの設定（母線・用紙）、展開図 JSON の書き出し
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DiagramSettings } from '../model/diagram';
 import type { Point, SymbolDef } from '../schematic/format';
-import { PAPER_SIZES } from '../schematic/format';
 import { autoLayout, nextPosition } from '../schematic/autoLayout';
-import { canBeVertical, canFlip, defaultRails, itemSymbol, ROW_PITCH, type ElementEntry, type SchematicBuild } from '../schematic/layout';
-import {
-  newSchematicSheet,
-  paperOf,
-  snap,
-  type PaperSize,
-  type Rails,
-  type Rotation,
-  type Schematic,
-  type SchematicItem,
-  type SchematicSheet,
-} from '../schematic/model';
+import { canBeVertical, canFlip, itemSymbol, type ElementEntry, type SchematicBuild } from '../schematic/layout';
+import { paperOf, snap, type Rotation, type Schematic, type SchematicItem } from '../schematic/model';
+import { NewSheetDialog, SheetSettings } from './SchematicSheetPanel';
 import { placedBounds, symbolBounds } from '../schematic/place';
 import { sheetSvgBody, symbolSvg } from '../schematic/svg';
 import { SheetTabs } from './SheetTabs';
@@ -36,6 +27,9 @@ interface Props {
   /** 概念図で機器を表示する */
   onShowDevice: (deviceId: string) => void;
   onExport: () => void;
+  /** 図面の情報（図面名・作成者・版。表題欄と表紙に入る） */
+  settings: DiagramSettings;
+  onSettings: (patch: Partial<DiagramSettings>) => void;
 }
 
 /** 記号の小さなプレビュー（一覧用） */
@@ -87,8 +81,9 @@ const rotate = (r: Rotation | undefined, delta: number): Rotation => ((((r ?? 0)
 export function SchematicEditor(props: Props) {
   const { build, schematic, onChange, sheet } = props;
   const [selected, setSelected] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const current = schematic.sheets.find((s) => s.id === sheet) ?? schematic.sheets[0];
-  const paper = paperOf(schematic);
+  const paper = paperOf(schematic, current);
   const selectedEntry = selected ? build.byId.get(selected) : undefined;
 
   // 選んだ要素が消えたら（元に戻すなど）選択を外す
@@ -99,7 +94,8 @@ export function SchematicEditor(props: Props) {
   const place = useCallback(
     (element: string, at?: { x: number; y: number }) => {
       const e = build.byId.get(element);
-      if (!e || !current || current.kind === 'terminal') return;
+      // 内容を自動で作るシート（I/O 図・部品表など）には記号を置かない
+      if (!e || !current || current.kind) return;
       onChange((s) => placeElement(s, current.id, element, at ?? nextPosition(current, e, paper, build.byId)));
       setSelected(element);
     },
@@ -161,7 +157,7 @@ export function SchematicEditor(props: Props) {
 
   return (
     <>
-      <ElementList build={build} schematic={schematic} selected={selected} onPlace={place} onSelect={(id) => {
+      <ElementList build={build} schematic={schematic} selected={selected} generated={!!current?.kind} onPlace={place} onSelect={(id) => {
         const e = build.byId.get(id);
         if (e?.placed && e.placed.sheet !== sheet) props.onSheet(e.placed.sheet);
         setSelected(id);
@@ -176,11 +172,7 @@ export function SchematicEditor(props: Props) {
             setSelected(null);
             props.onSheet(id);
           }}
-          onAdd={() => {
-            const ns = newSchematicSheet(schematic);
-            onChange((s) => ({ ...s, sheets: [...s.sheets, { ...ns, rails: defaultRails(build.railCandidates) }] }));
-            props.onSheet(ns.id);
-          }}
+          onAdd={() => setAdding(true)}
           onRename={(id, name) => onChange((s) => ({ ...s, sheets: s.sheets.map((x) => (x.id === id ? { ...x, name } : x)) }))}
           onDelete={(id) => {
             const sh = schematic.sheets.find((x) => x.id === id);
@@ -231,12 +223,8 @@ export function SchematicEditor(props: Props) {
               sheet={current}
               onChange={onChange}
               onExport={props.onExport}
-              onAddTerminalSheet={() => {
-                const ns = newSchematicSheet(schematic);
-                onChange((s) => ({ ...s, sheets: [...s.sheets, { ...ns, name: '端子台接続図', kind: 'terminal' }] }));
-                setSelected(null);
-                props.onSheet(ns.id);
-              }}
+              settings={props.settings}
+              onSettings={props.onSettings}
               onAuto={() => {
                 const r = autoLayout(build, schematic, current.id, paper);
                 if (r.placed) onChange(() => r.schematic);
@@ -246,6 +234,19 @@ export function SchematicEditor(props: Props) {
           )
         )}
       </aside>
+      {adding && (
+        <NewSheetDialog
+          build={build}
+          schematic={schematic}
+          onClose={() => setAdding(false)}
+          onCreate={(ns, first) => {
+            setAdding(false);
+            setSelected(null);
+            onChange((s) => ({ ...s, sheets: first ? [ns, ...s.sheets] : [...s.sheets, ns] }));
+            props.onSheet(ns.id);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -256,6 +257,8 @@ function ElementList(props: {
   build: SchematicBuild;
   schematic: Schematic;
   selected: string | null;
+  /** 表示中のシートが内容を自動で作るシート（記号を置けない） */
+  generated: boolean;
   onPlace: (element: string) => void;
   onSelect: (element: string) => void;
 }) {
@@ -285,7 +288,11 @@ function ElementList(props: {
           <input type="checkbox" checked={showPlaced} onChange={(e) => setShowPlaced(e.target.checked)} />
           置いたものも表示（{placed} / {total} を配置済み）
         </label>
-        <p className="small muted">用紙へドラッグするか、ダブルクリックで表示中の展開図に置きます。</p>
+        <p className="small muted">
+          {props.generated
+            ? '表示中のシートは内容を概念図から自動で作るので、記号は置けません（展開接続図のシートに切り替えて置きます）。'
+            : '用紙へドラッグするか、ダブルクリックで表示中の展開図に置きます。'}
+        </p>
       </div>
       <div className="schem-list__body">
         {groups.length === 0 && <p className="small muted schem-list__empty">{total ? 'すべて配置済みです' : '概念図に機器がありません'}</p>}
@@ -567,140 +574,6 @@ function ElementInfo(props: {
           展開図から外す
         </button>
       </div>
-    </div>
-  );
-}
-
-function SheetSettings(props: {
-  build: SchematicBuild;
-  schematic: Schematic;
-  sheet: SchematicSheet;
-  onChange: (update: (s: Schematic) => Schematic) => void;
-  onExport: () => void;
-  /** 自動で並べ、結果の説明を返す */
-  onAuto: () => string;
-  onAddTerminalSheet: () => void;
-}) {
-  const { sheet, build } = props;
-  const [autoMessage, setAutoMessage] = useState('');
-  const setRails = (patch: Partial<Rails>) =>
-    props.onChange((s) => ({
-      ...s,
-      sheets: s.sheets.map((x) => (x.id === sheet.id ? { ...x, rails: { ...x.rails, ...patch } } : x)),
-    }));
-  const options = [...build.railCandidates];
-  for (const ref of [sheet.rails?.supply, sheet.rails?.common]) {
-    if (ref && !options.some((o) => o.ref === ref)) options.push({ ref, label: ref, conductor: '+' });
-  }
-  const placed = build.elements.filter((e) => e.placed).length;
-  const exportBlock = (
-    <>
-      <hr />
-      <button type="button" className="primary" onClick={props.onExport}>
-        展開図 JSON を書き出す（DXF 用）
-      </button>
-      <p className="small muted">
-        書き出した JSON は、リポジトリの tools/dxf の Python スクリプトで DXF に変換します（<code>uv run conneko_dxf.py 展開図.json 出力.dxf</code>）。
-      </p>
-    </>
-  );
-  if (sheet.kind === 'terminal') {
-    const blocks = [...new Map(build.elements.filter((e) => e.def.category === 'terminal').map((e) => [e.device, e.def] as const))];
-    const chosen = new Set(sheet.blocks ?? blocks.map(([d]) => d));
-    const toggle = (device: string, on: boolean) =>
-      props.onChange((s) => ({
-        ...s,
-        sheets: s.sheets.map((x) => {
-          if (x.id !== sheet.id) return x;
-          const next = blocks.map(([d]) => d).filter((d) => (d === device ? on : chosen.has(d)));
-          // すべて選んだときは指定を省く（あとから足した端子台も入る）
-          return { ...x, blocks: next.length === blocks.length ? undefined : next };
-        }),
-      }));
-    return (
-      <div className="schem-settings">
-        <div className="panel-title">端子台接続図「{sheet.name}」</div>
-        <p className="small muted">端子台ごとに、端子の両側（上段・ネジ側と、下段・コネクタ側）の接続先と線番の表を、概念図の接続から自動で作ります。</p>
-        <div className="field">
-          <span>表にする端子台</span>
-          {blocks.length === 0 && <span className="small muted">図面に端子台がありません</span>}
-          {blocks.map(([d, def]) => (
-            <label key={d} className="small schem-list__toggle">
-              <input type="checkbox" checked={chosen.has(d)} onChange={(e) => toggle(d, e.target.checked)} />
-              {d}（{def.model}）
-            </label>
-          ))}
-        </div>
-        {exportBlock}
-      </div>
-    );
-  }
-  return (
-    <div className="schem-settings">
-      <div className="panel-title">展開図「{sheet.name}」</div>
-      <label className="field">
-        <span>電源側の母線（P24・R など）</span>
-        <select value={sheet.rails?.supply ?? ''} onChange={(e) => setRails({ supply: e.target.value || undefined })}>
-          <option value="">なし</option>
-          {options.map((o) => (
-            <option key={o.ref} value={o.ref}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>戻り側の母線（N24・S など）</span>
-        <select value={sheet.rails?.common ?? ''} onChange={(e) => setRails({ common: e.target.value || undefined })}>
-          <option value="">なし</option>
-          {options.map((o) => (
-            <option key={o.ref} value={o.ref}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>母線の並べ方</span>
-        <select value={sheet.rails?.layout ?? 'left'} onChange={(e) => setRails({ layout: e.target.value === 'sides' ? 'sides' : undefined })}>
-          <option value="left">左にまとめる（段の終わりから戻り側へ戻す）</option>
-          <option value="sides">左右に分ける（ラダー図の形）</option>
-        </select>
-      </label>
-      <p className="small muted">母線にした電位につながる端子は、線を個別に引かず母線へ引き出します。母線を選ばないシートは主回路として扱います。</p>
-      <button type="button" onClick={() => setAutoMessage(props.onAuto())}>
-        自動で並べる（{sheet.rails?.supply ? '未配置の段' : '主回路'}）
-      </button>
-      <p className="small muted">
-        {autoMessage ||
-          (sheet.rails?.supply
-            ? '電源側の母線から接点・コイル・表示灯・PLC の入出力点をたどり、コイルなどごとに 1 段にして並べます（自己保持などの枝は下の段）。置いた記号は動かしません。'
-            : '一次電源から遮断器・電磁接触器・サーマル・電動機を縦に並べ、制御電源の分岐などは横向きで右に並べます。置いた記号は動かしません。')}
-      </p>
-      <label className="field">
-        <span>用紙（全シート共通）</span>
-        <select
-          value={props.schematic.settings?.paper ?? 'A3'}
-          onChange={(e) => props.onChange((s) => ({ ...s, settings: { ...s.settings, paper: e.target.value as PaperSize } }))}
-        >
-          {(Object.keys(PAPER_SIZES) as PaperSize[]).map((p) => (
-            <option key={p} value={p}>
-              {p} 横
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="small muted">
-        配置済み {placed} / {build.elements.length} 個。1 枚 {build.rowsPerSheet} 段（段の間隔 {ROW_PITCH}mm）。
-      </div>
-      <button type="button" onClick={props.onAddTerminalSheet}>
-        端子台接続図のシートを追加
-      </button>
-      {exportBlock}
-      <hr />
-      <p className="small muted">
-        線は概念図の接続から自動で引きます。展開図の上では線を足したり消したりできないので、接続を変えるときは概念図で直してください。
-      </p>
     </div>
   );
 }
