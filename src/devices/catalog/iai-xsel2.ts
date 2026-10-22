@@ -1,3 +1,4 @@
+import { controllerEncoderPins } from '../iai/actuator';
 import { fieldbusBlock, IO_TYPE_LABELS, type IoType } from '../iai/fieldbus';
 import {
   DC24_MINUS,
@@ -201,7 +202,17 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     const pg = PG(a);
     const m = MOT(a);
     ts.push(
-      { id: `PG${a + 1}`, label: `PG${a + 1}（${a + 1} 軸目 エンコーダー）`, note: 'アクチュエーターのエンコーダーケーブル', x: pg.x, y: pg.y, side: 'top', role: 'connector', connector: { kind: 'IAI-XSEL-PG', pins: 0, width: 16, length: 48 }, optional: true },
+      {
+        id: `PG${a + 1}`,
+        label: `PG${a + 1}（${a + 1} 軸目 エンコーダー）`,
+        note: 'アクチュエーターのエンコーダーケーブル（26 ピン）。ピン 21 BK+・20 BK− はブレーキ付きアクチュエーターのブレーキ電源（BK PWR から出る）',
+        x: pg.x,
+        y: pg.y,
+        side: 'top',
+        role: 'connector',
+        connector: { kind: 'IAI-XSEL-PG', pins: 26, width: 16, length: 48, style: 'lan' },
+        optional: true,
+      },
       { id: `M${a + 1}`, label: `M${a + 1}（${a + 1} 軸目 モーター）`, note: 'アクチュエーターのモーターケーブル', x: m.x, y: n2(m.y + 14), side: 'bottom', role: 'connector', connector: { kind: 'IAI-XSEL2-MOT', pins: 0, width: 20, length: 28 }, optional: true },
     );
   }
@@ -241,7 +252,12 @@ const stoPins: PinDef[] = [
   { id: 'STO#8', label: 'EDM+（8）', role: 'signal', signal: { dir: 'out', kind: 'contact' }, optional: true, note: '外部機器モニター出力 +側' },
 ];
 
-const pins = (p: ParamValues): PinDef[] => [...stoPins, ...pioPoints(p).flatMap((s) => pioPins(s.pts, s.pol))];
+const pins = (p: ParamValues): PinDef[] => [
+  ...stoPins,
+  // エンコーダーコネクター（PG1〜）の 26 ピン。20 BK−・21 BK+ がブレーキの電源
+  ...Array.from({ length: axesOf(p) }, (_, a) => controllerEncoderPins(`PG${a + 1}`)).flat(),
+  ...pioPoints(p).flatMap((s) => pioPins(s.pts, s.pol)),
+];
 
 const links = (p: ParamValues): InternalLink[] => [
   // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグで閉）。Conneko では常に閉の導通として扱う
@@ -255,6 +271,11 @@ const links = (p: ParamValues): InternalLink[] => [
   { from: 'STO#8', to: 'STO#7', switch: 'output', ratedCurrent: 0.1 },
   { from: 'CPE', to: 'MPE' },
   { from: 'CPE', to: 'FG' },
+  // ブレーキ電源（BK PWR）から各軸のエンコーダーコネクターのブレーキ開放出力（21 BK+・20 BK−）へ。ブレーキ解除中（運転中）は導通しているものとして扱う
+  ...Array.from({ length: axesOf(p) }, (_, a): InternalLink[] => [
+    { from: 'BK+', to: `PG${a + 1}#21`, directed: true },
+    { from: 'BK-', to: `PG${a + 1}#20` },
+  ]).flat(),
   ...pioPoints(p).flatMap((s) => pioLinks(s.pts, s.pol, s.rated)),
 ];
 

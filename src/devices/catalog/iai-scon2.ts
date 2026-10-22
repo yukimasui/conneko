@@ -1,3 +1,4 @@
+import { controllerEncoderPins } from '../iai/actuator';
 import { fieldbusBlock, IO_TYPE_LABELS, ioOf, isPio, polarityOf, type IoType } from '../iai/fieldbus';
 import {
   DC24_MINUS,
@@ -157,7 +158,17 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       optional: true,
     },
     { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（F35FDC-04V-K）', x: MOT.x, y: MOT.y, side: 'left', role: 'connector', connector: { kind: 'IAI-SCON2-MOT', pins: 0, width: 16, length: 20, facing: 'front' }, optional: true },
-    { id: 'PG', label: 'PG（エンコーダー）', note: 'アクチュエーターのエンコーダーケーブル（10226-6202JL、26 ピン）', x: PG.x, y: PG.y, side: 'right', role: 'connector', connector: { kind: 'IAI-SCON-PG', pins: 0, width: 40, length: 14, facing: 'front' }, optional: true },
+    {
+      id: 'PG',
+      label: 'PG（エンコーダー）',
+      note: 'アクチュエーターのエンコーダーケーブル（10226-6202JL、26 ピン）。ピン 21 BK+・20 BK− はブレーキ付きアクチュエーターのブレーキ電源（システム I/O の BK+・BK− から出る）',
+      x: PG.x,
+      y: PG.y,
+      side: 'right',
+      role: 'connector',
+      connector: { kind: 'IAI-SCON-PG', pins: 26, width: 40, length: 14, facing: 'front', style: 'lan' },
+      optional: true,
+    },
     {
       id: 'STO',
       label: '安全機能用 I/O（SAFE）',
@@ -191,6 +202,8 @@ const terminals = (p: ParamValues): TerminalDef[] => {
 const pins = (p: ParamValues): PinDef[] => {
   const io = ioOf(p);
   return [
+    // エンコーダーコネクター（PG）の 26 ピン。20 BK−・21 BK+ がブレーキの電源
+    ...controllerEncoderPins('PG'),
     ...(isPio(io) ? pioPins(positionerPio40('PIO', patternOf(p), '*BALM'), polarityOf(io)) : []),
     { id: 'STO#1', label: 'NC（1）', role: 'signal', optional: true, note: '配線しない' },
     { id: 'STO#2', label: 'NC（2）', role: 'signal', optional: true, note: '配線しない' },
@@ -207,6 +220,9 @@ const links = (p: ParamValues): InternalLink[] => {
   const io = ioOf(p);
   return [
     { from: 'PE', to: 'FG' },
+    // ブレーキ電源（BK+・BK−）からエンコーダーコネクターのブレーキ開放出力（PG の 21 BK+・20 BK−）へ。ブレーキ解除中（運転中）は導通しているものとして扱う
+    { from: 'BK+', to: 'PG#21', directed: true },
+    { from: 'BK-', to: 'PG#20' },
     { from: 'STO#8', to: 'STO#7', switch: 'output', ratedCurrent: 0.1 },
     ...(isPio(io) ? pioLinks(positionerPio40('PIO', patternOf(p), '*BALM'), polarityOf(io)) : []),
   ];
