@@ -83,7 +83,8 @@ export function pinDirection(def: SymbolDef, pin: string, rotation = 0): Directi
   const b = symbolBounds(def);
   const eps = 0.01;
   let d: Point;
-  if (!p) d = [-1, 0];
+  if (def.pinDirs?.[pin]) d = def.pinDirs[pin];
+  else if (!p) d = [-1, 0];
   else if (p[0] <= b.x1 + eps) d = [-1, 0];
   else if (p[0] >= b.x2 - eps) d = [1, 0];
   else if (p[1] >= b.y2 - eps) d = [0, 1];

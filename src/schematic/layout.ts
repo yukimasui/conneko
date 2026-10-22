@@ -23,9 +23,9 @@ import {
   type SchematicSheetOut,
   type SymbolDef,
 } from './format';
-import { paperOf, splitRail, type SchematicItem } from './model';
+import { paperOf, splitRail, type Rails, type SchematicItem } from './model';
 import { pinDirection, pinPoint, placedBounds, type Bounds, type Direction } from './place';
-import { textWidth } from './symbols';
+import { librarySymbol, textWidth } from './symbols';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -61,16 +61,40 @@ export interface RailCandidate {
   conductor: Conductor;
 }
 
-/** 左右の母線の既定（電源側: +・R・L、戻り側: −・S・N。同じ機器の組を優先する） */
-export function defaultRails(candidates: RailCandidate[]): { left?: string; right?: string } {
+/** 母線の既定（電源側: +・R・L、戻り側: −・S・N。同じ機器の組を優先する） */
+export function defaultRails(candidates: RailCandidate[]): Rails {
   const pick = (cs: Conductor[], device?: string) =>
     candidates.find((c) => cs.includes(c.conductor) && (!device || c.ref.startsWith(`${device}.`)));
-  const left = pick(['+']) ?? pick(['R', 'L']);
-  if (!left) return {};
-  const device = left.ref.slice(0, left.ref.indexOf('.'));
-  const back: Conductor[] = left.conductor === '+' ? ['-'] : ['S', 'N'];
-  const right = pick(back, device) ?? pick(back);
-  return { left: left.ref, ...(right ? { right: right.ref } : {}) };
+  const supply = pick(['+']) ?? pick(['R', 'L']);
+  if (!supply) return {};
+  const device = supply.ref.slice(0, supply.ref.indexOf('.'));
+  const back: Conductor[] = supply.conductor === '+' ? ['-'] : ['S', 'N'];
+  const common = pick(back, device) ?? pick(back);
+  return { supply: supply.ref, ...(common ? { common: common.ref } : {}) };
+}
+
+/** 母線を左にまとめるときの、電源側・戻り側の母線の x[mm] */
+export const LEFT_SUPPLY_X = 35;
+export const LEFT_COMMON_X = 42.5;
+/** 戻り側へ戻す線を、段のどれだけ下に通すか（候補の順）[mm、上向きが正] */
+const RETURN_DETOURS = [-7.5, -5, -10, -12.5, 7.5, 5];
+
+/** 配置の向き（縦）に合わせた記号の ID（縦向きの記号がなければ元の記号） */
+export function itemSymbolId(e: ElementEntry, item: SchematicItem): string {
+  if (!item.vertical || e.element.box) return e.element.symbol;
+  const v = `${e.element.symbol}-v`;
+  return librarySymbol(v) ? v : e.element.symbol;
+}
+
+/** 配置の向き（縦）に合わせた記号 */
+export function itemSymbol(e: ElementEntry, item: SchematicItem): SymbolDef {
+  const id = itemSymbolId(e, item);
+  return id === e.element.symbol ? e.symbol : librarySymbol(id)!;
+}
+
+/** 縦向きにして置ける要素か */
+export function canBeVertical(e: ElementEntry): boolean {
+  return !e.element.box && !!librarySymbol(`${e.element.symbol}-v`);
 }
 
 export interface SchematicBuild {
@@ -86,6 +110,11 @@ export interface SchematicBuild {
   rowsPerSheet: number;
   /** 端子の網（同じ網の端子は同じ値）。展開図の今の配置で求めたもの */
   netOf(device: string, terminal: string): string;
+  /**
+   * 主回路の機器（一次電源・遮断器・電磁接触器・熱動素子・電動機）の中の経路を素通しにしない網。
+   * 配置によらない（主回路を並べるときに、機器の一次側と二次側を分けて見るため）
+   */
+  circuitNetOf(device: string, terminal: string): string;
 }
 
 /** 端子を入れ替えて置ける記号（端子 1 と 2 だけを持つ記号） */
@@ -225,12 +254,12 @@ const RAIL_DETOURS = [-5, -7.5, 5, 7.5, -10, 10, -12.5, 12.5, -2.5, 2.5];
  * 母線へ横に引き出す線。まっすぐ引くと記号を横切る（端子が母線と反対を向いているなど）場合は、
  * 端子から出して記号の下（または上）を回り込んでから母線へ引く。
  */
-function railRoute(p: PinAt, railX: number, net: string, obstacles: Bounds[], segments: Segment[]): Point[] {
+function railRoute(p: PinAt, railX: number, net: string, obstacles: Bounds[], segments: Segment[], detours = RAIL_DETOURS): Point[] {
   const straight: Point[] = [p.pos, [railX, p.pos[1]]];
   const candidates: Point[][] = [straight];
   for (const len of STUBS) {
     const s: Point = [p.pos[0] + p.dir[0] * len, p.pos[1] + p.dir[1] * len];
-    for (const dy of RAIL_DETOURS) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
+    for (const dy of detours) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
   }
   let best = straight;
   let bestScore = Infinity;
@@ -386,6 +415,18 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     // 置いた要素の中の導通は記号として描くので、網にはまとめない
     if (!terminalElement.get(a)?.entry.placed && !terminalElement.get(b)?.entry.placed) uf.union(a, b);
   }
+  // 主回路を並べるときの網: 主回路の機器の中の経路は、置いていなくても素通しにしない
+  const MAIN = new Set(['source', 'breaker', 'contactor', 'thermal', 'motor']);
+  const circuit = new UnionFind();
+  for (const w of model.wires) circuit.union(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
+  for (const [a, b] of model.cablePairs) circuit.union(a, b);
+  for (const [a, b] of model.labelLinks) circuit.union(a, b);
+  for (const [a, b] of model.fixedLinks) {
+    const ka = terminalElement.get(a)?.entry.element.kind;
+    const kb = terminalElement.get(b)?.entry.element.kind;
+    if (!(ka && MAIN.has(ka)) && !(kb && MAIN.has(kb))) circuit.union(a, b);
+  }
+
   const wireNos = new Map<string, Set<string>>();
   for (const w of model.wires) {
     if (!w.wireNo) continue;
@@ -408,13 +449,14 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     const seen = new Set<string>();
     for (const [t, pin] of Object.entries(placedPinOf(e, item))) {
       const root = uf.find(key(e.device, t));
-      const pos = pinPoint(e.symbol, pin, at, item.rotation);
+      const sym = itemSymbol(e, item);
+      const pos = pinPoint(sym, pin, at, item.rotation);
       const id = `${root}@${r3(pos[0])},${r3(pos[1])}`;
       if (seen.has(id)) continue;
       seen.add(id);
       const row = rowOf.get(e.id)!;
       const list = pinsBySheet.get(e.placed.sheet) ?? [];
-      list.push({ root, pos, dir: pinDirection(e.symbol, pin, item.rotation), row });
+      list.push({ root, pos, dir: pinDirection(sym, pin, item.rotation), row });
       pinsBySheet.set(e.placed.sheet, list);
       const bySheet = sheetsOfNet.get(root) ?? new Map<string, number[]>();
       bySheet.set(e.placed.sheet, [...(bySheet.get(e.placed.sheet) ?? []), row]);
@@ -455,7 +497,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       const comment = e.element.kind.startsWith('plc-') ? diagram.devices.find((d) => d.id === e.device)?.comments?.[Object.keys(e.element.pinOf)[0]] : undefined;
       const xref = xrefOf(e);
       out.inserts.push({
-        symbol: e.element.symbol,
+        symbol: itemSymbolId(e, it),
         at: up(it.x, it.y),
         ...(it.rotation ? { rotation: it.rotation } : {}),
         layer: 'SYMBOL',
@@ -470,13 +512,15 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       const k = r ? key(r.device, r.terminal) : undefined;
       return k && model.terminals.has(k) ? uf.find(k) : undefined;
     };
+    // 左にまとめる（既定）: 電源側・戻り側の順に左に並べ、戻り側へは段の下を通して戻す。左右に分ける: ラダー図の形
+    const leftLayout = sh.rails?.layout !== 'sides';
     const rails = [
-      { side: 'left' as const, x: RAIL_INSET, ref: sh.rails?.left, root: railRoot(sh.rails?.left) },
-      { side: 'right' as const, x: W - RAIL_INSET, ref: sh.rails?.right, root: railRoot(sh.rails?.right) },
+      { x: leftLayout ? LEFT_SUPPLY_X : RAIL_INSET, ref: sh.rails?.supply, root: railRoot(sh.rails?.supply), detours: RAIL_DETOURS },
+      { x: leftLayout ? LEFT_COMMON_X : W - RAIL_INSET, ref: sh.rails?.common, root: railRoot(sh.rails?.common), detours: leftLayout ? RETURN_DETOURS : RAIL_DETOURS },
     ];
 
     // 線が避ける記号の外形と、引いた線分（別の網の線と重ならないように経路を選ぶ）
-    const obstacles = out.inserts.map((ins) => placedBounds(byId.get(ins.element!)!.symbol, ins.at, ins.rotation));
+    const obstacles = out.inserts.map((ins) => placedBounds(symbolOfInsert(ins.symbol, byId.get(ins.element!)!), ins.at, ins.rotation));
     const segments: Segment[] = [];
     const draw = (points: Point[], net: string) => {
       out.polylines.push({ points, layer: 'WIRE' });
@@ -485,15 +529,16 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     const byNet = new Map<string, PlacedPin[]>();
     for (const p of pinsBySheet.get(sh.id) ?? []) byNet.set(p.root, [...(byNet.get(p.root) ?? []), p]);
 
-    // 母線と母線への引き出し（先に引き、ほかの線はこれを避ける）
+    // 母線と母線への引き出し（先に引き、ほかの線はこれを避ける）。母線の上端・下端はすべての母線でそろえる
+    const railYs: number[] = [];
     for (const rail of rails) {
       if (!rail.root) continue;
       const pins = byNet.get(rail.root) ?? [];
       const no = wireNoOf(rail.root);
-      const ys: number[] = [];
+      const ys = railYs;
       for (const p of pins) {
         if (r3(p.pos[0]) === r3(rail.x)) continue;
-        const pl = railRoute(p, rail.x, rail.root, obstacles, segments);
+        const pl = railRoute(p, rail.x, rail.root, obstacles, segments, rail.detours);
         draw(pl, rail.root);
         const end = pl[pl.length - 1];
         ys.push(end[1]);
@@ -503,8 +548,12 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
           out.texts.push({ at: [(a[0] + b[0]) / 2, b[1] + 1.8], text: no, height: WIRE_NO_TEXT, layer: 'WIRENO' });
         }
       }
-      const top = ys.length ? Math.max(...ys) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
-      const bottom = ys.length ? Math.min(...ys) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
+    }
+    const top = railYs.length ? Math.max(...railYs) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
+    const bottom = railYs.length ? Math.min(...railYs) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
+    for (const rail of rails) {
+      if (!rail.root) continue;
+      const no = wireNoOf(rail.root);
       draw([[rail.x, top], [rail.x, bottom]], rail.root);
       const r = splitRail(rail.ref!)!;
       const terminal = model.terminals.get(key(r.device, r.terminal))?.terminal;
@@ -559,11 +608,11 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     ...(diagram.settings?.revision ? { revision: diagram.settings.revision } : {}),
     layers: SCHEMATIC_LAYERS,
     symbols: Object.fromEntries(
-      sheets.flatMap((s) => s.inserts).map((ins) => [ins.symbol, byId.get(ins.element!)!.symbol] as const),
+      sheets.flatMap((s) => s.inserts).map((ins) => [ins.symbol, symbolOfInsert(ins.symbol, byId.get(ins.element!)!)] as const),
     ),
     sheets,
   };
-  return { doc, elements, byId, rows: rowOf, railCandidates, rowsPerSheet: rows, netOf: (d, t) => uf.find(key(d, t)) };
+  return { doc, elements, byId, rows: rowOf, railCandidates, rowsPerSheet: rows, netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
 }
 
 // ---- 端子台接続図 ----
@@ -746,4 +795,9 @@ function drawFrame(out: SchematicSheetOut, title: string | undefined, revision: 
     { at: [W - 22.5, 25], text: revision ? `版 ${revision}` : '', height: 2.5, layer: 'FRAME' },
     { at: [W - 22.5, 15], text: `${index + 1} / ${count}`, height: 2.5, layer: 'FRAME' },
   );
+}
+
+/** 配置した記号の ID から記号の定義（箱は要素が持つ定義、ほかはライブラリ） */
+function symbolOfInsert(id: string, e: ElementEntry): SymbolDef {
+  return id === e.element.symbol ? e.symbol : librarySymbol(id)!;
 }

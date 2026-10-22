@@ -39,7 +39,7 @@ function circuit(schematic: Schematic): Diagram {
   };
 }
 
-const empty: Schematic = { sheets: [{ id: 'D1', name: '制御回路', rails: { left: 'PS1.+V1', right: 'PS1.-V1' }, items: [] }] };
+const empty: Schematic = { sheets: [{ id: 'D1', name: '制御回路', rails: { supply: 'PS1.+V1', common: 'PS1.-V1', layout: 'sides' }, items: [] }] };
 const row = (n: number) => ROW_TOP + (n - 1) * ROW_PITCH;
 
 function run(s: Schematic) {
@@ -84,10 +84,35 @@ describe('展開図の自動配置', () => {
     expect(again.schematic).toBe(first);
   });
 
-  it('左の母線がなければ並べない', () => {
+  it('電源側の母線がないシートは主回路として並べる（主回路の機器がなければ並べない）', () => {
     const r = run({ sheets: [{ id: 'D1', name: '1', items: [] }] });
     expect(r.placed).toBe(0);
-    expect(r.message).toContain('左の母線');
+    expect(r.message).toContain('主回路');
+  });
+
+  it('主回路: 一次電源から縦に 1 列に並べ、制御電源の分岐は横向きで右に置く（サンプル図面）', () => {
+    const s: Schematic = { sheets: [{ id: 'M', name: '主回路', items: [] }] };
+    const d = { ...sampleDiagram, schematic: s };
+    const r = autoLayout(buildSchematic(d, getDeviceDefinition), s, 'M', paperOf(s));
+    const items = new Map(r.schematic.sheets[0].items.map((i) => [i.element, i]));
+    for (const id of ['PS1:main', 'ELB1:main', 'MC1:main', 'THR1:main', 'M1:U-V-W']) expect(items.get(id)?.vertical, id).toBe(true);
+    expect(items.get('CP1:main')?.vertical).toBeUndefined();
+    expect(items.get('CP2:main')?.vertical).toBeUndefined();
+    // 本線は上から一次電源 → ELB → MC → サーマル → 電動機の順。CP は ELB と MC の間の高さで右に
+    const y = (id: string) => items.get(id)!.y;
+    expect(y('PS1:main')).toBeLessThan(y('ELB1:main'));
+    expect(y('ELB1:main')).toBeLessThan(y('CP1:main'));
+    expect(y('CP2:main')).toBeLessThan(y('MC1:main'));
+    expect(y('MC1:main')).toBeLessThan(y('THR1:main'));
+    expect(y('THR1:main')).toBeLessThan(y('M1:U-V-W'));
+    expect(items.get('CP1:main')!.x).toBeGreaterThan(items.get('ELB1:main')!.x + 15);
+    // 線: R 相は電源から電動機まで x = 60 の縦の線でつながる
+    const out = buildSchematic({ ...d, schematic: r.schematic }, getDeviceDefinition).doc.sheets[0];
+    const H = out.paper.height;
+    const verticalAt60 = out.polylines.filter((p) => p.layer === 'WIRE' && p.points.length === 2 && p.points.every((q) => q[0] === 60));
+    expect(verticalAt60.length).toBeGreaterThanOrEqual(4);
+    expect(out.inserts.find((i) => i.element === 'PS1:main')?.symbol).toBe('source-3p-v');
+    expect(H).toBe(297);
   });
 
   it('3 線式センサーにつながる入力は、センサーの箱と入力の 1 段にする（サンプル図面）', () => {

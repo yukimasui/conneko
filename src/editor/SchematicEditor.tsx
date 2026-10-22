@@ -9,12 +9,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Point, SymbolDef } from '../schematic/format';
 import { PAPER_SIZES } from '../schematic/format';
 import { autoLayout, nextPosition } from '../schematic/autoLayout';
-import { canFlip, defaultRails, ROW_PITCH, type ElementEntry, type SchematicBuild } from '../schematic/layout';
+import { canBeVertical, canFlip, defaultRails, itemSymbol, ROW_PITCH, type ElementEntry, type SchematicBuild } from '../schematic/layout';
 import {
   newSchematicSheet,
   paperOf,
   snap,
   type PaperSize,
+  type Rails,
   type Rotation,
   type Schematic,
   type SchematicItem,
@@ -121,6 +122,14 @@ export function SchematicEditor(props: Props) {
     [build, onChange],
   );
 
+  const toggleVertical = useCallback(
+    (element: string) => {
+      const e = build.byId.get(element);
+      if (e && canBeVertical(e)) onChange((s) => updateItem(s, element, (i) => ({ ...i, vertical: !i.vertical || undefined })));
+    },
+    [build, onChange],
+  );
+
   const turn = useCallback((element: string, delta: number) => onChange((s) => updateItem(s, element, (i) => ({ ...i, rotation: rotate(i.rotation, delta) }))), [onChange]);
 
   // キー操作（文字の入力中は除く）
@@ -133,6 +142,7 @@ export function SchematicEditor(props: Props) {
       const move = (dx: number, dy: number) => onChange((s) => updateItem(s, selected, (i) => ({ ...i, x: snap(i.x + dx), y: snap(i.y + dy) })));
       if (e.key === 'r' || e.key === 'R') turn(selected, e.shiftKey ? -90 : 90);
       else if (e.key === 'f' || e.key === 'F') flip(selected);
+      else if (e.key === 'v' || e.key === 'V') toggleVertical(selected);
       else if (e.key === 'Delete' || e.key === 'Backspace') remove(selected);
       else if (e.key === 'Escape') setSelected(null);
       else if (e.key === 'ArrowLeft') move(-step, 0);
@@ -144,7 +154,7 @@ export function SchematicEditor(props: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, onChange, turn, flip, remove]);
+  }, [selected, onChange, turn, flip, toggleVertical, remove]);
 
   const sheetsMeta = schematic.sheets.map((s) => ({ id: s.id, name: s.name }));
   const counts = useMemo(() => new Map(schematic.sheets.map((s) => [s.id, s.items.length])), [schematic]);
@@ -209,6 +219,7 @@ export function SchematicEditor(props: Props) {
             row={build.rows.get(selectedEntry.id)}
             onTurn={(d) => turn(selectedEntry.id, d)}
             onFlip={canFlip(selectedEntry.symbol) ? () => flip(selectedEntry.id) : undefined}
+            onVertical={canBeVertical(selectedEntry) ? () => toggleVertical(selectedEntry.id) : undefined}
             onRemove={() => remove(selectedEntry.id)}
             onShowDevice={() => props.onShowDevice(selectedEntry.device)}
           />
@@ -431,7 +442,7 @@ function SheetCanvas(props: {
         <span className="small muted">{Math.round((zoom / 3.78) * 100)}%</span>
         <button type="button" onClick={() => zoomAt(1.25)} aria-label="拡大">＋</button>
         <button type="button" onClick={fit}>用紙に合わせる</button>
-        <span className="small muted schem-canvas__hint">ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、F で端子の入れ替え、Delete で外す</span>
+        <span className="small muted schem-canvas__hint">ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、V で縦/横、F で端子の入れ替え、Delete で外す</span>
       </div>
       <div
         className={`schem-canvas__view${panning ? ' is-panning' : ''}`}
@@ -467,7 +478,7 @@ function SheetCanvas(props: {
             {out.inserts.map((ins) => {
               const e = ins.element ? props.build.byId.get(ins.element) : undefined;
               if (!e) return null;
-              const b = placedBounds(e.symbol, ins.at, ins.rotation);
+              const b = placedBounds(itemSymbol(e, e.placed!.item), ins.at, ins.rotation);
               const pad = 1.5;
               const sel = props.selected === e.id;
               return (
@@ -511,6 +522,7 @@ function ElementInfo(props: {
   row?: number;
   onTurn: (delta: number) => void;
   onFlip?: () => void;
+  onVertical?: () => void;
   onRemove: () => void;
   onShowDevice: () => void;
 }) {
@@ -525,7 +537,7 @@ function ElementInfo(props: {
         {e.def.name}（{e.def.maker ? `${e.def.maker} ` : ''}
         {e.def.model}）
       </div>
-      <SymbolPreview def={e.symbol} />
+      <SymbolPreview def={e.placed ? itemSymbol(e, e.placed.item) : e.symbol} />
       <table className="schem-info__terminals">
         <tbody>
           {Object.entries(e.element.pinOf).map(([t, pin]) => (
@@ -540,6 +552,11 @@ function ElementInfo(props: {
       <div className="schem-info__actions">
         <button type="button" onClick={() => props.onTurn(90)}>⟲ 90°</button>
         <button type="button" onClick={() => props.onTurn(-90)}>⟳ 90°</button>
+        {props.onVertical && (
+          <button type="button" onClick={props.onVertical} title="主回路の縦向きの記号と横向きを切り替えます（V）">
+            {e.placed?.item.vertical ? '↔ 横にする' : '↕ 縦にする'}
+          </button>
+        )}
         {props.onFlip && (
           <button type="button" onClick={props.onFlip} title="記号の向きはそのままで、左右の端子を入れ替えます（F）">
             ⇄ 端子を入れ替え
@@ -566,13 +583,13 @@ function SheetSettings(props: {
 }) {
   const { sheet, build } = props;
   const [autoMessage, setAutoMessage] = useState('');
-  const setRail = (side: 'left' | 'right', ref: string) =>
+  const setRails = (patch: Partial<Rails>) =>
     props.onChange((s) => ({
       ...s,
-      sheets: s.sheets.map((x) => (x.id === sheet.id ? { ...x, rails: { ...x.rails, [side]: ref || undefined } } : x)),
+      sheets: s.sheets.map((x) => (x.id === sheet.id ? { ...x, rails: { ...x.rails, ...patch } } : x)),
     }));
   const options = [...build.railCandidates];
-  for (const ref of [sheet.rails?.left, sheet.rails?.right]) {
+  for (const ref of [sheet.rails?.supply, sheet.rails?.common]) {
     if (ref && !options.some((o) => o.ref === ref)) options.push({ ref, label: ref, conductor: '+' });
   }
   const placed = build.elements.filter((e) => e.placed).length;
@@ -622,8 +639,8 @@ function SheetSettings(props: {
     <div className="schem-settings">
       <div className="panel-title">展開図「{sheet.name}」</div>
       <label className="field">
-        <span>左の母線（電源側）</span>
-        <select value={sheet.rails?.left ?? ''} onChange={(e) => setRail('left', e.target.value)}>
+        <span>電源側の母線（P24・R など）</span>
+        <select value={sheet.rails?.supply ?? ''} onChange={(e) => setRails({ supply: e.target.value || undefined })}>
           <option value="">なし</option>
           {options.map((o) => (
             <option key={o.ref} value={o.ref}>
@@ -633,8 +650,8 @@ function SheetSettings(props: {
         </select>
       </label>
       <label className="field">
-        <span>右の母線（戻り側）</span>
-        <select value={sheet.rails?.right ?? ''} onChange={(e) => setRail('right', e.target.value)}>
+        <span>戻り側の母線（N24・S など）</span>
+        <select value={sheet.rails?.common ?? ''} onChange={(e) => setRails({ common: e.target.value || undefined })}>
           <option value="">なし</option>
           {options.map((o) => (
             <option key={o.ref} value={o.ref}>
@@ -643,13 +660,22 @@ function SheetSettings(props: {
           ))}
         </select>
       </label>
-      <p className="small muted">母線にした電位につながる端子は、線を個別に引かず横にまっすぐ母線へ引き出します。</p>
-      <button type="button" onClick={() => setAutoMessage(props.onAuto())} disabled={!sheet.rails?.left}>
-        自動で並べる（未配置の段）
+      <label className="field">
+        <span>母線の並べ方</span>
+        <select value={sheet.rails?.layout ?? 'left'} onChange={(e) => setRails({ layout: e.target.value === 'sides' ? 'sides' : undefined })}>
+          <option value="left">左にまとめる（段の終わりから戻り側へ戻す）</option>
+          <option value="sides">左右に分ける（ラダー図の形）</option>
+        </select>
+      </label>
+      <p className="small muted">母線にした電位につながる端子は、線を個別に引かず母線へ引き出します。母線を選ばないシートは主回路として扱います。</p>
+      <button type="button" onClick={() => setAutoMessage(props.onAuto())}>
+        自動で並べる（{sheet.rails?.supply ? '未配置の段' : '主回路'}）
       </button>
       <p className="small muted">
         {autoMessage ||
-          '左の母線から接点・コイル・表示灯・PLC の入出力点をたどり、コイルなどごとに 1 段にして並べます（自己保持などの枝は下の段）。置いた記号は動かしません。'}
+          (sheet.rails?.supply
+            ? '電源側の母線から接点・コイル・表示灯・PLC の入出力点をたどり、コイルなどごとに 1 段にして並べます（自己保持などの枝は下の段）。置いた記号は動かしません。'
+            : '一次電源から遮断器・電磁接触器・サーマル・電動機を縦に並べ、制御電源の分岐などは横向きで右に並べます。置いた記号は動かしません。')}
       </p>
       <label className="field">
         <span>用紙（全シート共通）</span>

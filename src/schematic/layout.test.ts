@@ -41,7 +41,7 @@ const placed: Schematic = {
     {
       id: 'D1',
       name: '制御回路',
-      rails: { left: 'PS1.+V1', right: 'PS1.-V1' },
+      rails: { supply: 'PS1.+V1', common: 'PS1.-V1', layout: 'sides' },
       items: [
         { element: 'ES1:21-22', x: 60, y: row(1) },
         { element: 'MC1:A1-A2', x: 330, y: row(1) },
@@ -134,7 +134,7 @@ describe('展開図の組み立て', () => {
     const d = circuit(placed);
     d.wires.push(W('W8', 'ES1.21', 'MC1.13'), W('W9', 'ES1.22', 'MC1.14'));
     d.wires = d.wires.filter((w) => w.id !== 'W5' && w.id !== 'W6');
-    const s: Schematic = { sheets: [{ ...placed.sheets[0], rails: { right: 'PS1.-V1' }, items: placed.sheets[0].items.filter((i) => i.element !== 'PL1:X1-X2') }] };
+    const s: Schematic = { sheets: [{ ...placed.sheets[0], rails: { common: 'PS1.-V1', layout: 'sides' }, items: placed.sheets[0].items.filter((i) => i.element !== 'PL1:X1-X2') }] };
     const sheet = build({ ...d, schematic: s }).doc.sheets[0];
     const lines = linesOf(sheet);
     // ES1.22（70）と MC1.14（70, 2 行目）は右へ 5mm 出してから縦につなぐ
@@ -257,6 +257,6 @@ describe('展開図の配置の保存と読み込み', () => {
     const pruned = pruneSchematic(placed, new Set(['PS1', 'ES1', 'PL1']))!;
     expect(pruned.sheets[0].items.map((i) => i.element)).toEqual(['ES1:21-22', 'PL1:X1-X2']);
     expect(pruneSchematic(placed, new Set(['PS1', 'ES1', 'MC1', 'PL1']))).toBe(placed);
-    expect(pruneSchematic(placed, new Set(['ES1', 'MC1', 'PL1']))!.sheets[0].rails).toEqual({ left: undefined, right: undefined });
+    expect(pruneSchematic(placed, new Set(['ES1', 'MC1', 'PL1']))!.sheets[0].rails).toEqual({ supply: undefined, common: undefined, layout: 'sides' });
   });
 });

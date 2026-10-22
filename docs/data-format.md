@@ -119,7 +119,7 @@ MIL コネクタや LAN ポートなど、`role: 'connector'` の端子どうし
     {
       "id": "D1",
       "name": "制御回路",
-      "rails": { "left": "PSU1.+V1", "right": "PSU1.-V1" },
+      "rails": { "supply": "PSU1.+V1", "common": "PSU1.-V1" },
       "items": [{ "element": "MC1:A1-A2", "x": 330, "y": 30 }]
     }
   ]

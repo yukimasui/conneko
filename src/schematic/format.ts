@@ -39,6 +39,8 @@ export interface SymbolDef {
   primitives: Primitive[];
   /** 端子の位置（線をつなぐ点）。記号の端子名 → 位置 */
   pins: Record<string, Point>;
+  /** 端子から線を出す向き（単位ベクトル）。省略した端子は記号の外形から決める。DXF には使わない */
+  pinDirs?: Record<string, Point>;
   attributes: AttributeDef[];
 }
 
