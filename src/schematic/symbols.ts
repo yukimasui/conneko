@@ -270,21 +270,23 @@ function ground(): SymbolDef {
 
 // ---- PLC の入出力 ----
 
+/**
+ * PLC の入出力点。段の右端（コイルの位置）に置く枠で、左に端子を出す（入力: +24V → 接点 → 入力、
+ * シンク出力: +24V → 負荷 → 出力 の順に並ぶ）。ソース出力のように左に置く場合は配置で回転する。
+ * 出力は枠の右に縦線を足して入力と見分ける。
+ */
 function plcPoint(dir: 'in' | 'out'): SymbolDef {
-  // 入力は左に端子、出力は右に端子を出した枠。枠の中に入出力番号
-  const box = dir === 'in' ? rect(2.5, -2.5, 17.5, 2.5) : rect(0, -2.5, 15, 2.5);
-  const lead = dir === 'in' ? line([0, 0], [2.5, 0]) : line([15, 0], [17.5, 0]);
-  const pin: Point = dir === 'in' ? [0, 0] : [17.5, 0];
-  const center = dir === 'in' ? 10 : 7.5;
+  const primitives: Primitive[] = [rect(2.5, -2.5, 17.5, 2.5), line([0, 0], [2.5, 0])];
+  if (dir === 'out') primitives.push(line([16, -2.5], [16, 2.5]));
   return {
     description: dir === 'in' ? 'PLC の入力' : 'PLC の出力',
-    primitives: [box, lead],
-    pins: { 1: pin },
+    primitives,
+    pins: { 1: [0, 0] },
     attributes: [
-      attr('ADDR', [center, 0], TAG_TEXT),
-      attr('T1', [dir === 'in' ? 1.25 : 16.25, 1.5], PIN_TEXT),
-      attr('TAG', [center, 4], PIN_TEXT),
-      attr('COMMENT', [center, -4], PIN_TEXT),
+      attr('ADDR', [dir === 'in' ? 10 : 9.25, 0], TAG_TEXT),
+      attr('T1', [1.25, 1.5], PIN_TEXT),
+      attr('TAG', [10, 4], PIN_TEXT),
+      attr('COMMENT', [10, -4], PIN_TEXT),
     ],
   };
 }

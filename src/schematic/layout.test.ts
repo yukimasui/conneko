@@ -147,6 +147,63 @@ describe('展開図の組み立て', () => {
     expect(sheet.dots.map((p) => down(sheet, p.at))).toContainEqual([75, row(1)]);
   });
 
+  it('並んだ極から枝を出すとき、別の網の線は重ならず交差もしない', () => {
+    const d: Diagram = {
+      devices: [
+        { id: 'ELB1', type: 'mitsubishi.nf32-sv.3p', x: 0, y: 0 },
+        { id: 'MC1', type: 'mitsubishi.s-t12.ac200v', x: 0, y: 0 },
+        { id: 'CP1', type: 'mitsubishi.cp30-ba.2p', x: 0, y: 0 },
+      ],
+      wires: [W('W1', 'ELB1.2', 'MC1.1/L1', 'R1'), W('W2', 'ELB1.4', 'MC1.3/L2', 'S1'), W('W3', 'ELB1.2', 'CP1.1', 'R1'), W('W4', 'ELB1.4', 'CP1.3', 'S1')],
+      schematic: {
+        sheets: [
+          {
+            id: 'D1',
+            name: '主回路',
+            items: [
+              { element: 'ELB1:main', x: 80, y: 30 },
+              { element: 'MC1:main', x: 130, y: 30 },
+              { element: 'CP1:main', x: 100, y: 75 },
+            ],
+          },
+        ],
+      },
+    };
+    const lines = linesOf(build(d).doc.sheets[0]);
+    // R1 は x = 95、S1 は内側の x = 92.5 で下ろす（同じ x で重ねず、R1 の横の線とも交差しない）
+    expect(lines).toContainEqual([
+      [90, 30],
+      [95, 30],
+      [95, 75],
+      [100, 75],
+    ]);
+    expect(lines).toContainEqual([
+      [90, 35],
+      [92.5, 35],
+      [92.5, 80],
+      [100, 80],
+    ]);
+  });
+
+  it('コイルの反対側の端子へは、記号を横切らずに回り込む', () => {
+    const d: Diagram = {
+      devices: [
+        { id: 'CP1', type: 'mitsubishi.cp30-ba.2p', x: 0, y: 0 },
+        { id: 'MC1', type: 'mitsubishi.s-t12.ac200v', x: 0, y: 0 },
+      ],
+      wires: [W('W1', 'CP1.2', 'MC1.A1', 'R2'), W('W2', 'CP1.4', 'MC1.A2', 'S2')],
+      schematic: { sheets: [{ id: 'D1', name: '1', items: [{ element: 'CP1:main', x: 80, y: 30 }, { element: 'MC1:A1-A2', x: 200, y: 30 }] }] },
+    };
+    const lines = linesOf(build(d).doc.sheets[0]);
+    // A2（210, 30）へは、コイルの下（y = 35）を通ってから上がる
+    expect(lines).toContainEqual([
+      [90, 35],
+      [215, 35],
+      [215, 30],
+      [210, 30],
+    ]);
+  });
+
   it('別のシートにある同じ網の端子は、その行番号を書く', () => {
     const s: Schematic = {
       sheets: [

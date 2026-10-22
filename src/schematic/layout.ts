@@ -11,7 +11,7 @@
  * 内部の計算は展開図 JSON と同じ y が上向きの座標で行う（配置は y が下向きなので変換する）。
  */
 import { buildModel, key, supplyLabel, UnionFind, type DefLookup } from '../check/model';
-import type { DeviceDefinition, ParamValues } from '../devices/types';
+import type { Conductor, DeviceDefinition, ParamValues } from '../devices/types';
 import type { Diagram } from '../model/diagram';
 import { deviceElements, elementId, elementSymbol, type SchematicElement } from './elements';
 import {
@@ -24,7 +24,7 @@ import {
   type SymbolDef,
 } from './format';
 import { paperOf, splitRail, type SchematicItem } from './model';
-import { pinDirection, pinPoint, type Direction } from './place';
+import { pinDirection, pinPoint, placedBounds, type Bounds, type Direction } from './place';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -57,6 +57,19 @@ export interface RailCandidate {
   /** `機器名.端子ID` */
   ref: string;
   label: string;
+  conductor: Conductor;
+}
+
+/** 左右の母線の既定（電源側: +・R・L、戻り側: −・S・N。同じ機器の組を優先する） */
+export function defaultRails(candidates: RailCandidate[]): { left?: string; right?: string } {
+  const pick = (cs: Conductor[], device?: string) =>
+    candidates.find((c) => cs.includes(c.conductor) && (!device || c.ref.startsWith(`${device}.`)));
+  const left = pick(['+']) ?? pick(['R', 'L']);
+  if (!left) return {};
+  const device = left.ref.slice(0, left.ref.indexOf('.'));
+  const back: Conductor[] = left.conductor === '+' ? ['-'] : ['S', 'N'];
+  const right = pick(back, device) ?? pick(back);
+  return { left: left.ref, ...(right ? { right: right.ref } : {}) };
 }
 
 export interface SchematicBuild {
@@ -116,17 +129,103 @@ interface PinAt {
   dir: Direction;
 }
 
-/** 2 つの端子を直角の折れ線でつなぐ */
-function route(a: PinAt, b: PinAt): Point[] {
+/** 軸に平行な線分が四角の内側を通るか（縁に沿う・縁で止まるのは通らないとみなす） */
+function crosses(a: Point, b: Point, r: Bounds): boolean {
+  const e = 0.05;
+  const [x1, x2] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+  const [y1, y2] = [Math.min(a[1], b[1]), Math.max(a[1], b[1])];
+  return x2 > r.x1 + e && x1 < r.x2 - e && y2 > r.y1 + e && y1 < r.y2 - e;
+}
+
+/** 折れ線が横切る記号の数 */
+function hits(points: Point[], obstacles: Bounds[]): number {
+  let n = 0;
+  for (const r of obstacles) if (points.slice(1).some((p, i) => crosses(points[i], p, r))) n++;
+  return n;
+}
+
+/** シートに引いた線分（網ごと）。別の網の線と重ならないように経路を選ぶ */
+interface Segment {
+  a: Point;
+  b: Point;
+  net: string;
+}
+
+/** 2 つの線分が一直線上で重なる長さ（重ならなければ 0） */
+function overlap(p: Point, q: Point, s: Point, t: Point): number {
+  if (r3(p[1]) === r3(q[1]) && r3(s[1]) === r3(t[1]) && r3(p[1]) === r3(s[1])) {
+    return Math.min(Math.max(p[0], q[0]), Math.max(s[0], t[0])) - Math.max(Math.min(p[0], q[0]), Math.min(s[0], t[0]));
+  }
+  if (r3(p[0]) === r3(q[0]) && r3(s[0]) === r3(t[0]) && r3(p[0]) === r3(s[0])) {
+    return Math.min(Math.max(p[1], q[1]), Math.max(s[1], t[1])) - Math.max(Math.min(p[1], q[1]), Math.min(s[1], t[1]));
+  }
+  return 0;
+}
+
+/** 点が線分の上（端を含む）にあるか */
+const touches = (p: Point, a: Point, b: Point) => same(p, a) || same(p, b) || onSegment(p, a, b);
+
+/** 縦と横の線分が、互いの途中で交わるか */
+function crossing(p: Point, q: Point, s: Point, t: Point): boolean {
+  const vertical = (a: Point, b: Point) => r3(a[0]) === r3(b[0]);
+  const pair: Point[] | undefined = vertical(p, q) && !vertical(s, t) ? [p, q, s, t] : vertical(s, t) && !vertical(p, q) ? [s, t, p, q] : undefined;
+  if (!pair) return false;
+  const [v1, v2, h1, h2] = pair;
+  const x = v1[0];
+  const y = h1[1];
+  return x > Math.min(h1[0], h2[0]) && x < Math.max(h1[0], h2[0]) && y > Math.min(v1[1], v2[1]) && y < Math.max(v1[1], v2[1]);
+}
+
+/**
+ * 折れ線と別の網の線との干渉の点数。重なる・T 字に触れる（つながって見える）は 10、交差は 1。
+ */
+function conflicts(points: Point[], net: string, segments: Segment[]): number {
+  let n = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [p, q] = [points[i], points[i + 1]];
+    for (const s of segments) {
+      if (s.net === net) continue;
+      if (overlap(p, q, s.a, s.b) > 0.01) n += 10;
+      else if (touches(s.a, p, q) || touches(s.b, p, q) || touches(p, s.a, s.b) || touches(q, s.a, s.b)) n += 10;
+      else if (crossing(p, q, s.a, s.b)) n += 1;
+    }
+  }
+  return n;
+}
+
+/** 端子から出す長さの候補（短い方を優先し、重なるときに伸ばす） */
+const STUBS = [STUB, STUB + 2.5, STUB + 5, STUB + 7.5, STUB - 2.5, STUB + 10];
+
+/**
+ * 2 つの端子を直角の折れ線でつなぐ。端子からまっすぐ出し、L 字に曲げてつなぐ。
+ * 出す長さと曲げ方の組み合わせのうち、記号を横切らず、別の網の線と重ならないものを選ぶ。
+ */
+function route(a: PinAt, b: PinAt, net: string, obstacles: Bounds[], segments: Segment[]): Point[] {
   const [ax, ay] = a.pos;
   const [bx, by] = b.pos;
   // 同じ高さで向かい合っている（a の右に b があり、a は右へ・b は左へ出す）ならまっすぐ
-  if (r3(ay) === r3(by) && (bx - ax) * a.dir[0] > 0 && (ax - bx) * b.dir[0] > 0) return [a.pos, b.pos];
-  if (r3(ax) === r3(bx) && (by - ay) * a.dir[1] > 0 && (ay - by) * b.dir[1] > 0) return [a.pos, b.pos];
-  const sa: Point = [ax + a.dir[0] * STUB, ay + a.dir[1] * STUB];
-  const sb: Point = [bx + b.dir[0] * STUB, by + b.dir[1] * STUB];
-  const corner: Point = a.dir[0] !== 0 ? [sa[0], sb[1]] : [sb[0], sa[1]];
-  return simplify([a.pos, sa, corner, sb, b.pos]);
+  const facing =
+    (r3(ay) === r3(by) && (bx - ax) * a.dir[0] > 0 && (ax - bx) * b.dir[0] > 0) ||
+    (r3(ax) === r3(bx) && (by - ay) * a.dir[1] > 0 && (ay - by) * b.dir[1] > 0);
+  const candidates: Point[][] = facing ? [[a.pos, b.pos]] : [];
+  for (const len of STUBS) {
+    const sa: Point = [ax + a.dir[0] * len, ay + a.dir[1] * len];
+    const sb: Point = [bx + b.dir[0] * len, by + b.dir[1] * len];
+    const first: Point = a.dir[0] !== 0 ? [sa[0], sb[1]] : [sb[0], sa[1]];
+    const second: Point = a.dir[0] !== 0 ? [sb[0], sa[1]] : [sa[0], sb[1]];
+    candidates.push(simplify([a.pos, sa, first, sb, b.pos]), simplify([a.pos, sa, second, sb, b.pos]));
+  }
+  // 記号を横切らないこと > 別の網と重ならないこと > 候補の順（短い出し方・まっすぐを優先）
+  let best = candidates[0];
+  let bestScore = Infinity;
+  candidates.forEach((c, i) => {
+    const score = hits(c, obstacles) * 1000 + conflicts(c, net, segments) + i * 0.01;
+    if (score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  });
+  return best;
 }
 
 /** 置いた端子どうしを結ぶ最小全域木（Prim 法。距離は縦横の和）の辺 */
@@ -322,47 +421,61 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       { side: 'right' as const, x: W - RAIL_INSET, ref: sh.rails?.right, root: railRoot(sh.rails?.right) },
     ];
 
-    // 網ごとの線
+    // 線が避ける記号の外形と、引いた線分（別の網の線と重ならないように経路を選ぶ）
+    const obstacles = out.inserts.map((ins) => placedBounds(byId.get(ins.element!)!.symbol, ins.at, ins.rotation));
+    const segments: Segment[] = [];
+    const draw = (points: Point[], net: string) => {
+      out.polylines.push({ points, layer: 'WIRE' });
+      for (let i = 0; i + 1 < points.length; i++) segments.push({ a: points[i], b: points[i + 1], net });
+    };
     const byNet = new Map<string, PlacedPin[]>();
     for (const p of pinsBySheet.get(sh.id) ?? []) byNet.set(p.root, [...(byNet.get(p.root) ?? []), p]);
-    for (const [root, pins] of byNet) {
-      const rail = rails.find((r) => r.root === root);
-      if (rail) continue;
-      const polylines = spanningTree(pins).map(([i, j]) => route(pins[i], pins[j]));
-      // 別のシートにも同じ網の端子があれば、その行番号を書く
-      const others = [...(sheetsOfNet.get(root) ?? [])].filter(([s]) => s !== sh.id).flatMap(([, rs]) => rs);
-      if (others.length) {
-        const p = pins[0];
-        const end: Point = [p.pos[0] + p.dir[0] * STUB, p.pos[1] + p.dir[1] * STUB];
-        if (pins.length === 1) polylines.push([p.pos, end]);
-        const text = `→${[...new Set(others)].sort((a, b) => a - b).join(',')}`;
-        out.texts.push({ at: [end[0] + p.dir[0] * 1, end[1] + (p.dir[1] ? p.dir[1] * 2 : 0)], text, height: REF_TEXT, align: p.dir[0] < 0 ? 'right' : 'left', layer: 'TAG' });
-      }
-      for (const pl of polylines) out.polylines.push({ points: pl, layer: 'WIRE' });
-      for (const at of junctions(polylines)) out.dots.push({ at, layer: 'WIRE' });
-      const no = wireNoOf(root);
-      const label = no ? wireNoAt(polylines) : undefined;
-      if (label) out.texts.push({ at: label.at, text: no, height: WIRE_NO_TEXT, align: label.align, layer: 'WIRENO' });
-    }
 
-    // 母線と母線への引き出し
+    // 母線と母線への引き出し（先に引き、ほかの線はこれを避ける）
     for (const rail of rails) {
       if (!rail.root) continue;
       const pins = byNet.get(rail.root) ?? [];
       const no = wireNoOf(rail.root);
       for (const p of pins) {
         if (r3(p.pos[0]) === r3(rail.x)) continue;
-        out.polylines.push({ points: [p.pos, [rail.x, p.pos[1]]], layer: 'WIRE' });
+        draw([p.pos, [rail.x, p.pos[1]]], rail.root);
         out.dots.push({ at: [rail.x, p.pos[1]], layer: 'WIRE' });
         if (no) out.texts.push({ at: [(p.pos[0] + rail.x) / 2, p.pos[1] + 1.8], text: no, height: WIRE_NO_TEXT, layer: 'WIRENO' });
       }
       const ys = pins.map((p) => p.pos[1]);
       const top = ys.length ? Math.max(...ys) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
       const bottom = ys.length ? Math.min(...ys) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
-      out.polylines.push({ points: [[rail.x, top], [rail.x, bottom]], layer: 'WIRE' });
+      draw([[rail.x, top], [rail.x, bottom]], rail.root);
       const r = splitRail(rail.ref!)!;
       const terminal = model.terminals.get(key(r.device, r.terminal))?.terminal;
       out.texts.push({ at: [rail.x, top + 3], text: no || (terminal?.label ?? terminal?.id ?? ''), height: WIRE_NO_TEXT, layer: 'TAG' });
+    }
+
+    // 網ごとの線
+    for (const [root, pins] of byNet) {
+      if (rails.some((r) => r.root === root)) continue;
+      const polylines: Point[][] = [];
+      for (const [i, j] of spanningTree(pins)) {
+        const pl = route(pins[i], pins[j], root, obstacles, segments);
+        draw(pl, root);
+        polylines.push(pl);
+      }
+      // 別のシートにも同じ網の端子があれば、その行番号を書く
+      const others = [...(sheetsOfNet.get(root) ?? [])].filter(([s]) => s !== sh.id).flatMap(([, rs]) => rs);
+      if (others.length) {
+        const p = pins[0];
+        const end: Point = [p.pos[0] + p.dir[0] * STUB, p.pos[1] + p.dir[1] * STUB];
+        if (pins.length === 1) {
+          draw([p.pos, end], root);
+          polylines.push([p.pos, end]);
+        }
+        const text = `→${[...new Set(others)].sort((a, b) => a - b).join(',')}`;
+        out.texts.push({ at: [end[0] + p.dir[0] * 1, end[1] + (p.dir[1] ? p.dir[1] * 2 : 0)], text, height: REF_TEXT, align: p.dir[0] < 0 ? 'right' : 'left', layer: 'TAG' });
+      }
+      for (const at of junctions(polylines)) out.dots.push({ at, layer: 'WIRE' });
+      const no = wireNoOf(root);
+      const label = no ? wireNoAt(polylines) : undefined;
+      if (label) out.texts.push({ at: label.at, text: no, height: WIRE_NO_TEXT, align: label.align, layer: 'WIRENO' });
     }
     return out;
   });
@@ -370,7 +483,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
   // --- 母線にできる網 ---
   const railCandidates: RailCandidate[] = [...model.supplies.entries()].map(([k, s]) => {
     const info = model.terminals.get(k)!;
-    return { ref: `${info.device.id}.${info.terminal.id}`, label: `${info.device.id}.${info.terminal.label ?? info.terminal.id}（${supplyLabel(s)}）` };
+    return { ref: `${info.device.id}.${info.terminal.id}`, label: `${info.device.id}.${info.terminal.label ?? info.terminal.id}（${supplyLabel(s)}）`, conductor: s.conductor };
   });
 
   const doc: SchematicExport = {

@@ -106,6 +106,35 @@ const base: Diagram = {
     w('PSU1:PE', 'PLC1:FG', 'E', 'green', 2),
     w('PLC1:FG', 'HMI1:FG', 'E', 'green', 2),
   ],
+  // 展開図の見本（主回路と、DC24V の表示灯・PLC の出力）
+  schematic: {
+    sheets: [
+      {
+        id: 'D1',
+        name: '主回路',
+        items: [
+          { element: 'PS1:main', x: 30, y: 30 },
+          { element: 'ELB1:main', x: 85, y: 30 },
+          { element: 'MC1:main', x: 140, y: 30 },
+          { element: 'THR1:main', x: 190, y: 30 },
+          { element: 'M1:U-V-W', x: 240, y: 30 },
+          { element: 'CP1:main', x: 110, y: 75 },
+          { element: 'MC1:A1-A2', x: 200, y: 75 },
+          { element: 'CP2:main', x: 110, y: 105 },
+        ],
+      },
+      {
+        id: 'D2',
+        name: '表示・出力',
+        rails: { left: 'PSU1.+V1', right: 'PSU1.-V1' },
+        items: [
+          { element: 'PL1:X1-X2', x: 330, y: 30 },
+          { element: 'PL2:X1-X2', x: 60, y: 45 },
+          { element: 'OUT1:CN1#1', x: 330, y: 45 },
+        ],
+      },
+    ],
+  },
 };
 
 export const sampleDiagram: Diagram = splitCrossSheetWires(base, getDeviceDefinition);
