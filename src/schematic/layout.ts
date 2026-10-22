@@ -429,8 +429,9 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     if (k === 'coil') {
       const a = siblings.filter((x) => x.element.kind === 'contactor' || x.element.symbol.startsWith('contact-no')).map((x) => rowOf.get(x.id)!);
       const b = siblings.filter((x) => x.element.symbol.startsWith('contact-nc')).map((x) => rowOf.get(x.id)!);
+      const c = siblings.filter((x) => x.element.symbol.startsWith('contact-c')).map((x) => rowOf.get(x.id)!);
       const fmt = (label: string, ns: number[]) => (ns.length ? `${label}:${[...new Set(ns)].sort((x, y) => x - y).join(',')}` : '');
-      return [fmt('a', a), fmt('b', b)].filter(Boolean).join(' ') || undefined;
+      return [fmt('a', a), fmt('b', b), fmt('c', c)].filter(Boolean).join(' ') || undefined;
     }
     if (k === 'contact') {
       const owner = siblings.find((x) => x.element.kind === 'coil' || x.element.kind === 'thermal');

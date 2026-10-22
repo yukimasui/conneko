@@ -116,6 +116,11 @@ describe('代表的な機器の切り出し', () => {
     expect(els[0]).toMatchObject({ key: '1', pinOf: { '1': '1', 'CN#1': '2' } });
   });
 
+  it('汎用リレー（c 接点）: 共通・b 接点・a 接点の 3 端子を 1 つの c 接点にする', () => {
+    expect(summary(elementsOf('omron.my2n.dc24'))).toEqual(['13-14 coil coil', '9-1-5 contact contact-c', '12-4-8 contact contact-c']);
+    expect(elementsOf('omron.my2n.dc24')[1]).toMatchObject({ pinOf: { 9: '1', 1: '2', 5: '3' }, attributes: { T1: '9', T2: '1', T3: '5' } });
+  });
+
   it('リンクは要素を持たない', () => {
     expect(elementsOf('generic.link')).toEqual([]);
   });

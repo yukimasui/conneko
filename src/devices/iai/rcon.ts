@@ -186,8 +186,8 @@ export interface Rcon24Spec {
   description: string;
   stripe: string;
   motorKind: string;
-  /** モデル（PC / PCF など）の選択肢。省略時はなし */
-  models?: { value: string; label: string; axes: 1 | 2 }[];
+  /** モデル（PC / PCF など）の選択肢。省略時はなし。motorKind はモデルごとのモーター・エンコーダーコネクターの種類（省略時は motorKind） */
+  models?: { value: string; label: string; axes: 1 | 2; motorKind?: string }[];
   mpOptions: { value: number; label: string }[];
   mpDefault: number;
 }
@@ -219,13 +219,13 @@ export function rconDriverSvg(s: Rcon24Spec, axes: number, model: string) {
   ${[0, 1].map((r) => [0, 1].map((k) => `<rect x="${n2(c.x + k * c.dx - 2)}" y="${n2(c.y + r * c.dy - 1.5)}" width="4" height="3" rx="0.4" fill="#5d6166"/>`).join('')).join('')}`;
 }
 
-export function rconDriverTerminals(s: Rcon24Spec, axes: number): TerminalDef[] {
+export function rconDriverTerminals(s: Rcon24Spec, axes: number, motorKind = s.motorKind): TerminalDef[] {
   const c = DRV.cut;
   const ts: TerminalDef[] = [];
   for (let i = 0; i < axes; i++) {
     const m = DRV.mpg(i);
     const ax = i === 0 ? 'Ⅰ' : 'Ⅱ';
-    ts.push(frontConnector(`MPG${i + 1}`, `MPG ${ax}（${i + 1} 軸目 モーター・エンコーダー）`, 'アクチュエーターのモーター・エンコーダー一体ケーブル（DF62 24 ピン）', m.x, m.y, rconMpg(s.motorKind)));
+    ts.push(frontConnector(`MPG${i + 1}`, `MPG ${ax}（${i + 1} 軸目 モーター・エンコーダー）`, 'アクチュエーターのモーター・エンコーダー一体ケーブル（DF62 24 ピン）', m.x, m.y, rconMpg(motorKind)));
     ts.push(
       {
         id: `MPI${i + 1}`,
@@ -271,7 +271,7 @@ export function buildRcon24(s: Rcon24Spec): DeviceDefinition {
     width: DRIVER_W,
     height: RCON_H,
     svg: (p) => rconDriverSvg(s, axesOf(p), modelOf(p)),
-    terminals: (p) => rconDriverTerminals(s, axesOf(p)),
+    terminals: (p) => rconDriverTerminals(s, axesOf(p), s.models?.find((x) => x.value === modelOf(p))?.motorKind ?? s.motorKind),
     links: [],
     params: [
       s.models

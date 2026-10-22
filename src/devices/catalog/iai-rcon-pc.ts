@@ -14,7 +14,8 @@ export default buildRcon24({
   models: [
     { value: 'RCON-PC-2', label: 'RCON-PC-2（2 軸）', axes: 2 },
     { value: 'RCON-PC-1', label: 'RCON-PC-1（1 軸）', axes: 1 },
-    { value: 'RCON-PCF-1', label: 'RCON-PCF-1（高推力 1 軸）', axes: 1 },
+    // 高推力モーター（56SP/60P/86P）用。アクチュエーターの適応コントローラー P6（RCP6 の高推力タイプ）とつなぐ（ケーブル CB-ADPC-MPA＋変換ケーブル CB-CAN-AJ002）
+    { value: 'RCON-PCF-1', label: 'RCON-PCF-1（高推力 1 軸）', axes: 1, motorKind: 'IAI-RCON-MPG-PCF' },
   ],
   mpOptions: [
     { value: 0.8, label: 'RCP2 20P/28P × 1 軸（0.8A）' },
@@ -29,5 +30,6 @@ export default buildRcon24({
     'IAI の R-unit（RCON）の 24V ドライバーユニット（パルスモーター用）。ゲートウェイユニット（RCON-GW など）の右に連結し、ロボシリンダー RCP6/RCP5/RCP4/RCP3/RCP2 を 1 ユニットで 1〜2 軸動かす。' +
     '制御電源とモーター電源はゲートウェイユニットから連結で供給される（モーター電源の消費: 28P〜56P は 1 軸 1.9A、高出力設定で 2.3A、PCF は 5.7A）。' +
     '前面の駆動源遮断コネクターは軸ごとに MPO（モーター電源出力）と MPI（モーター電源入力）があり、通常は短絡、外部で駆動源を遮断する場合は接触器などの接点を入れる。' +
-    'モーター・エンコーダーコネクター（MPG Ⅰ・Ⅱ）にアクチュエーターのケーブルをつなぐ。',
+    'モーター・エンコーダーコネクター（MPG Ⅰ・Ⅱ）にアクチュエーターのケーブルをつなぐ（適応コントローラー P5 の RCP6 などは CB-ADPC-MPA）。' +
+    'RCON-PCF-1 は高推力モーター（56SP/60P/86P）用で、適応コントローラー P6 のアクチュエーター（RCP6 の SA8C・RA8C など）だけをつなぐ（CB-ADPC-MPA＋変換ケーブル CB-CAN-AJ002）。',
 });

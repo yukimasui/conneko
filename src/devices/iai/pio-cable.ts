@@ -29,8 +29,11 @@ export const IAI_COLORS = [
 /** k 本目（0 から）の線色（'茶-1' など） */
 export const leadColor = (k: number) => (k < 0 ? { name: '', hex: '#c9ccd0', mark: 0 } : { ...IAI_COLORS[k % 10], mark: Math.floor(k / 10) + 1 });
 
-/** 線色の表記（'茶-1'。色が不明な芯線は空） */
-const colorName = (c: ReturnType<typeof leadColor>) => (c.name ? `${c.name}-${c.mark}` : '');
+/** 線色の表記（'茶-1'。ドットマークのない芯線は色名だけ、色が不明な芯線は空） */
+const colorName = (c: ReturnType<typeof leadColor>) => (c.name ? (c.mark ? `${c.name}-${c.mark}` : c.name) : '');
+
+/** 芯線の色（color の指定があればそれ、なければ 10 色＋ドットマーク） */
+const colorOf = (l: PioLead) => (l.color ? { ...l.color, mark: 0 } : leadColor(l.colorIndex));
 
 export interface PioLead {
   /** 端子ID（マニュアルのピン番号の表記。'1A'、'25' など） */
@@ -39,6 +42,8 @@ export interface PioLead {
   pin: number;
   /** 線色（IAI_COLORS の順の何本目か。線色が公開資料で確認できない場合は −1 で灰色に描く） */
   colorIndex: number;
+  /** 10 色＋ドットマークでない芯線の色（CB-EC-PWBIO など）。指定すると colorIndex より優先する */
+  color?: { name: string; hex: string };
   /** 芯線の印字（省略時は id と線色） */
   label?: string;
   /** 補足（どのコントローラーで何の信号か） */
@@ -60,6 +65,8 @@ export interface PioCableSpec {
   leads: PioLead[];
   /** フラットケーブルの本数（CB-PAC-PIO は 20 芯 × 2 本）。省略時は 1 */
   ribbons?: number;
+  /** フラットケーブルでなく、黒いシースの丸形ケーブル（CB-EC-PWBIO など） */
+  sheath?: boolean;
 }
 
 export function buildPioCable(s: PioCableSpec): DeviceDefinition {
@@ -85,7 +92,7 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
 
   const wires = s.leads
     .map((l, i) => {
-      const c = leadColor(l.colorIndex);
+      const c = colorOf(l);
       const x0 = ribbonX(i);
       const d = `M${x0} 62 C${x0} 88 ${xs[i]} ${yEnd - 46} ${xs[i]} ${yEnd - 12}`;
       const dots = Array.from({ length: c.mark }, (_, k) => `<circle cx="${xs[i]}" cy="${n2(yEnd - 33 - k * 2.6)}" r="0.7" fill="${c.name === '黒' ? '#ddd' : '#111'}"/>`).join('');
@@ -98,13 +105,15 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
     })
     .join('');
 
-  // 平らな帯（フラットケーブル）。芯線の色を細い縞で描く
-  const ribbon = s.leads
-    .map((l, i) => {
-      const x = ribbonX(i, 0);
-      return `<rect x="${x}" y="${PLUG.y + PLUG.h}" width="${n2((ribbonW - (groups - 1) * GAP) / n)}" height="${n2(62 - PLUG.y - PLUG.h)}" fill="${leadColor(l.colorIndex).hex}"/>`;
-    })
-    .join('');
+  // 平らな帯（フラットケーブル）。芯線の色を細い縞で描く。丸形ケーブルは黒いシース
+  const ribbon = s.sheath
+    ? `<rect x="${n2(CX - ribbonW / 2 - 1)}" y="${PLUG.y + PLUG.h - 1}" width="${n2(ribbonW + 2)}" height="${n2(64 - PLUG.y - PLUG.h)}" rx="2" fill="url(#iaicbl-plug-{{uid}})" stroke="#060607" stroke-width="0.5"/>`
+    : s.leads
+        .map((l, i) => {
+          const x = ribbonX(i, 0);
+          return `<rect x="${x}" y="${PLUG.y + PLUG.h}" width="${n2((ribbonW - (groups - 1) * GAP) / n)}" height="${n2(62 - PLUG.y - PLUG.h)}" fill="${colorOf(l).hex}"/>`;
+        })
+        .join('');
 
   const svg = `
   <defs>
@@ -115,7 +124,7 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
   </defs>
   ${wires}
   ${ribbon}
-  ${Array.from({ length: groups }, (_, g) => `<rect x="${ribbonX(g * per, 0)}" y="${PLUG.y + PLUG.h}" width="${n2(ribbonX(Math.min(n, (g + 1) * per) - 1, 1) - ribbonX(g * per, 0))}" height="${n2(62 - PLUG.y - PLUG.h)}" fill="#ffffff" opacity="0.18" stroke="#555" stroke-width="0.3"/>`).join('')}
+  ${s.sheath ? '' : Array.from({ length: groups }, (_, g) => `<rect x="${ribbonX(g * per, 0)}" y="${PLUG.y + PLUG.h}" width="${n2(ribbonX(Math.min(n, (g + 1) * per) - 1, 1) - ribbonX(g * per, 0))}" height="${n2(62 - PLUG.y - PLUG.h)}" fill="#ffffff" opacity="0.18" stroke="#555" stroke-width="0.3"/>`).join('')}
   <rect x="${PLUG.x}" y="${PLUG.y}" width="${PLUG.w}" height="${PLUG.h}" rx="2" fill="url(#iaicbl-plug-{{uid}})" stroke="#060607" stroke-width="0.8"/>
   <path d="M${PLUG.x + 4} ${PLUG.y + 4} l2 -2.6 l2 2.6 z" fill="#e8e9eb"/>
   ${text(CX, PLUG.y + 11, s.model, 4.2, '#e6e7e9', 'middle', 'bold')}
@@ -132,7 +141,7 @@ export function buildPioCable(s: PioCableSpec): DeviceDefinition {
       connector: { kind: s.kind, pins: s.poles, width: n2(PLUG.w) },
     },
     ...s.leads.map((l, i): TerminalDef => {
-      const c = leadColor(l.colorIndex);
+      const c = colorOf(l);
       return {
         id: l.id,
         label: l.label ?? [l.id, colorName(c)].filter(Boolean).join(' '),

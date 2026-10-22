@@ -7,7 +7,7 @@
  * 1. 機器定義の schematic.elements（明示した要素）
  * 2. 電磁接触器・リレーのコイル（受電端子がちょうど 2 つ）
  * 3. 保護の経路（遮断器の極、サーマルリレーの熱動素子）と、電磁接触器の主接点。極をまとめて 1 要素
- * 4. a 接点・b 接点（経路ごとに 1 要素）
+ * 4. c 接点（共通の端子から b 接点と a 接点が出る組）、a 接点・b 接点（経路ごとに 1 要素）
  * 5. PLC の出力点・入力点（1 点ごとに 1 要素）
  * 6. 端子台の端子（常時導通の経路でつながった端子の組ごと）
  * 7. 接地端子
@@ -168,8 +168,28 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
     }
   }
 
-  // 4. a 接点・b 接点
+  // 4. c 接点（共通の端子を持つ b 接点と a 接点の組）、a 接点・b 接点
   const actuator = hint.actuator ?? (thermal ? 'thermal' : undefined);
+  for (const nc of r.links) {
+    if (nc.switch !== 'NC' || !free(nc.from) || !free(nc.to)) continue;
+    for (const no of r.links) {
+      if (no.switch !== 'NO' || !free(no.from) || !free(no.to)) continue;
+      const com = [nc.from, nc.to].find((t) => t === no.from || t === no.to);
+      if (!com) continue;
+      const b = nc.from === com ? nc.to : nc.from;
+      const a = no.from === com ? no.to : no.from;
+      if (a === b) continue;
+      add({
+        key: `${com}-${b}-${a}`,
+        kind: 'contact',
+        name: `c 接点 ${com}-${b}/${a}`,
+        symbol: contactSymbolId('C', actuator),
+        pinOf: { [com]: '1', [b]: '2', [a]: '3' },
+        attributes: { T1: pinNumber(com), T2: pinNumber(b), T3: pinNumber(a) },
+      });
+      break;
+    }
+  }
   for (const l of r.links) {
     if ((l.switch !== 'NO' && l.switch !== 'NC') || !free(l.from) || !free(l.to)) continue;
     add(twoPin('contact', contactSymbolId(l.switch, actuator), l.switch === 'NO' ? 'a 接点' : 'b 接点', l.from, l.to));

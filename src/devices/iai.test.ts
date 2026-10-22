@@ -319,3 +319,145 @@ describe('IAI のケーブル・コネクター', () => {
     expect(paramsWithDefaults(def('iai.pcon-cb'), {}).io).toBe('NP');
   });
 });
+
+describe('アクチュエーター（ロボシリンダー・エレシリンダー）とコントローラーの接続', () => {
+  const on = (d: Diagram, id: string) => checkDiagram(d, lookup).filter((i) => i.devices.includes(id));
+
+  /** PCON-CB（電源・非常停止を配線済み）とアクチュエーターを 1 台ずつ、モーター・エンコーダー一体型ケーブルでつなぐ */
+  const pcon = (axType: string, axParams: ParamValues = {}, ctrl = 'iai.pcon-cb', ctrlParams: ParamValues = {}): Diagram => ({
+    devices: [
+      { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'C1', type: ctrl, x: 0, y: 0, params: ctrlParams },
+      { id: 'AX1', type: axType, x: 0, y: 0, params: axParams },
+    ],
+    wires: [
+      w('PSU1.+V1', 'C1.24V'),
+      w('PSU1.-V1', 'C1.0V'),
+      w('C1.MPO', 'C1.MPI'),
+      w('PSU1.+V1', 'C1.EMG-'),
+      cable('C1.MPG', 'AX1.MPG'),
+    ],
+  });
+
+  it('PCON-CB と RCP6（適応コントローラー P3）をケーブルでつなぐとエラーなし（スライダー・ロッドとも）', () => {
+    for (const t of ['iai.rcp6-sa', 'iai.rcp6-ra']) {
+      const d = pcon(t);
+      expect(errorsOf(d), t).toEqual([]);
+      expect(on(d, 'AX1'), t).toEqual([]);
+    }
+    // ブレーキ付きでも配線は変わらない
+    expect(errorsOf(pcon('iai.rcp6-sa', { brake: 'B' }))).toEqual([]);
+  });
+
+  it('RCP6 の高推力タイプ（SA8C・RA8C、P4）は PCON-CB にはつながらず、PCON-CFB にはつながる', () => {
+    expect(rulesOf(pcon('iai.rcp6-sa', { type: 'SA8C' }))).toContain('connector-mismatch');
+    expect(rulesOf(pcon('iai.rcp6-ra', { type: 'RA8C' }))).toContain('connector-mismatch');
+    expect(errorsOf(pcon('iai.rcp6-sa', { type: 'SA8C' }, 'iai.pcon-cfb'))).toEqual([]);
+    expect(rulesOf(pcon('iai.rcp6-sa', {}, 'iai.pcon-cfb'))).toContain('connector-mismatch');
+  });
+
+  it('適応コントローラーの違うアクチュエーターをつなぐと connector-mismatch（RCP6 → ACON-CB、RCA2 → PCON-CB、RCD → PCON-CB）', () => {
+    expect(rulesOf(pcon('iai.rcp6-sa', {}, 'iai.acon-cb'))).toContain('connector-mismatch');
+    expect(rulesOf(pcon('iai.rca2-rn'))).toContain('connector-mismatch');
+    expect(rulesOf(pcon('iai.rcd-ra1da'))).toContain('connector-mismatch');
+    expect(errorsOf(pcon('iai.rca2-rn', {}, 'iai.acon-cb'))).toEqual([]);
+    expect(errorsOf(pcon('iai.rcd-ra1da', {}, 'iai.dcon-cb'))).toEqual([]);
+  });
+
+  it('コネクターの種類の対応: RCP6 P3 は MSEL（PC）・MCON、P5 は RCON-PC、P6 は RCON-PCF、RCA2 A6 は RCON-AC、RCD D6 は RCON-DC', () => {
+    const conn = (type: string, params: ParamValues, id: string) => resolveDevice(def(type), params).terminal(id)!.connector!;
+    const mate = (a: [string, ParamValues, string], b: [string, ParamValues, string]) => connectorsMate(conn(...a), conn(...b));
+    expect(mate(['iai.rcp6-sa', {}, 'MPG'], ['iai.msel', {}, 'MPG1'])).toBe(true);
+    expect(mate(['iai.rcp6-sa', {}, 'MPG'], ['iai.msel', { model: 'PCF' }, 'MPG1'])).toBe(false);
+    expect(mate(['iai.rcp6-sa', { type: 'SA8C' }, 'MPG'], ['iai.msel', { model: 'PGF' }, 'MPG1'])).toBe(true);
+    expect(mate(['iai.rcp6-sa', {}, 'MPG'], ['iai.mcon-c', {}, 'AX0'])).toBe(true);
+    expect(mate(['iai.rcp6-sa', {}, 'MPG'], ['iai.pcon-cyb', {}, 'MPG'])).toBe(true);
+    expect(mate(['iai.rcp6-sa', { ctrl: 'rcon' }, 'MPG'], ['iai.rcon-pc', {}, 'MPG1'])).toBe(true);
+    expect(mate(['iai.rcp6-sa', { ctrl: 'rcon' }, 'MPG'], ['iai.pcon-cb', {}, 'MPG'])).toBe(false);
+    expect(mate(['iai.rcp6-ra', { type: 'RA8C', ctrl: 'rcon' }, 'MPG'], ['iai.rcon-pc', { model: 'RCON-PCF-1' }, 'MPG1'])).toBe(true);
+    expect(mate(['iai.rcp6-ra', { ctrl: 'rcon' }, 'MPG'], ['iai.rcon-pc', { model: 'RCON-PCF-1' }, 'MPG1'])).toBe(false);
+    expect(mate(['iai.rca2-rn', {}, 'MPG'], ['iai.acon-cyb', {}, 'MPG'])).toBe(true);
+    expect(mate(['iai.rca2-rn', { ctrl: 'A6' }, 'MPG'], ['iai.rcon-ac', {}, 'MPG1'])).toBe(true);
+    expect(mate(['iai.rcd-ra1da', { ctrl: 'D6' }, 'MPG'], ['iai.rcon-dc', {}, 'MPG1'])).toBe(true);
+    // RCON-PC の端子ID はモデルを変えても同じ
+    expect(resolveDevice(def('iai.rcon-pc'), { model: 'RCON-PCF-1' }).terminal('MPG1')).toBeDefined();
+  });
+
+  /** SCON-CB（または SCON2）と RCS4 をモーターケーブル・エンコーダーケーブルでつなぐ。bk: ブレーキ電源を配線するか */
+  const scon = (axParams: ParamValues, bk: boolean, ctrl = 'iai.scon-cb'): Diagram => ({
+    devices: [
+      { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'C1', type: ctrl, x: 0, y: 0 },
+      { id: 'AX1', type: 'iai.rcs4-sa', x: 0, y: 0, params: axParams },
+    ],
+    wires: [
+      cable('C1.MOT', 'AX1.MOT'),
+      cable('C1.PG', 'AX1.PG'),
+      ...(bk ? [w('PSU1.+V1', 'C1.BK+'), w('PSU1.-V1', ctrl === 'iai.scon-cb' ? 'C1.PWR-' : 'C1.BK-')] : []),
+    ],
+  });
+
+  it('RCS4（T2）は SCON-CB の MOT・PG につながり、T4 は SCON2 につながる（逆は connector-mismatch）', () => {
+    expect(on(scon({}, false), 'AX1')).toEqual([]);
+    expect(rulesOf(scon({ ctrl: 'T4' }, false))).toContain('connector-mismatch');
+    expect(on(scon({ ctrl: 'T4' }, false, 'iai.scon2'), 'AX1')).toEqual([]);
+    expect(rulesOf(scon({}, false, 'iai.scon2'))).toContain('connector-mismatch');
+  });
+
+  it('ブレーキ付きの RCS4 は、コントローラーのブレーキ電源（BK+）を配線しないと「電源が来ていません」', () => {
+    expect(on(scon({ brake: 'B' }, false), 'AX1').map((i) => i.rule)).toContain('no-power');
+    expect(on(scon({ brake: 'B' }, true), 'AX1')).toEqual([]);
+    expect(on(scon({ brake: 'B', ctrl: 'T4' }, false, 'iai.scon2'), 'AX1').map((i) => i.rule)).toContain('no-power');
+    expect(on(scon({ brake: 'B', ctrl: 'T4' }, true, 'iai.scon2'), 'AX1')).toEqual([]);
+  });
+
+  it('RCS4（T2）は XSEL-RA の M1・PG1 にもつながり、ブレーキ電源（BK PWR）の有無が同じようにチェックされる', () => {
+    const d = (bk: boolean): Diagram => ({
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+        { id: 'C1', type: 'iai.xsel-ra', x: 0, y: 0 },
+        { id: 'AX1', type: 'iai.rcs4-sa', x: 0, y: 0, params: { brake: 'B' } },
+      ],
+      wires: [cable('C1.M1', 'AX1.MOT'), cable('C1.PG1', 'AX1.PG'), ...(bk ? [w('PSU1.+V1', 'C1.BK+'), w('PSU1.-V1', 'C1.BK-')] : [])],
+    });
+    expect(rulesOf(d(true))).not.toContain('connector-mismatch');
+    expect(on(d(true), 'AX1')).toEqual([]);
+    expect(on(d(false), 'AX1').map((i) => i.rule)).toContain('no-power');
+  });
+
+  /** KEYENCE KV-C32TC（NPN 出力）→ MIL 34極 変換端子台 → 電源・I/O ケーブル CB-EC-PWBIO → エレシリンダー EC-S6 */
+  const ec = (ecParams: ParamValues = {}): Diagram => ({
+    devices: [
+      { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 0, y: 0 },
+      { id: 'TB1', type: 'generic.mil-terminal-block.34p', x: 0, y: 0 },
+      { id: 'CBL1', type: 'iai.cb-ec-pwbio', x: 0, y: 0 },
+      { id: 'EC1', type: 'iai.ec-s6', x: 0, y: 0, params: ecParams },
+    ],
+    wires: [
+      cable('OUT1.CN1', 'TB1.CN'),
+      cable('EC1.PWRIO', 'CBL1.CN'),
+      w('PSU1.-V1', 'TB1.33'),
+      w('PSU1.+V2', 'CBL1.B1'),
+      w('PSU1.-V2', 'CBL1.A1'),
+      // PLC の出力 R200 → ST1（前進）
+      w('TB1.1', 'CBL1.B4'),
+    ],
+  });
+
+  it('エレシリンダー（NPN 仕様）の ST1 を PLC の NPN 出力で駆動するとエラーなし、PNP 仕様だと極性エラー', () => {
+    const d = ec();
+    expect(errorsOf(d)).toEqual([]);
+    expect(rulesOf(d)).not.toContain('signal-polarity');
+    expect(errorsOf(ec({ io: 'PN' })).map((i) => i.rule)).toContain('signal-polarity');
+  });
+
+  it('エレシリンダーの電源（B1）に 0V をつなぐと極性エラー、RCON-EC 接続仕様（ACR）は RCON-EC につながる', () => {
+    const d = ec();
+    d.wires = d.wires.map((x) => (x.to.device === 'CBL1' && x.to.terminal === 'B1' ? { ...x, from: { device: 'PSU1', terminal: '-V2' } } : x));
+    expect(errorsOf(d).map((i) => i.rule)).toContain('conductor-mismatch');
+    const acr = resolveDevice(def('iai.ec-s6'), { io: 'ACR' }).terminal('PWRIO')!.connector!;
+    expect(connectorsMate(acr, resolveDevice(def('iai.rcon-ec')).terminal('EC1')!.connector!)).toBe(true);
+    expect(connectorsMate(acr, resolveDevice(def('iai.cb-ec-pwbio')).terminal('CN')!.connector!)).toBe(false);
+  });
+});
