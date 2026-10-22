@@ -53,8 +53,8 @@ describe('三菱電機 機器定義', () => {
     for (const c of r.commonLimits) {
       expect(r.links.some((l) => l.switch === 'output' && l.to === c.common), `commonLimits ${c.common}`).toBe(true);
     }
-    // DC 入力点のコモンは受電端子（+/− 共用）
-    for (const t of all.filter((x) => x.signal?.dir === 'in')) {
+    // PLC の DC 入力点のコモンは受電端子（+/− 共用）。インバーターなどの無電圧接点入力・アナログ入力は対象外
+    for (const t of all.filter((x) => d.category === 'plc' && x.signal?.dir === 'in')) {
       expect(t.signal?.kind).toBe('dc');
       const com = byId.get(t.signal!.common!);
       expect(com?.role, `${t.id} のコモン`).toBe('input');
