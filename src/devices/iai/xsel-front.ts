@@ -1,3 +1,4 @@
+import { controllerEncoderPins } from './actuator';
 import { fieldbusBlock, IO_TYPE_LABELS, type IoType } from './fieldbus';
 import {
   dsub9V,
@@ -193,7 +194,17 @@ const terminalsOf = (spec: XselFrontSpec) => (p: ParamValues): TerminalDef[] => 
     const pg = PG(i);
     const m = MOT(i);
     ts.push(
-      { id: `PG${i + 1}`, label: `PG${i + 1}（${i + 1} 軸目 エンコーダー）`, note: 'アクチュエーターのエンコーダーケーブル', x: pg.x, y: pg.y, side: 'left', role: 'connector', connector: { kind: 'IAI-XSEL-PG', pins: 0, width: 50, length: 16, facing: 'front' }, optional: true },
+      {
+        id: `PG${i + 1}`,
+        label: `PG${i + 1}（${i + 1} 軸目 エンコーダー）`,
+        note: 'アクチュエーターのエンコーダーケーブル（26 ピン）。ピン 21 BK+・20 BK− はブレーキ付きアクチュエーターのブレーキ電源（BK PWR から出る）',
+        x: pg.x,
+        y: pg.y,
+        side: 'left',
+        role: 'connector',
+        connector: { kind: 'IAI-XSEL-PG', pins: 26, width: 50, length: 16, facing: 'front', style: 'lan' },
+        optional: true,
+      },
       { id: `M${i + 1}`, label: `M${i + 1}（${i + 1} 軸目 モーター PE/U/V/W）`, note: 'アクチュエーターのモーターケーブル', x: n2(m.x - 7), y: m.y, side: 'left', role: 'connector', connector: { kind: 'IAI-XSEL-MOT', pins: 0, width: 62, length: 16, facing: 'front' }, optional: true },
     );
   }
@@ -220,10 +231,20 @@ const terminalsOf = (spec: XselFrontSpec) => (p: ParamValues): TerminalDef[] => 
   return ts;
 };
 
-const pins = (p: ParamValues): PinDef[] => [...xselBoardPins('I/O1', board(p, 'io1'), 1).pins, ...xselBoardPins('I/O2', board(p, 'io2'), 2).pins];
+const pins = (p: ParamValues): PinDef[] => [
+  // エンコーダーコネクター（PG1〜）の 26 ピン。20 BK−・21 BK+ がブレーキの電源
+  ...Array.from({ length: axesOf(p) }, (_, i) => controllerEncoderPins(`PG${i + 1}`)).flat(),
+  ...xselBoardPins('I/O1', board(p, 'io1'), 1).pins,
+  ...xselBoardPins('I/O2', board(p, 'io2'), 2).pins,
+];
 
 const linksOf = (spec: XselFrontSpec) => (p: ParamValues): InternalLink[] => [
   { from: 'PE', to: 'FG' },
+  // ブレーキ電源（BK PWR）から各軸のエンコーダーコネクターのブレーキ開放出力（21 BK+・20 BK−）へ。ブレーキ解除中（運転中）は導通しているものとして扱う
+  ...Array.from({ length: axesOf(p) }, (_, i): InternalLink[] => [
+    { from: 'BK+', to: `PG${i + 1}#21`, directed: true },
+    { from: 'BK-', to: `PG${i + 1}#20` },
+  ]).flat(),
   ...sys(spec, p).links,
   ...xselBoardPins('I/O1', board(p, 'io1'), 1).links,
   ...xselBoardPins('I/O2', board(p, 'io2'), 2).links,

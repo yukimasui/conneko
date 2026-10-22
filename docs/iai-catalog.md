@@ -1,7 +1,7 @@
 # IAI（アイエイアイ）機器の調査と実装状況
 
-IAI のロボシリンダー・単軸ロボット用コントローラーと、その配線に使うケーブル・電源の調査結果と Conneko での実装状況をまとめる。
-調査は 2026-10 時点の IAI 公式サイトで公開されている総合カタログ（CJ9005）と各製品の取扱説明書（PDF）による。
+IAI のロボシリンダー・単軸ロボット用コントローラーと、その配線に使うケーブル・電源、コントローラーにつなぐアクチュエーター本体の調査結果と Conneko での実装状況をまとめる。
+調査は 2026-10 時点の IAI 公式サイトで公開されている総合カタログ（CJ9005。アクチュエーターは 2026 年版の CJ9006 第 3・4・8 巻）と各製品の取扱説明書（PDF）による。
 資料で確かめられなかった点は「推定」と書いた。
 
 - 機器定義: `src/devices/catalog/iai-*.ts`（1 機器 1 ファイル）と `generic-mil-terminal-block-50p.ts`
@@ -16,9 +16,12 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
   - `psel.ts` PSEL / ASEL の共通の作り
   - `pio-cable.ts` 片側バラ線の PIO ケーブル（IAI の 10 色＋ドットマーク）
   - `psa24.ts` 電源 PSA-24
+  - `actuator.ts` アクチュエーター本体の描画部品（スライダー・ロッド・ケーブルジョイントコネクター）、コネクターの種類の対応、
+    AC サーボのエンコーダーコネクター（26 ピン）のピン定義（コントローラー側・アクチュエーター側）
+  - `ec.ts` エレシリンダーの電源・I/O コネクター（12 ピン）のピン・出力の内部経路と CB-EC-PWBIO の線色
 - 整合性・電気チェックのテスト: `src/devices/iai.test.ts`
 
-## 実装済みの機器（IAI 38 定義＋汎用 1）
+## 実装済みの機器（IAI 45 定義＋汎用 1）
 
 | type | 型式 | 分類（category） | 主な出典 |
 |---|---|---|---|
@@ -69,11 +72,20 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 | `iai.cb-x-pio` | CB-X-PIO（MIL 50 極、片側バラ線） | terminal | MJ0359 |
 | `iai.cb-ds-pio` | CB-DS-PIO（PSEL/ASEL 用 34 極、片側バラ線） | terminal | MJ0172 |
 | `iai.cb-sc-sto` | CB-SC-STO（SCON-CB の STO 用） | terminal | MJ0340 |
+| `iai.cb-ec-pwbio` | CB-EC-PWBIO（エレシリンダーの電源・I/O、片側バラ線） | terminal | MJ3816 |
+| **アクチュエーター（ロボシリンダー）** | | | |
+| `iai.rcp6-sa` | RCP6-SA4C/SA6C/SA7C/SA8C（スライダー、パルスモーター） | load | CJ9006 第 3 巻、MJ3749 |
+| `iai.rcp6-ra` | RCP6-RA4C/RA6C/RA7C/RA8C（ロッド、パルスモーター） | load | CJ9006 第 4 巻、MJ3751 |
+| `iai.rca2-rn` | RCA2-RN3NA/RN4NA（細小型ロッド、24V AC サーボ） | load | CJ9006 第 4 巻、MJ3671 |
+| `iai.rcd-ra1da` | RCD-RA1DA（ミニシリンダー、DC ブラシレス） | load | CJ9006 第 4 巻、MJ3721 |
+| `iai.rcs4-sa` | RCS4-SA4C/SA6C/SA7C/SA8C（スライダー、200V AC サーボ） | load | CJ9006 第 3 巻、MJ3769 |
+| **エレシリンダー（コントローラー内蔵）** | | | |
+| `iai.ec-s6` | EC-S6/S7（スライダー、パルスモーター） | load | MJ3793、MJ3816 |
 | **汎用** | | | |
 | `generic.mil-terminal-block.50p` | MIL 50 極 変換端子台 | terminal | XSEL の PIO ボード用 |
 
 系列ごとの数: CB 世代ポジショナー 4、CA 世代 4、CYB 3、AC サーボポジショナー 2、多軸ポジショナー 1、R-unit 11（RSEL を含む）、
-プログラムコントローラー 6、電源 2、ケーブル 5、汎用 1。
+プログラムコントローラー 6、電源 2、ケーブル 6、アクチュエーター 5、エレシリンダー 1、汎用 1。
 
 ## 共通の方針
 
@@ -84,6 +96,7 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 - **プログラムコントローラー（MSEL・XSEL・PSEL・ASEL・RSEL）は `plc`**。自分の入出力ポート（入力 000〜、出力 300〜）を持ち、
   センサー・電磁弁を直接つなぐ「小さな PLC」として使われるため。ピンのラベルは `IN000（5A）`・`OUT300（1B）` のようにポート番号を先に書く。
 - ケーブル・変換端子台は `terminal`、PSA-24 は `power-supply`。
+- **アクチュエーター本体（ロボシリンダー）・エレシリンダーは `load`**（モーターと同じ現場側の負荷）。
 
 ### PIO（パラレル I/O）
 
@@ -121,6 +134,42 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
   ループに a 接点（例: 電磁接触器の 13-14）を入れると `estop-not-nc` の注意になる（テストあり）。
 - SCON-CB の STO 仕様・SCON2・RCON-SC の STO（/SRI1+・/SRI2+）は 2 チャンネルの安全入力。CB-SC-STO を通して安全コントローラーの OSSD 2 本をつなぐとエラーなし、片側だけだと `safety-channel-partial`（テストあり）。
 
+### アクチュエーターとコントローラーの接続
+
+- アクチュエーターは、モーター側から出るコネクター（RCP6 は端面のコネクター、RCA2・RCD・RCS4 はケーブルの先のケーブルジョイントコネクター）を
+  コネクター端子（`role: 'connector'`）にし、コントローラーの MPG（RCS4 は MOT と PG）とケーブルでつなぐ。専用ケーブル（CB-CAN-MPA など）は機器にせず、
+  ケーブル（電線）の種類として扱う（両端のコネクターの形は違うが、Conneko では「専用ケーブルでつながる組み合わせ」を connector.kind で表す）。
+- どのコントローラーにつながるかは、アクチュエーターの型式の「適応コントローラー」の記号で決まる。パラメーター `ctrl` で選び、connector.kind を切り替える。
+
+| アクチュエーター | 適応コントローラー（記号） | connector.kind（mates） | 専用ケーブル |
+|---|---|---|---|
+| RCP6（35P/42P/56P） | P3: PCON-CB/CGB・PCON-CYB・MSEL・MCON | `IAI-RCP-MPG`（`IAI-MCON-MOT`） | CB-CAN-MPA |
+| RCP6（35P/42P/56P） | P5: RCON・RSEL（RCON-PC） | `IAI-RCON-MPG` | CB-ADPC-MPA |
+| RCP6 高推力（SA8C 56SP・RA8C 60P） | P4: PCON-CFB/CGFB・MSEL-PCF/PGF | `IAI-RCP-MPG-CFB` | CB-CFA3-MPA |
+| RCP6 高推力 | P6: RCON-PCF・RSEL | `IAI-RCON-MPG-PCF` | CB-ADPC-MPA＋変換ケーブル CB-CAN-AJ002 |
+| RCA2-RN | A3/A5: ACON-CYB・ACON-CB/CGB（ACON-CA・MCON） | `IAI-RCA-MPG`（`IAI-MCON-MOT`） | CB-APSEP-MPA（CNS 仕様は CB-CAN-MPA） |
+| RCA2-RN | A6: RCON・RSEL（RCON-AC） | `IAI-RCON-MPG-AC` | CB-RCAPC-MPA（CNS 仕様は CB-ADPC-MPA） |
+| RCD-RA1DA | D5: DCON-CB/CGB・DCON-CYB（DCON-CA・MCON） | `IAI-RCD-MPG`（`IAI-MCON-MOT`） | CB-CAN-MPA |
+| RCD-RA1DA | D6: RCON・RSEL（RCON-DC） | `IAI-RCON-MPG-DC` | CB-ADPC-MPA |
+| RCS4 モーター | T2: SCON-CB・XSEL-RA/SA・XSEL-P/Q（MSCON・SSEL） | `IAI-SCON-MOT`（`IAI-XSEL-MOT`） | CB-RCC-MA |
+| RCS4 モーター | T4: SCON2・RCON（RCON-SC）・RSEL・XSEL2 | `IAI-SCON2-MOT`（`IAI-XSEL2-MOT`） | CB-RCC1-MA |
+| RCS4 エンコーダー | T2・T4 共通 | `IAI-SCON-PG`（`IAI-XSEL-PG`）、26 ピン | CB-X1-PA |
+| EC-S6/S7 | PIO（NPN / PNP） | `IAI-EC-PWRIO`、12 ピン（CB-EC-PWBIO とだけつながる） | CB-EC-PWBIO |
+| EC-S6/S7 | ACR: RCON-EC | `IAI-EC13` | CB-REC-PWBIO |
+
+- 合わせて変えたコントローラー（端子ID は変えていない）:
+  - MSEL の MPG1〜4 は、PCF/PGF タイプ（高推力モーター対応）のとき `IAI-RCP-MPG-CFB`（PCON-CFB と同じ。P4）にした。
+  - RCON-PC の RCON-PCF-1 の MPG1 を `IAI-RCON-MPG-PCF`（P6）にした（`Rcon24Spec.models[].motorKind`）。
+  - SCON-CB・SCON2・XSEL-RA/SA・XSEL-P/Q・XSEL2 のエンコーダーコネクター（PG、PG1〜）を 26 ピンにし（`style: 'lan'` で描き方は従来どおり）、
+    ピン 21 BK+・20 BK− をブレーキ電源の端子（SCON-CB は BK+・PWR−、ほかは BK+・BK−）から内部経路でつないだ
+    （各取扱説明書の「エンコーダーコネクター」: 20 BK− ブレーキ開放出力信号−（全軸共通）、21 BK+ ブレーキ開放出力信号+）。
+- **ブレーキ**: パルスモーター・24V サーボ（RCP6・RCA2）のブレーキは一体型ケーブルを通してコントローラーが駆動するので、ブレーキ付き（オプション B）でも配線は変わらない（パラメーター `brake` は銘板の表示だけ）。
+  200V AC サーボ（RCS4）のブレーキ付きは、エンコーダーケーブルのピン 21・20 をブレーキの受電にしたので、コントローラーのブレーキ電源を配線し忘れると `no-power`（テストあり）。
+  RCON-SC はブレーキ電源が連結で供給されるため、PG のピンを持たせず、チェックの対象外。
+- **エレシリンダー**: 電源・I/O コネクターのピン（A1 0V・B1 24V・B3 ST0・B4 ST1・B5 RES・A3 LS0・A4 LS1・A5 *ALM・B2 BKRLS）を PIO と同じ考え方で定義し
+  （入力は NPN 仕様でプラスコモン＝B1、PNP 仕様でマイナスコモン＝A1。出力は NPN が A1 へ、PNP が B1 から、50mA/点）、
+  片側バラ線の CB-EC-PWBIO で PLC の入出力へつなぐ。PLC の NPN 出力で PNP 仕様の EC を駆動すると `signal-polarity`（テストあり）。
+
 ### 電源
 
 - DC24V の受電は ±10%（21.6〜26.4V）。AC 入力は SCON-CB（100V/200V のパラメーター）、SCON2、XSEL（制御電源 単相・モーター電源 三相/単相）、RCON-PS2、MSEL（単相 AC100〜230V）。
@@ -143,14 +192,24 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 - **RCON**: PIO ユニットの幅（22.6mm）は推定。RCON-SC の STO 端子の配置は簡略化。
 - **CB-SC-STO**: 芯線の色は資料で確認できず灰色で描いた。
 - **PSEL / ASEL**: I/O コネクターの形式は推定（上記）。CS タイプは TP コネクターの形式違いとして扱った。
+- **アクチュエーターの外形**: 盤外の機器なので、長さ方向を縮めて描いた（ストロークは代表的な長さ、ケーブルは短く）。幅・本体径・ロッド径はカタログの値に比例させた。
+  RCD-RA1DA は小さいので大きめに描いた。
+- **適応コントローラーの記号**: RCA2 の A3（ACON-CYB）と A5（ACON-CB）は同じコネクターの種類として扱った（Conneko の ACON-CB・ACON-CYB は同じ `IAI-RCA-MPG`）。
+  RCP6 の P3 / P5 などは 1 つのパラメーターで選び、高推力タイプ（SA8C・RA8C）では自動的に P4 / P6 になる。
+- **ケーブルのピン番号**: 専用ケーブルは両端のコネクターでピン番号が違う（CB-X1-PA はコントローラー側 21 BK+ がアクチュエーター側 9）。
+  Conneko のケーブルは同じ番号のピンどうしをつなぐため、アクチュエーター側のピンもコントローラー側の番号で定義した。
+- **EC の電源 2 系統仕様（TMD2）の PNP 出力**: 出力がどちらの 24V から出るかは確かめられず、B1 とした（推定。TMD2＋PNP のときだけ端子の説明に書く）。
 
 ## 未実装と理由
 
 - **MSCON**（AC サーボ多軸ポジショナー）・**SSEL**（AC サーボ 2 軸プログラムコントローラー、旧製品）: 取扱説明書は確認したが、今回は時間の都合で見送った。
   MSCON は MCON-C と似た作り（スロット・電源・システム I/O）で、AC 入力に替えれば追加しやすい。
-- **ERC2/ERC3・EC シリーズ（エレシリンダー）**: コントローラー一体型のアクチュエーターで、Conneko の分類ではアクチュエーター（現場機器）側になるため対象外とした（REC-GW の連結相手としても未定義）。
+- **エレシリンダー**: EC-S6/S7（スライダー、パルスモーター）だけを定義した。ほかの形（ロッド EC-R・グリッパー・ロータリー、200V AC サーボの EC-S□□）、
+  デジタルスピコン付き（EC-DS）、無線通信仕様、3 ポジション切替仕様（MF）、旧製品の ERC2/ERC3 は未定義。
+- **アクチュエーター本体**: RCP6（スライダー・ロッド）、RCA2-RN、RCD-RA1DA、RCS4（スライダー）だけ。RCP5/RCP4/RCP3/RCP2・RCA・RCS3/RCS2・単軸ロボット（ISB・NSA など）・
+  直交ロボット・ブレーキボックスが必要な機種（RCS2-RA13R など）は未定義。PSEL / ASEL（`IAI-PSEL-*`・`IAI-ASEL-*`）につながるアクチュエーターもない。
+- **専用ケーブル（CB-CAN-MPA・CB-RCC-MA・CB-X1-PA など）**: 機器にはせず、コネクターどうしをつなぐケーブル（電線）として扱った。中継の延長ケーブル・変換ケーブル（CB-CAN-AJ002）も機器にはしていない。
 - **ティーチングボックス・パソコンケーブル・ダミープラグ・アブソバッテリーボックス・回生抵抗ユニット**: 配線図の主題から外れるため、コネクター端子（`optional`）だけを用意した。
-- **アクチュエーター本体・モーター/エンコーダーケーブル**: 機器としては未定義。コントローラーの MPG・PG・M コネクターは相手のない `optional` のコネクター端子。
 
 ## 機器定義では表せていないこと（コアへの提案）
 
@@ -166,6 +225,12 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
    提案: `commonLimits` に「出力ピンの組 → 上限電流」の形を足す。
 6. **bus のレールで電位（24V の有無）を伝えられない**。R-unit のドライバーの MPO は連結バスで来るモーター電源だが、バスは電流の合計しか扱わないため、MPO を独立の供給端子として描いた。
    提案: bus のレールに `supply` 相当の電位情報を持たせ、連結したユニットの端子にネットとして渡す。
+7. **コネクター端子の未接続を警告できない**。未接続の検査（`checkUnconnected`）は `role: 'connector'` を飛ばすため、アクチュエーターのモーター・エンコーダーコネクターを
+   コントローラーにつなぎ忘れても指摘されない（ピンの受電端子を `optional: false` にすると、ピン数の違うコネクターや RCON-EC のようなピンのない相手で誤った指摘になる）。
+   提案: `ConnectorSpec.required?: true` を足し、ケーブルがつながっていなければ `unconnected` を出す。
+8. **ケーブルの両端でピン番号が違うことを書けない**。専用ケーブルはコントローラー側とアクチュエーター側でピン番号が違う（CB-X1-PA は 21 → 9 など）。
+   提案: 両端のコネクターの kind の組ごとのピンの対応表（`cableMaps: { [kindA|kindB]: { 21: 9, ... } }`）か、ケーブルを機器にしたときにコネクター 2 つを内部経路でつなぐ書き方の例を用意する。
+9. **パラメーターの選択肢を別のパラメーターで変えられない**。RCP6 の適応コントローラーは、標準タイプが P3/P5、高推力タイプが P4/P6 だが、選択肢を型式（タイプ）で切り替えられないため、1 つの選択肢にまとめた。
 
 ## 調査で使った主な資料
 
@@ -173,5 +238,9 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 - 取扱説明書: MJ0342（PCON-CB/CFB）、MJ0343（ACON-CB/DCON-CB）、MJ0289（PCON-CA/CFA）、MJ0326（ACON-CA/DCON-CA）、MJ0353（PCON-CYB/PLB/POB）、
   MJ0354（ACON/DCON-CYB/PLB/POB）、MJ0340（SCON-CB/CGB）、MJ0458（SCON2）、MJ0341（MCON-C/CG）、MJ0384（RCON）、MJ0394（REC）、MJ0392（RSEL）、
   MJ0336（MSEL）、MJ0359（XSEL-RA/SA/RAX/SAX）、MJ0148（XSEL-P/Q）、MJ0478（XSEL2）、MJ0172（PSEL）、MJ0165（ASEL）、MJ0379（PSA-24）
+- アクチュエーター: 総合カタログ CJ9006（2026 年版）第 3 巻「スライダー」（RCP6-SA・RCS4-SA）・第 4 巻「ロッド」（RCP6-RA・RCA2-RN・RCD-RA1DA）・
+  第 8 巻「コントローラー」の各コントローラーの「メンテナンス部品（ケーブル）」（ケーブル対応表）。
+  取扱説明書: MJ3749（RCP6 スライダー）、MJ3751（RCP6 ロッド）、MJ3769（RCS4 スライダー）、MJ3671（RCA2 細小型ロッド）、MJ3721（RCD ミニシリンダー）、
+  MJ3793（エレシリンダー スライダー）、MJ3816（エレシリンダー 電気編）。エンコーダーコネクターのピン: MJ0340（SCON-CB）、MJ0458（SCON2）、MJ0359（XSEL-RA/SA）、MJ0148（XSEL-P/Q）、MJ0478（XSEL2）
 - フィールドネットワーク取扱説明書: MJ0254（CC-Link）、MJ0389（CC-Link IE Field）、MJ0256（DeviceNet）、MJ0258（PROFIBUS-DP）、MJ0220（CompoNet）、
   MJ0221（MECHATROLINK）、MJ0317（MECHATROLINK-Ⅲ）、MJ0273（EtherCAT）、MJ0278（EtherNet/IP）、MJ0333（PROFINET IO）

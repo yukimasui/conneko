@@ -66,6 +66,8 @@ const axesOf = (p: ParamValues) => Math.max(1, Math.min(4, Number(p.axes ?? 4) |
 const extOf = (p: ParamValues) => String(p.ext ?? 'none') as IoType | 'none';
 const stdPolarity = (p: ParamValues): Polarity => (String(p.io ?? 'NP') === 'PN' ? 'pnp' : 'npn');
 const isG = (p: ParamValues) => String(p.model ?? 'PC').includes('G');
+/** 高推力モーター（56SP/60P/86P）対応タイプ（PCF / PGF） */
+const isF = (p: ParamValues) => String(p.model ?? 'PC').endsWith('F');
 
 const svg = (p: ParamValues) => {
   const ext = extOf(p);
@@ -160,12 +162,15 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     ts.push({
       id: `MPG${i + 1}`,
       label: `MPG${i + 1}（${i + 1} 軸目 モーター・エンコーダー）`,
-      note: 'ロボシリンダー（RCP6/RCP5/RCP4/RCP3/RCP2）のモーター・エンコーダー一体ケーブルをつなぐ',
+      note: isF(p)
+        ? '高推力パルスモーター（56SP/60P/86P）のロボシリンダー（適応コントローラー P4 の RCP6 など）のモーター・エンコーダー一体ケーブルをつなぐ'
+        : 'ロボシリンダー（RCP6/RCP5/RCP4/RCP3/RCP2）のモーター・エンコーダー一体ケーブルをつなぐ',
       x: n2(m.x + m.w / 4),
       y: n2(m.y + m.h / 2),
       side: 'left',
       role: 'connector',
-      connector: { kind: 'IAI-RCP-MPG', pins: 0, width: m.h, length: 14, facing: 'front' },
+      // PCF / PGF（高推力モーター対応）は PCON-CFB と同じ種類（RCP6 の適応コントローラー P4）
+      connector: { kind: isF(p) ? 'IAI-RCP-MPG-CFB' : 'IAI-RCP-MPG', pins: 0, width: m.h, length: 14, facing: 'front' },
       optional: true,
     });
   }
@@ -231,6 +236,7 @@ const def: DeviceDefinition = {
     '電源: L・N に単相 AC100〜230V ±10%（電源電流 2.9A @AC100V / 1.4A @AC200V）、PE を接地。' +
     'システム I/O: EMGOUT（内蔵 24V）→ 非常停止スイッチの b 接点 → EMGIN、ENBOUT → イネーブルスイッチ → ENBIN（出荷時は短絡線で EMGOUT-EMGS1+、EMGS1-‐EMGIN、ENBOUT-ENBS1+、ENBS1-‐ENBIN を接続）。' +
     'PG/PGF タイプ（安全カテゴリー対応）は外部に駆動源遮断回路を設け、MPO-MPI 間に接触器の接点を入れる（通常は MPO-MPI を短絡）。' +
+    'MPG1〜4 には、PC/PG タイプは適応コントローラー P3 の RCP6 など、PCF/PGF タイプは高推力モーター（56SP/60P/86P）の P4 のアクチュエーターをつなぐ（PCON-CFB と同じ種類のコネクターとして扱う）。' +
     '標準 I/O（I/O1）: 40 極 HIF6、入力 16 点（ポート 000〜015）・出力 16 点（ポート 300〜315、100mA/点・8 点で 400mA）。NPN / PNP は型式で選ぶ。1A・2A に +24V、19B・20B に 0V。PIO ケーブル CB-PAC-PIO で配線する。' +
     '拡張 I/O（I/O2）: 拡張 PIO（ポート 016〜031 / 316〜331）または DeviceNet・CC-Link・PROFIBUS-DP・EtherNet/IP・EtherCAT・PROFINET IO。',
   labelPrefix: 'MSEL',
