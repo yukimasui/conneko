@@ -82,6 +82,8 @@ export interface SchematicText {
 export interface SchematicSheetOut {
   id: string;
   name: string;
+  /** 元になった展開図のシートの ID（端子台接続図は 1 枚のシートから複数のページになる）。DXF には書かない */
+  source?: string;
   /** 用紙の大きさ[mm] */
   paper: { width: number; height: number };
   inserts: SchematicInsert[];

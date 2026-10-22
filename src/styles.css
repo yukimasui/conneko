@@ -1974,3 +1974,6 @@ textarea {
   min-width: 0;
   overflow-x: hidden;
 }
+.schem-paper--more {
+  margin-top: 16px;
+}

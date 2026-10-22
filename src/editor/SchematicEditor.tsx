@@ -98,7 +98,7 @@ export function SchematicEditor(props: Props) {
   const place = useCallback(
     (element: string, at?: { x: number; y: number }) => {
       const e = build.byId.get(element);
-      if (!e || !current) return;
+      if (!e || !current || current.kind === 'terminal') return;
       onChange((s) => placeElement(s, current.id, element, at ?? nextPosition(current, e, paper, build.byId)));
       setSelected(element);
     },
@@ -220,6 +220,12 @@ export function SchematicEditor(props: Props) {
               sheet={current}
               onChange={onChange}
               onExport={props.onExport}
+              onAddTerminalSheet={() => {
+                const ns = newSchematicSheet(schematic);
+                onChange((s) => ({ ...s, sheets: [...s.sheets, { ...ns, name: '端子台接続図', kind: 'terminal' }] }));
+                setSelected(null);
+                props.onSheet(ns.id);
+              }}
               onAuto={() => {
                 const r = autoLayout(build, schematic, current.id, paper);
                 if (r.placed) onChange(() => r.schematic);
@@ -321,7 +327,9 @@ function SheetCanvas(props: {
   const svg = useRef<SVGSVGElement>(null);
   const [zoom, setZoom] = useState(3);
   const drag = useRef<{ element: string; start: Point; origin: Point } | null>(null);
-  const out = props.build.doc.sheets.find((s) => s.id === props.sheetId);
+  // 端子台接続図は 1 枚のシートが複数のページになる（2 ページ目からは表示だけ）
+  const pages = props.build.doc.sheets.filter((s) => (s.source ?? s.id) === props.sheetId);
+  const out = pages[0];
 
   const fit = useCallback(() => {
     const el = view.current;
@@ -355,6 +363,7 @@ function SheetCanvas(props: {
   });
 
   const body = useMemo(() => (out ? sheetSvgBody(props.build.doc, out) : ''), [props.build, out]);
+  const rest = useMemo(() => pages.slice(1).map((p) => ({ id: p.id, body: sheetSvgBody(props.build.doc, p) })), [props.build, pages]);
   if (!out) return null;
 
   return (
@@ -429,6 +438,12 @@ function SheetCanvas(props: {
             );
           })}
         </svg>
+        {rest.map((p) => (
+          <svg key={p.id} className="schem-paper schem-paper--more" viewBox={`0 0 ${W} ${H}`} style={{ width: W * zoom, height: H * zoom }}>
+            <rect width={W} height={H} fill="#fff" />
+            <g dangerouslySetInnerHTML={{ __html: p.body }} />
+          </svg>
+        ))}
       </div>
     </div>
   );
@@ -492,6 +507,7 @@ function SheetSettings(props: {
   onExport: () => void;
   /** 自動で並べ、結果の説明を返す */
   onAuto: () => string;
+  onAddTerminalSheet: () => void;
 }) {
   const { sheet, build } = props;
   const [autoMessage, setAutoMessage] = useState('');
@@ -505,6 +521,48 @@ function SheetSettings(props: {
     if (ref && !options.some((o) => o.ref === ref)) options.push({ ref, label: ref, conductor: '+' });
   }
   const placed = build.elements.filter((e) => e.placed).length;
+  const exportBlock = (
+    <>
+      <hr />
+      <button type="button" className="primary" onClick={props.onExport}>
+        展開図 JSON を書き出す（DXF 用）
+      </button>
+      <p className="small muted">
+        書き出した JSON は、リポジトリの tools/dxf の Python スクリプトで DXF に変換します（<code>uv run conneko_dxf.py 展開図.json 出力.dxf</code>）。
+      </p>
+    </>
+  );
+  if (sheet.kind === 'terminal') {
+    const blocks = [...new Map(build.elements.filter((e) => e.def.category === 'terminal').map((e) => [e.device, e.def] as const))];
+    const chosen = new Set(sheet.blocks ?? blocks.map(([d]) => d));
+    const toggle = (device: string, on: boolean) =>
+      props.onChange((s) => ({
+        ...s,
+        sheets: s.sheets.map((x) => {
+          if (x.id !== sheet.id) return x;
+          const next = blocks.map(([d]) => d).filter((d) => (d === device ? on : chosen.has(d)));
+          // すべて選んだときは指定を省く（あとから足した端子台も入る）
+          return { ...x, blocks: next.length === blocks.length ? undefined : next };
+        }),
+      }));
+    return (
+      <div className="schem-settings">
+        <div className="panel-title">端子台接続図「{sheet.name}」</div>
+        <p className="small muted">端子台ごとに、端子の両側（上段・ネジ側と、下段・コネクタ側）の接続先と線番の表を、概念図の接続から自動で作ります。</p>
+        <div className="field">
+          <span>表にする端子台</span>
+          {blocks.length === 0 && <span className="small muted">図面に端子台がありません</span>}
+          {blocks.map(([d, def]) => (
+            <label key={d} className="small schem-list__toggle">
+              <input type="checkbox" checked={chosen.has(d)} onChange={(e) => toggle(d, e.target.checked)} />
+              {d}（{def.model}）
+            </label>
+          ))}
+        </div>
+        {exportBlock}
+      </div>
+    );
+  }
   return (
     <div className="schem-settings">
       <div className="panel-title">展開図「{sheet.name}」</div>
@@ -554,13 +612,10 @@ function SheetSettings(props: {
       <div className="small muted">
         配置済み {placed} / {build.elements.length} 個。1 枚 {build.rowsPerSheet} 段（段の間隔 {ROW_PITCH}mm）。
       </div>
-      <hr />
-      <button type="button" className="primary" onClick={props.onExport}>
-        展開図 JSON を書き出す（DXF 用）
+      <button type="button" onClick={props.onAddTerminalSheet}>
+        端子台接続図のシートを追加
       </button>
-      <p className="small muted">
-        書き出した JSON は、リポジトリの tools/dxf の Python スクリプトで DXF に変換します（<code>uv run conneko_dxf.py 展開図.json 出力.dxf</code>）。
-      </p>
+      {exportBlock}
       <hr />
       <p className="small muted">
         線は概念図の接続から自動で引きます。展開図の上では線を足したり消したりできないので、接続を変えるときは概念図で直してください。
