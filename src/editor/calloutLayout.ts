@@ -6,6 +6,7 @@
  * 重ならない吹き出しは端子のすぐ横（従来どおり）に置く。座標はすべて機器の座標系[px]。
  */
 import type { TerminalSide } from '../devices/types';
+import { spread } from '../model/spread';
 
 /** 端子から吹き出しまでの距離 */
 export const CALLOUT_GAP = 7;
@@ -67,37 +68,6 @@ const horizontal = (side: TerminalSide) => side === 'left' || side === 'right';
 const along = (it: Item) => (horizontal(it.side) ? it.y : it.x);
 const alongSize = (it: Item) => (horizontal(it.side) ? it.h : it.w);
 
-/**
- * 望む位置（中心）の並びを、大きさぶん重ならないよう詰めて並べる。ずらす量の合計が小さくなるよう、
- * 重なった組は組の中心が望む位置の平均になるように置く。items は望む位置の昇順。返り値は各中心
- */
-function spread(items: { want: number; size: number }[]): number[] {
-  type Block = { idx: number[]; offsets: number[]; sum: number; total: number; top: number };
-  const blocks: Block[] = [];
-  items.forEach((it, i) => {
-    let b: Block = { idx: [i], offsets: [0], sum: it.want - it.size / 2, total: it.size, top: it.want - it.size / 2 };
-    while (blocks.length) {
-      const prev = blocks[blocks.length - 1];
-      if (prev.top + prev.total + SPACE <= b.top) break;
-      blocks.pop();
-      const shift = prev.total + SPACE;
-      const n = prev.idx.length + b.idx.length;
-      const sum = prev.sum + b.sum - b.idx.length * shift;
-      b = {
-        idx: [...prev.idx, ...b.idx],
-        offsets: [...prev.offsets, ...b.offsets.map((o) => o + shift)],
-        sum,
-        total: prev.total + SPACE + b.total,
-        top: sum / n,
-      };
-    }
-    blocks.push(b);
-  });
-  const centers: number[] = new Array(items.length);
-  for (const b of blocks) b.idx.forEach((i, k) => (centers[i] = b.top + b.offsets[k] + items[i].size / 2));
-  return centers;
-}
-
 /** 端子から電線の向きへ d だけ出た点 */
 function beside(it: Item, d: number): [number, number] {
   switch (it.side) {
@@ -126,7 +96,7 @@ function arrange(sorted: Item[]) {
     const centers: number[] = new Array(sorted.length);
     for (let t = 0; t < tiers; t++) {
       const idx = sorted.flatMap((_, i) => (i % tiers === t ? [i] : []));
-      const c = spread(idx.map((i) => ({ want: along(sorted[i]), size: alongSize(sorted[i]) })));
+      const c = spread(idx.map((i) => ({ want: along(sorted[i]), size: alongSize(sorted[i]) })), SPACE);
       idx.forEach((i, k) => (centers[i] = c[k]));
     }
     const moved = Math.max(...sorted.map((it, i) => Math.abs(centers[i] - along(it))));
