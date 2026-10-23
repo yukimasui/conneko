@@ -1321,6 +1321,28 @@ textarea {
   padding: 0 4px;
   white-space: nowrap;
 }
+/* つなげる機器の候補: 型式の下に説明と注意のタグ（設定の変更・装着が必要など）。型式は長いので折り返さず 1 行に出す */
+.connect-picker__mate {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.connect-picker__mate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+.connect-picker__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.connect-picker__tags .connect-picker__tag {
+  margin-left: 0;
+  white-space: normal;
+}
 .connect-picker__link {
   display: flex;
   gap: 4px;
