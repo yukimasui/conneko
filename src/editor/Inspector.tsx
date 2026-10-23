@@ -5,7 +5,7 @@ import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
-import { busAccepts, type BusLayout } from '../model/bus';
+import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
 import { terminalFacts } from './terminalInfo';
@@ -154,18 +154,30 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
     const d = getDeviceDefinition(n.data.deviceType);
     return n.id !== node.id && !n.data.mount && d && busAccepts(d, def);
   });
+  // 通信タイプのマニホールドに装着した電磁弁: ソレノイドの SI ユニットの出力（連の順に自動で決まる）
+  const serial = (['A', 'B'] as const).flatMap((side) => {
+    const o = serialOutputOf(props.bus, node.id, side);
+    return o ? [{ side, ...o }] : [];
+  });
   return (
     <div className="field">
       <span>装着先</span>
       {mount ? (
-        <div className="mount-row">
-          <span>
-            {mount.device} の位置 {mount.slot}
-          </span>
-          <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
-            {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
-          </button>
-        </div>
+        <>
+          <div className="mount-row">
+            <span>
+              {mount.device} の位置 {mount.slot}
+            </span>
+            <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
+              {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
+            </button>
+          </div>
+          {serial.length > 0 && (
+            <div className="small">
+              SI ユニットの出力: {serial.map((o) => `${o.host} 出力${o.output}${serial.length > 1 ? `（SOL ${o.side}）` : ''}`).join('、')}
+            </div>
+          )}
+        </>
       ) : hosts.length ? (
         <div className="mount-row">
           <span className="muted small">未装着</span>

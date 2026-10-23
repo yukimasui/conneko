@@ -175,6 +175,14 @@ export function connectorsMate(a: ConnectorSpec, b: ConnectorSpec): boolean {
   return a.kind === b.kind || !!a.mates?.includes(b.kind) || !!b.mates?.includes(a.kind);
 }
 
+/**
+ * LAN の通信ポートか（ピンのない RJ-45 と、RJ-45 と変換ケーブルでつなぐ通信コネクタ。SI ユニットの M12 D コードなど）。
+ * LAN の通信ポートから引くと、つなげる機器の候補の代わりにネットワークの候補を出す
+ */
+export function isLanPort(c: ConnectorSpec | undefined): boolean {
+  return !!c && c.pins === 0 && (c.kind === 'RJ45' || !!c.mates?.includes('RJ45'));
+}
+
 /** ケーブルの描き方 */
 export function cableStyle(c: ConnectorSpec): NonNullable<ConnectorSpec['style']> {
   return c.style ?? (c.pins === 0 ? 'lan' : 'multicore');

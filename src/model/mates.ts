@@ -11,7 +11,7 @@
  * （アクチュエーターどうし、PLC のユニットどうしを出さないため）。ただしケーブル（def.cable）は同じ分類でも出す。
  * LAN ポート（RJ45）は相手が多すぎるため対象外（従来どおりネットワークの候補を出す）。
  */
-import { connectorsMate, resolveDevice } from '../devices/resolve';
+import { connectorsMate, isLanPort, resolveDevice } from '../devices/resolve';
 import { paramLabel, paramsWithDefaults, type ConnectorSpec, type DeviceDefinition, type ParamValues, type TerminalDef } from '../devices/types';
 import { paramVariants } from '../devices/validate';
 import { tubeAttrs } from './air';
@@ -33,13 +33,13 @@ export interface MateCandidate {
   needsMount?: boolean;
 }
 
-/** 候補を出すコネクタか（LAN ポートは除く） */
+/** 候補を出すコネクタか（LAN ポートは除く。RJ-45 とつなぐ M12 D コードの通信ポートも LAN ポートとして扱う） */
 export function hasMateCandidates(c: ConnectorSpec | undefined): boolean {
-  return !!c && c.kind !== 'RJ45';
+  return !!c && !isLanPort(c);
 }
 
 /** まとめてつなぐ対象にするコネクタか（通信ポートは相手を決めきれないので、引いたコネクタ以外ではつながない） */
-const pairable = (c: ConnectorSpec) => c.kind !== 'RJ45' && !c.protocols?.length;
+const pairable = (c: ConnectorSpec) => !isLanPort(c) && !c.protocols?.length;
 
 /** 相手の候補にするか（同じ分類の機器はケーブルのときだけ） */
 const otherSide = (a: DeviceDefinition, b: DeviceDefinition) => a.category !== b.category || !!a.cable || !!b.cable;

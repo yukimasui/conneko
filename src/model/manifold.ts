@@ -6,12 +6,13 @@
  * - 連の機種の変更: 機器名・装着の位置・パラメータ・電線（新しい機種にもある端子のもの）を引き継ぐ
  * - A・B のつなぎ先: 連の A・B ポートからチューブ（シートが違えばエアのリンク）を引く
  * - ソレノイドと PLC の出力: I/O の接続（src/model/io.ts）を使う。シンク出力（NPN）は −、ソース出力（PNP）は + につなぐ
+ * - 通信タイプ（SI ユニット付き）のマニホールド: ソレノイドの出力は連の順に自動で決まる（src/model/bus.ts の serial）。電線は引かない
  */
 import { buildModel, key, type Model } from '../check/model';
 import { resolveDevice } from '../devices/resolve';
-import { deviceModel, type DeviceDefinition } from '../devices/types';
+import { deviceModel, paramsWithDefaults, type DeviceDefinition } from '../devices/types';
 import { tubeAttrs } from './air';
-import { computeBus, effectiveParams } from './bus';
+import { computeBus, effectiveParams, solenoidCount, type SerialPoint } from './bus';
 import { isTube, nextDeviceId, type Diagram, type DiagramDevice, type TerminalRef } from './diagram';
 import { compareAddress, connectIo, disconnectIo, ioHosts, ioSystem, type IoPoint } from './io';
 import { AIR_LINK_TYPE, connectTerminals, uniqueLinkName, type WireAttrs } from './ops';
@@ -22,6 +23,11 @@ type DefLookup = (type: string) => DeviceDefinition | undefined;
 /** マニホールド（電磁弁を装着する親）か */
 export function isManifold(def: DeviceDefinition | undefined): boolean {
   return !!def?.bus?.host && def.category === 'valve';
+}
+
+/** 通信タイプ（SI ユニット付き）のマニホールドか */
+export function isSerialManifold(def: DeviceDefinition | undefined): boolean {
+  return isManifold(def) && !!def?.bus?.host?.serial;
 }
 
 /** 機器がマニホールドか、マニホールドに装着した連なら、そのマニホールドの機器ID */
@@ -176,7 +182,10 @@ export interface StationRow {
   blank: boolean;
   /** A・B ポートのつなぎ先 */
   ports: { port: 'A' | 'B'; peers: AirPeer[] }[];
+  /** 個別配線のソレノイド（リード線の端子があるもの） */
   solenoids: SolenoidRow[];
+  /** 通信タイプのマニホールドで、この連が使う SI ユニットの出力（番号の順。side がないのは空きの点） */
+  serial: SerialPoint[];
 }
 
 /** 図面にある PLC の出力の一覧 */
@@ -191,6 +200,7 @@ const solenoidSides = (r: ReturnType<typeof resolveDevice>): ('A' | 'B')[] => ([
 /** マニホールドの連の一覧（位置の順）。outputs を渡すと、それを使ってソレノイドの出力を探す */
 export function manifoldRows(d: Diagram, hostId: string, lookup: DefLookup, outputs = plcOutputs(d, lookup)): StationRow[] {
   const m = buildModel(d, lookup, () => {});
+  const points = m.bus.serial.get(hostId)?.points ?? [];
   return mountedUnits(d, hostId).flatMap((u) => {
     const info = m.devices.get(u.id);
     if (!info) return [];
@@ -204,7 +214,8 @@ export function manifoldRows(d: Diagram, hostId: string, lookup: DefLookup, outp
       const common = used.has(minus) ? plus : minus;
       return { side, plus, minus, outputs: outs, commonWired: m.wiresAt.has(key(u.id, common)) };
     });
-    return [{ slot: u.mount!.slot, device: u, def: info.def, blank: !r.terminals.length, ports, solenoids }];
+    const serial = points.filter((p) => p.device === u.id);
+    return [{ slot: u.mount!.slot, device: u, def: info.def, blank: !r.terminals.length, ports, solenoids, serial }];
   });
 }
 
@@ -285,20 +296,40 @@ export function setSolenoidOutput(
   return connectIo(out, fresh, { device: unitId, terminal: solenoidTerminal(side, fresh) }, attrs, lookup);
 }
 
+/** マニホールドの概要 */
+export interface ManifoldSummary {
+  model: string;
+  stations: number;
+  solenoids: number;
+  /** 通信タイプのマニホールドの SI ユニット（型式・使う出力の点数・出力点数・配線） */
+  serial?: { unitModel: string; used: number; outputs: number; wiring: 'double' | 'specified' };
+  notes: string[];
+}
+
 /** マニホールドの概要（型式・連数・ソレノイドの数）と注意 */
-export function manifoldSummary(d: Diagram, hostId: string, lookup: DefLookup): { model: string; stations: number; solenoids: number; notes: string[] } {
+export function manifoldSummary(d: Diagram, hostId: string, lookup: DefLookup): ManifoldSummary {
   const host = d.devices.find((x) => x.id === hostId);
   const def = host && lookup(host.type);
   if (!host || !def) return { model: '', stations: 0, solenoids: 0, notes: [] };
   const bus = computeBus(d.devices, lookup);
   const units = mountedUnits(d, hostId);
-  const solenoids = units.reduce((n, u) => {
-    const ud = lookup(u.type);
-    return n + (ud ? solenoidSides(resolveDevice(ud, u.params)).length : 0);
-  }, 0);
+  // ソレノイドの数は空圧回路図の記号の操作方式で数える（プラグイン形の弁はリード線の端子がない）
+  const solenoids = units.reduce((n, u) => n + solenoidCount(lookup(u.type), u.params), 0);
   const notes: string[] = [];
+  const spec = def.bus?.host?.serial;
+  const sl = bus.serial.get(hostId);
+  const params = effectiveParams(host, bus);
   if (units.length < 2) notes.push('連数は 2 以上にします（使わない連はブランクプレートにします）');
-  if (units.length > 10) notes.push('10 連を超える場合は、両側（D 側・U 側）から給排気します');
+  if (units.length > 10) notes.push(spec ? '11 連以上は P・E ポートを両側（D 側・U 側）にします（型式の記号 B）' : '10 連を超える場合は、両側（D 側・U 側）から給排気します');
   for (const p of bus.problems) if (p.devices.includes(hostId)) notes.push(p.message);
-  return { model: deviceModel(def, effectiveParams(host, bus)), stations: units.length, solenoids, notes };
+  const full = paramsWithDefaults(def, params);
+  const serial = spec
+    ? {
+        unitModel: spec.unitModel(full),
+        used: sl?.points.length ?? 0,
+        outputs: typeof spec.outputs === 'function' ? spec.outputs(full) : spec.outputs,
+        wiring: sl?.wiring ?? (String(typeof spec.wiring === 'string' ? spec.wiring : full[spec.wiring.param]) === 'specified' ? ('specified' as const) : ('double' as const)),
+      }
+    : undefined;
+  return { model: deviceModel(def, params), stations: units.length, solenoids, ...(serial ? { serial } : {}), notes };
 }

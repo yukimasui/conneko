@@ -20,7 +20,7 @@ import iconUrl from './assets/conneko-icon.svg?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
-import { connectorsMate, resolveDevice } from './devices/resolve';
+import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
 import { deviceSize } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
@@ -612,7 +612,7 @@ function Editor() {
       // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
       const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];
-      if (conn && !(conn.pins === 0 && conn.kind === 'RJ45') && !mates.length) return;
+      if (conn && !isLanPort(conn) && !mates.length) return;
       const point = 'changedTouches' in event ? event.changedTouches[0] : event;
       setPicker({
         x: point.clientX,

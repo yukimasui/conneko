@@ -62,16 +62,17 @@ export const SY_SIZES: Record<SySize, SizeSpec> = {
 /** マニホールドのバスの種類（同じシリーズ・タイプの弁とブランクプレートだけ装着できる） */
 export const manifoldBusKind = (size: SySize) => `smc-ss5y${size}-41`;
 
-const H = 150;
+/** 連の高さ（通信タイプのマニホールド sy-serial.ts も同じ高さにそろえる） */
+export const H = 150;
 /** マニホールドベースの上端・下端 */
-const BASE_TOP = 100;
-const BASE_BOTTOM = 140;
+export const BASE_TOP = 100;
+export const BASE_BOTTOM = 140;
 /** エンドブロック・エンドプレートの上端・下端（ベースより少し大きい） */
-const END_TOP = 94;
-const END_BOTTOM = 145;
+export const END_TOP = 94;
+export const END_BOTTOM = 145;
 
 /** 1 連分のマニホールドベース（A・B の継手付き、または栓をした A・B） */
-function baseSegment(w: number, plugged: boolean): string {
+export function baseSegment(w: number, plugged: boolean): string {
   const ax = w * 0.3;
   const bx = w * 0.7;
   const ports = plugged
@@ -183,11 +184,9 @@ export function buildSyBase(s: SyBaseSpec): DeviceDefinition {
   };
 }
 
-/** ブランクプレート（弁を付けない連をふさぐ板） */
-export function buildSyBlank(size: SySize, type: string): DeviceDefinition {
-  const z = SY_SIZES[size];
-  const W = z.station;
-  const svg = `
+/** ブランクプレートの連の絵（幅 W。栓をした A・B のマニホールドベース付き） */
+export function blankSvg(W: number): string {
+  return `
   <defs>${syDefs}
   </defs>
   ${baseSegment(W, true)}
@@ -197,6 +196,13 @@ export function buildSyBlank(size: SySize, type: string): DeviceDefinition {
   ${[W * 0.3, W * 0.7].map((x) => `<circle cx="${x}" cy="88" r="2.2" fill="#8c939a" stroke="#4b5056" stroke-width="0.4"/><path d="M${x - 1.4} 88 H${x + 1.4}" stroke="#4b5056" stroke-width="0.5"/>`).join('')}
   ${text(W / 2, 82, 'BLANK', 3.4, '#4b5056', 'normal')}
 `;
+}
+
+/** ブランクプレート（弁を付けない連をふさぐ板） */
+export function buildSyBlank(size: SySize, type: string): DeviceDefinition {
+  const z = SY_SIZES[size];
+  const W = z.station;
+  const svg = blankSvg(W);
   return {
     type,
     name: 'ブランクプレート（マニホールド用）',
@@ -214,7 +220,7 @@ export function buildSyBlank(size: SySize, type: string): DeviceDefinition {
 }
 
 /** 装着した連から、マニホールドの連数と A/B ポートの継手の表記を求める */
-function manifoldParams(units: { params: ParamValues }[]): ParamValues {
+export function manifoldParams(units: { params: ParamValues }[]): ParamValues {
   const ports = [...new Set(units.map((u) => u.params.portAB).filter((v) => v !== undefined).map((v) => `C${v}`))];
   return { stations: units.length, portCode: ports.length > 1 ? 'M' : (ports[0] ?? '') };
 }
