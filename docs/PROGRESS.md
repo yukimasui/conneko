@@ -1,13 +1,17 @@
 # 進捗
 
-最終更新: 2026-10-23（別の環境へ引き継ぐ時点）
+最終更新: 2026-10-23（v0.4.0 をリリースした時点）
 
 ## 現在地
 
-- `main` は `8c4dc3d`（PR #27 のマージ）。作業中のブランチ・未コミットの変更はない
+- `main` は PR #28 のマージ後。v0.4.0 をリリース済み（#20・#26・#27・#28 を含む）
 - 直近で入れたもの
   - PR #26 端子の案内: 選択中の機器の端子に呼び名の吹き出し、ホバーで即ポップアップ、インスペクタの端子表（ADR-001・002）
   - PR #27 コネクタの「つなげる機器」の候補: コネクタから引いて離す／インスペクタの「つなぐ機器を選ぶ…」で、合う機器を置いてケーブルでつなぐ（ADR-003・004）
+  - PR #28 配線の見やすさ
+    - 密集した端子の吹き出しを一列に並べ直して引出線でつなぐ（`src/editor/calloutLayout.ts`。多数並ぶ端子は段に分け、印字だけにする）
+    - 機器の右クリックメニュー「リンクを端子の横にそろえる」（`src/model/alignLinks.ts`）
+    - 一方が上下・もう一方が左右に出る電線は L 字にする（`lCorner`）。シートをまたぐ電線のリンクは交差しない順に置く
 - 設計判断は [DECISIONS.md](DECISIONS.md) の ADR-001〜004
 
 ## 次にやること（ユーザーの判断待ち）
@@ -28,6 +32,7 @@
 - [x] コネクタの「つなげる機器」の候補（`src/model/mates.ts`、`ConnectPicker`・インスペクタの入口）
 - [ ] コネクタの候補のユーザー目視確認（下記。PR #27 はユーザーの判断でマージ済み）
 - [ ] 装着が必要なユニットの扱いを決めて実装（上記）
+- [x] 密集した端子の吹き出しの並べ直し・リンクの整列・L 字の配線（PR #28、ユーザー確認済み）
 
 ## ユーザーの目視確認が必要な項目
 
@@ -45,6 +50,10 @@
   `ConnectorSpec` にオス・メスを持たせる案を見直す
 - `hint` を書いていない機器: `omron.g7sa-3a1b`（自動の呼び名が長い）。FX5U の入出力・MIL 変換端子台・端子台は意味がつなぐ相手で決まるため対象外
 - インスペクタの端子表の行にマウスを乗せたら、キャンバスの端子を強調する（未実装）
+- 吹き出しは 14 文字で切るため、並べ直した列でも「EMGin +24V 非常…」のように説明が途中までになる
+- XSEL-RA の左の列では、BK PWR の端子台の吹き出しも非常停止の列に混ざって並び、引出線が少し交差する
+- 「リンクを端子の横にそろえる」は、並べた先のほかの機器を避けない。ほかの機器ともつないだリンクは動かさない
+- 同じ名前のリンクは 450px 以内なら使い回すため、サンプルの「入出力機器」シートでは表示灯 PL2 の P24 線がセンサー PH1 の P24 リンクまで長く走る
 
 ## 既知の落とし穴
 
@@ -53,7 +62,8 @@
   新しい環境で設定済みなら不要
 - 元の環境ではリモートが https なのに git の credential helper がなく、push に失敗した。`gh` はログイン済みだったので
   `git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push` で push した（設定は変えていない）。`gh auth setup-git` を一度流せば常用できる
-- Claude Code の auto mode は `gh pr merge` を「レビューなしのマージ」として止める。PR のマージはユーザーが `! gh pr merge <番号> --merge` で実行している
+- Claude Code の auto mode は `gh pr merge` を「レビューなしのマージ」として止める。PR のマージはユーザーが `! gh pr merge <番号> --merge` で実行するか、`/permissions` で許可してもらう
+- 版上げのコミット（`package.json` の version）も main へ直接 push せず、PR のブランチに入れてからマージする
 - clone 直後は `node_modules` がないので `npm ci` から（ないと `npm run build` が `tsc: not found` で落ちる）
 
 ### 検査・テスト
@@ -67,5 +77,6 @@
 - 機器定義の変更が意図した項目だけか（`hint` だけ、など）は、全機種・全パラメータ（`paramVariants`）の `resolveDevice` の結果と SVG を JSON に書き出し、
   変更前（`git stash`）と比べると確かめられる
 - 画面の確認は、`playwright-core` をリポジトリの外に入れ、システムの Chrome（`executablePath`）で `dist/index.html` を開いて行った。
+  `~/.cache/ms-playwright` に chromium-1148 がある環境では、`playwright-core@1.49.1` なら `executablePath` なしで起動できる。
   図面は `input[type=file]` に JSON を `setInputFiles` で読み込ませる。ドラッグは `mouse.down/move/up`（離す位置がキャンバスの外・タブの帯にならないよう注意）。
   端子は `.react-flow__node[data-id="<機器ID>"] .react-flow__handle[data-handleid="<端子ID>"]` で取れる
