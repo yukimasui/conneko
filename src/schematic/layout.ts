@@ -29,6 +29,7 @@ import { librarySymbol } from './symbols';
 import { bomPages } from './sheets/bom';
 import { coverPageCount, coverPages, type CoverEntry } from './sheets/cover';
 import { ioPages, ioPlcHosts } from './sheets/io';
+import { pneumaticPages } from './sheets/pneumatic';
 import { rackHosts, rackPages } from './sheets/rack';
 import { ioSystem } from '../model/io';
 import { terminalPages } from './sheets/terminal';
@@ -420,6 +421,8 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
         return rackPages(sh, model, lookup, p);
       case 'bom':
         return bomPages(sh, diagram, lookup, p);
+      case 'pneumatic':
+        return pneumaticPages(sh, diagram, model, lookup, p);
       case 'cover':
         return null;
     }
@@ -505,6 +508,8 @@ export function sheetKindName(sh: { kind?: string; rails?: Rails }): string {
       return '部品表';
     case 'cover':
       return '表紙・図面目次';
+    case 'pneumatic':
+      return '空圧回路図';
     default:
       return sh.rails?.supply ? '展開接続図（制御回路）' : '展開接続図（主回路）';
   }

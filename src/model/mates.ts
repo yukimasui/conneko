@@ -14,7 +14,8 @@
 import { connectorsMate, resolveDevice } from '../devices/resolve';
 import { paramLabel, paramsWithDefaults, type ConnectorSpec, type DeviceDefinition, type ParamValues, type TerminalDef } from '../devices/types';
 import { paramVariants } from '../devices/validate';
-import { CABLE_WIRE_TYPE, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
+import { tubeAttrs } from './air';
+import { CABLE_WIRE_TYPE, isTube, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
 
@@ -193,6 +194,20 @@ export function applyMateCandidate(d: Diagram, from: TerminalRef, c: MateCandida
     devices = [...devices, placed];
   }
   const used = d.wires.map((w) => w.id);
+  // エアのポートどうしはチューブでつなぐ
+  const srcPort = resolveDevice(lookup(src.type)!, src.params).terminal(c.pairs[0].from);
+  if (srcPort?.role === 'air') {
+    const next: Diagram = { ...d, devices };
+    const tubes: DiagramWire[] = c.pairs.map((p) => {
+      const id = nextWireId(used);
+      used.push(id);
+      const a = { device: src.id, terminal: p.from };
+      const b = { device: target!, terminal: p.to };
+      const prev = [...d.wires].reverse().find((w) => isTube(w));
+      return { id, from: a, to: b, ...tubeAttrs(next, a, b, lookup, prev) };
+    });
+    return { diagram: { ...next, wires: [...d.wires, ...tubes] }, device: target };
+  }
   const cables: DiagramWire[] = c.pairs.map((p, i) => {
     const id = nextWireId(used);
     used.push(id);

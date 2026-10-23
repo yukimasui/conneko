@@ -43,7 +43,7 @@ import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { alignableLinkCount, alignLinks } from './model/alignLinks';
-import { isAirPort, normalizeTubes, tubeAttrs } from './model/air';
+import { airCandidates, isAirPort, normalizeTubes, tubeAttrs } from './model/air';
 import { isTubeType } from './data/tubes';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
@@ -577,8 +577,21 @@ function Editor() {
       const target = event.target as Element | null;
       if (!target?.closest('.react-flow__pane')) return;
       const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
-      // エアのポートは電気の接続先の候補を出さない
-      if (isAirPort(terminalOf(from.device, from.terminal))) return;
+      // エアのポートは、流れの向きが合うエア機器の候補を出す（電気の接続先は出さない）
+      if (isAirPort(terminalOf(from.device, from.terminal))) {
+        const cands = airCandidates(diagram, from, deviceDefinitions, getDeviceDefinition);
+        if (!cands.length) return;
+        const pt = 'changedTouches' in event ? event.changedTouches[0] : event;
+        setPicker({
+          x: pt.clientX,
+          y: pt.clientY,
+          at: screenToFlowPosition({ x: pt.clientX, y: pt.clientY }),
+          from,
+          suggestions: { power: [], io: [], defaultName: '' },
+          mates: cands,
+        });
+        return;
+      }
       // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
       const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];

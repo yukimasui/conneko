@@ -16,6 +16,7 @@ const NEW_KINDS: { kind: NewKind; label: string; name: string; description: stri
   { kind: 'io', label: 'PLC の I/O 図', name: 'I/O 図', description: 'PLC のユニットごとに端子・アドレス・コメントを表に並べ、各点から機器を通って電源へ線を出します（自動で作ります）。' },
   { kind: 'rack', label: 'PLC のユニット構成図', name: 'ユニット構成', description: 'CPU・ベースユニットと装着したユニットの並び、入出力番号の範囲、内部電源の収支を描きます（自動で作ります）。' },
   { kind: 'terminal', label: '端子台接続図', name: '端子台接続図', description: '端子台ごとに、端子の両側の接続先と線番の表を作ります（自動で作ります）。' },
+  { kind: 'pneumatic', label: '空圧回路図', name: '空圧回路図', description: 'エア源・3 点セット・電磁弁・速度制御弁・シリンダを JIS の空圧記号で描きます。概念図のエア機器とチューブから自動で作ります。' },
   { kind: 'bom', label: '部品表', name: '部品表', description: '機器を型式・仕様ごとにまとめた表です（自動で作ります）。' },
   { kind: 'cover', label: '表紙・図面目次', name: '表紙', description: '図面名・作成者・版と、全ページの目次です。いちばん前に入れます（自動で作ります）。' },
 ];
@@ -229,6 +230,13 @@ export function SheetSettings(props: {
       break;
     case 'bom':
       body = <p className="small muted">図面の機器を型式・仕様ごとにまとめた表です（出力の「部品表（CSV）」と同じ内容）。</p>;
+      break;
+    case 'pneumatic':
+      body = (
+        <p className="small muted">
+          上の段にシリンダなどのアクチュエータ、その下に速度制御弁と電磁弁を弁ごとに縦に並べ、下の主管の左にエア源と 3 点セットを描きます。ソレノイド・オートスイッチの横には、つないだ PLC の入出力番号を書きます。配管は概念図で変えます。
+        </p>
+      );
       break;
     case 'cover':
       body = <p className="small muted">下の「図面の情報」の図面名・作成者・版と、全ページの目次を書きます。</p>;

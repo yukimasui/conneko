@@ -121,6 +121,30 @@ export function airPressures(m: Model): Map<string, number> {
   return pressure;
 }
 
+/**
+ * 真空の配管: 真空のポート（kind: 'vacuum'）から、チューブ・エアのリンク・機器の中の向きのない通り道でつながるポート。
+ * 真空エジェクタと吸着パッドの間のティなどは圧力のあるエアが届かないが、エアの届かない機器として指摘しない
+ */
+function vacuumNet(m: Model, ports: Map<string, Port>): Set<string> {
+  const adj = new Map<string, string[]>();
+  const add = (a: string, b: string) => {
+    adj.set(a, [...(adj.get(a) ?? []), b]);
+    adj.set(b, [...(adj.get(b) ?? []), a]);
+  };
+  for (const w of m.tubes) add(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
+  for (const [a, b] of m.labelLinks) if (ports.has(a) && ports.has(b)) add(a, b);
+  for (const { device, r } of m.devices.values()) for (const l of r.airLinks) if (!l.directed) add(key(device.id, l.from), key(device.id, l.to));
+  const seen = new Set<string>();
+  const stack = [...ports].filter(([, p]) => p.spec.kind === 'vacuum').map(([k]) => k);
+  while (stack.length) {
+    const u = stack.pop()!;
+    if (seen.has(u)) continue;
+    seen.add(u);
+    stack.push(...(adj.get(u) ?? []));
+  }
+  return seen;
+}
+
 export function checkPneumatic(m: Model, push: Push) {
   const ports = airPorts(m);
   if (!ports.size) return;
@@ -189,13 +213,14 @@ export function checkPneumatic(m: Model, push: Push) {
   }
 
   // 機器ごとの圧力: 届かない・使用圧力範囲の外・向きの逆
+  const vacuum = vacuumNet(m, ports);
   const byDevice = new Map<string, string[]>();
   for (const [k, p] of ports) if (!p.link) byDevice.set(p.device, [...(byDevice.get(p.device) ?? []), k]);
   for (const [device, ks] of byDevice) {
     const info = m.devices.get(device)!;
     // 一次側・作業ポートにチューブがあるのに、どこにもエアが届いていない
     const fed = ks.filter((k) => ['in', 'work'].includes(ports.get(k)!.spec.kind) && (m.tubesAt.has(k) || linked.has(k) || joined.has(k)));
-    if (fed.length && !fed.some((k) => pressure.has(k))) {
+    if (fed.length && !fed.some((k) => pressure.has(k)) && !fed.some((k) => vacuum.has(k))) {
       // 向きのある通り道の出口側だけにエアが来ているなら、つなぐ向きが逆
       const reversed = info.r.airLinks.find((l) => l.directed && pressure.has(key(device, l.to)) && !pressure.has(key(device, l.from)));
       push(
