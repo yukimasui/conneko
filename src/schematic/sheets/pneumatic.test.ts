@@ -94,6 +94,62 @@ describe('空圧回路図', () => {
     if (process.env.PNEUMATIC_SVG) writeFileSync(process.env.PNEUMATIC_SVG, sheetSvg(build.doc, page));
   });
 
+  it('シリンダのポートに直付けしたスピードコントローラは、別に置いたものと同じ記号・逆止弁の向きで描く', () => {
+    /** 速度制御弁の逆止弁の玉（半径 1.1 の円）が、破線の枠の中心より上（+1）か下（-1）か */
+    const balls = (d: Diagram) => {
+      const page = buildSchematic(d, lookup).doc.sheets[0];
+      const center = (pts: [number, number][]) => ({ x: pts.reduce((a, p) => a + p[0], 0) / pts.length, y: pts.reduce((a, p) => a + p[1], 0) / pts.length });
+      const scBoxes = page.polylines
+        .filter((l) => l.dashed && l.closed && l.points.length === 4)
+        .map((l) => ({ ...center(l.points), w: Math.abs(l.points[1][0] - l.points[0][0]), h: Math.abs(l.points[2][1] - l.points[0][1]) }))
+        .filter((b) => Math.abs(b.w - 12) < 0.01 && Math.abs(b.h - 16) < 0.01);
+      return page.polylines
+        .filter((l) => l.closed && l.points.length === 20)
+        .map((l) => ({ c: center(l.points), r: Math.hypot(l.points[0][0] - center(l.points).x, l.points[0][1] - center(l.points).y) }))
+        .filter((b) => Math.abs(b.r - 1.1) < 0.01)
+        .map((b) => {
+          const box = scBoxes.find((x) => Math.abs(x.x - b.c.x) < 6 && Math.abs(x.y - b.c.y) < 8)!;
+          return Math.sign(b.c.y - box.y);
+        });
+    };
+    const t = (id: string, from: string, to: string): DiagramWire => {
+      const [fd, ft] = from.split('.');
+      const [td, tt] = to.split('.');
+      return { id, from: { device: fd, terminal: ft }, to: { device: td, terminal: tt }, color: 'blue', sizeSq: 0, wireType: 'TU', tubeOD: 6 };
+    };
+    const sheet = { sheets: [{ id: 'D1', name: '空圧回路図', kind: 'pneumatic' as const, items: [] }] };
+    const attached = (control: string): Diagram => ({
+      devices: [
+        { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
+        { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+        { id: 'CY1', type: 'smc.cm2', x: 0, y: 0, params: { speedController: control } },
+      ],
+      wires: [t('T1', 'AIR1.OUT', 'SOL1.P'), t('T2', 'SOL1.A', 'CY1.HEAD'), t('T3', 'SOL1.B', 'CY1.ROD')],
+      schematic: sheet,
+    });
+    const separate = (type: string): Diagram => ({
+      devices: [
+        { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
+        { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+        { id: 'SC1', type, x: 0, y: 0 },
+        { id: 'CY1', type: 'smc.cm2', x: 0, y: 0 },
+      ],
+      wires: [t('T1', 'AIR1.OUT', 'SOL1.P'), t('T2', 'SOL1.A', 'SC1.TUBE'), t('T3', 'SC1.CYL', 'CY1.HEAD'), t('T4', 'SOL1.B', 'CY1.ROD')],
+      schematic: sheet,
+    });
+    const out = balls(separate('smc.as2201f'));
+    const inn = balls(separate('smc.as2211f'));
+    expect(out).toHaveLength(1);
+    expect(inn).toEqual([-out[0]]);
+    // 直付けはヘッド側・ロッド側の 2 個。向きは別に置いたものと同じ
+    expect(balls(attached('meter-out'))).toEqual([out[0], out[0]]);
+    expect(balls(attached('meter-in'))).toEqual([inn[0], inn[0]]);
+    expect(balls(attached('none'))).toEqual([]);
+    const texts = buildSchematic(attached('meter-out'), lookup).doc.sheets[0].texts.map((x) => x.text);
+    expect(texts.filter((x) => x === 'AS2201F')).toHaveLength(2);
+    expect(texts).toContain('-01-06S');
+  });
+
   it('エア機器がなければ案内を書く', () => {
     const d: Diagram = { devices: [], wires: [], schematic: { sheets: [{ id: 'D1', name: '空圧', kind: 'pneumatic', items: [] }] } };
     expect(buildSchematic(d, lookup).doc.sheets[0].texts.some((t) => t.text.includes('エア機器'))).toBe(true);
