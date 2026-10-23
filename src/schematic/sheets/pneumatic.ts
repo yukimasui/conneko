@@ -192,6 +192,50 @@ function drawBoxSymbol(pen: Pen, label: string, ports: string[], cx: number, y: 
   return { pins, box: { x: cx - w / 2, y, w, h } };
 }
 
+/**
+ * エアチャック・ロータリアクチュエータ（JIS に決まった記号がないので、SMC のカタログのように複動の本体に指・回転の矢印を付けて描く）。
+ * ports は左から並べるポート名（弁の 4 につながるポートを左にすると線が交差しない）。ポートの横に名前（開・閉、A・B）を書く
+ */
+function drawGripperOrRotary(pen: Pen, kind: 'gripper' | 'rotary', ports: string[], cx: number, y: number): Drawn {
+  const w = 30;
+  const h = 10;
+  const x0 = cx - w / 2;
+  pen.rect(x0, y, w, h);
+  if (kind === 'gripper') {
+    // 本体の中のピストンと、上に開閉する 2 本の指
+    pen.line([[cx, y], [cx, y + h]]);
+    pen.line([[cx - 7, y], [cx - 7, y - 6], [cx - 2.5, y - 6], [cx - 2.5, y - 3.5]]);
+    pen.line([[cx + 7, y], [cx + 7, y - 6], [cx + 2.5, y - 6], [cx + 2.5, y - 3.5]]);
+    pen.arrow([cx - 5, y - 9], [cx - 9, y - 9]);
+    pen.arrow([cx + 5, y - 9], [cx + 9, y - 9]);
+  } else {
+    // 揺動の矢印（両向き）
+    const r = 3.5;
+    const pts: XY[] = Array.from({ length: 9 }, (_, i) => {
+      const a = Math.PI * (0.15 + (0.7 * i) / 8);
+      return [cx + r * Math.cos(a) * 1.6, y + h / 2 - r * Math.sin(a) + 1.5] as XY;
+    });
+    pen.line(pts);
+    pen.arrow(pts[1], pts[0]);
+    pen.arrow(pts[7], pts[8]);
+  }
+  const names: Record<string, string> = { open: '開', close: '閉', a: 'A', b: 'B' };
+  const pins: Record<string, XY> = {};
+  ports.forEach((p, i) => {
+    const px = ports.length === 1 ? cx : x0 + 5 + (i * (w - 10)) / (ports.length - 1);
+    pins[p] = [px, y + h];
+    pen.text(px + 0.8, y + h + 2.5, names[p] ?? p, { height: 1.8 });
+  });
+  return { pins, box: { x: x0, y: kind === 'gripper' ? y - 10 : y, w, h: kind === 'gripper' ? h + 10 : h } };
+}
+
+/** オートスイッチの印（ひし形）と、検出する位置・PLC の入出力番号。x, y はひし形の中心 */
+function drawSwitch(pen: Pen, x: number, y: number, label: string, addr: string | undefined, align: 'left' | 'right') {
+  pen.line([[x, y - 1.8], [x + 1.8, y], [x, y + 1.8], [x - 1.8, y]], { closed: true });
+  const tx = align === 'left' ? x + 2.8 : x - 2.8;
+  pen.text(tx, y - 0.2, addr ? `${label} ${addr}` : label, { height: 1.9, layer: 'TAG', align });
+}
+
 /** 速度制御弁（縦向き）。上端 y、中心 cx。in が下（弁の側）・out が上（アクチュエータの側）のとき上向きの流れが自由流れ */
 function drawSpeedController(pen: Pen, cx: number, y: number, freeUp: boolean): Drawn {
   const h = 16;
@@ -203,15 +247,16 @@ function drawSpeedController(pen: Pen, cx: number, y: number, freeUp: boolean): 
   pen.line([[cx - 5, y + h / 2 + 3], [cx, y + h / 2 - 3]]);
   // 逆止弁（並列）
   pen.line([[cx - 2.5, y + 2], [cx + 3, y + 2], [cx + 3, y + h - 2], [cx - 2.5, y + h - 2]]);
-  const by = freeUp ? y + h / 2 + 1 : y + h / 2 - 1;
-  pen.circle(cx + 3, by, 1.2);
-  const sy = freeUp ? by + 1.6 : by - 1.6;
-  pen.line([[cx + 1.4, sy + (freeUp ? 1.2 : -1.2)], [cx + 3, sy], [cx + 4.6, sy + (freeUp ? 1.2 : -1.2)]]);
+  // 玉は V 字の弁座の開いた側に座る。V 字の頂点から玉へ向かう向きが自由流れ
+  const dir = freeUp ? -1 : 1;
+  const apex = y + h / 2 - dir * 2.2;
+  pen.line([[cx + 1.2, apex + dir * 3.2], [cx + 3, apex], [cx + 4.8, apex + dir * 3.2]]);
+  pen.circle(cx + 3, apex + dir * 2.1, 1.1);
   return { pins: { top: [cx - 2.5, y], bottom: [cx - 2.5, y + h] }, box: { x: cx - 6, y, w: 12, h } };
 }
 
 /** 横向きの機器（エア源・3 点セットなど。in が左、out が右）。左端 x、中心の高さ cy。返り値の幅で次を並べる */
-function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number): Drawn & { width: number } {
+function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number, opts: { exhSilencer?: boolean } = {}): Drawn & { width: number } {
   const diamond = (dx: number, inner: 'filter' | 'lub' | 'mist') => {
     const s = 6;
     pen.line([[dx, cy], [dx + s, cy - s], [dx + 2 * s, cy], [dx + s, cy + s]], { closed: true });
@@ -253,10 +298,11 @@ function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number): Drawn
     return { pins: { in: [x, cy], out: [x + 10, cy] }, box: { x, y: cy - 3, w: 10, h: 6 }, width: 10 };
   }
   if (s === 'check-valve') {
-    pen.circle(x + 6, cy, 2);
-    pen.line([[x + 9, cy - 3], [x + 7.5, cy], [x + 9, cy + 3]]);
-    pipe(x, x + 4);
-    pipe(x + 8.2, x + 12);
+    // in → out が自由流れ: V 字の頂点を in 側に、玉を V 字の中（out 側）に
+    pen.line([[x + 8.5, cy - 3.2], [x + 3.5, cy], [x + 8.5, cy + 3.2]]);
+    pen.circle(x + 6.8, cy, 1.8);
+    pipe(x, x + 3.5);
+    pipe(x + 8.6, x + 12);
     return { pins: { in: [x, cy], out: [x + 12, cy] }, box: { x, y: cy - 3, w: 12, h: 6 }, width: 12 };
   }
   if (s === 'residual-valve') {
@@ -274,14 +320,15 @@ function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number): Drawn
     pen.arrow([bx + 15, top], [bx + 17, bot]);
     pen.line([[bx + 13, bot], [bx + 13, bot - 3]]);
     pen.line([[bx + 11.5, bot - 3], [bx + 14.5, bot - 3]]);
-    // 手動操作（ロック付き）
-    pen.line([[bx, cy], [bx - 5, cy]]);
-    pen.line([[bx - 5, cy - 2.5], [bx - 5, cy + 2.5]]);
-    pen.line([[bx - 3, cy - 1.5], [bx - 2, cy + 1.5]]);
+    // 手動操作（ロック付き）。主の流れの線に重ならないよう箱の上寄りに付ける
+    const oy = top + 3;
+    pen.line([[bx, oy], [bx - 5, oy]]);
+    pen.line([[bx - 5, oy - 2.5], [bx - 5, oy + 2.5]]);
+    pen.line([[bx - 3, oy - 1.5], [bx - 2, oy + 1.5]]);
     // 一次側は下から、二次側は上から出して、主の流れ（cy）につなぐ
     pen.line([[x, cy], [x + 2, cy], [x + 2, bot + 5], [bx + 13, bot + 5], [bx + 13, bot]], { layer: 'WIRE' });
     pen.line([[bx + 15, top], [bx + 15, top - 5], [bx + 24, top - 5], [bx + 24, cy]], { layer: 'WIRE' });
-    drawExhaust(pen, [bx + 17, bot], false);
+    drawExhaust(pen, [bx + 17, bot], !!opts.exhSilencer);
     return { pins: { in: [x, cy], out: [bx + 24, cy], exh: [bx + 17, bot] }, box: { x, y: top - 5, w: bx + 24 - x, h: 22 }, width: bx + 24 - x };
   }
   if (s === 'pressure-switch' || s === 'gauge') {
@@ -304,21 +351,22 @@ function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number): Drawn
     if (u === 'filter') cx += diamond(cx, 'filter');
     else if (u === 'mist-separator') cx += diamond(cx, 'mist');
     else if (u === 'lubricator') cx += diamond(cx, 'lub');
-    else if (u === 'regulator') {
-      const w = regulator(cx);
-      if (hint.gauge) gauge(cx + w + 1.5);
-      cx += w;
-    } else if (u === 'filter-regulator') {
-      cx += diamond(cx, 'filter');
-      pipe(cx, cx + 2);
-      cx += 2;
-      const w = regulator(cx);
-      if (hint.gauge) gauge(cx + w + 1.5);
-      cx += w;
+    else if (u === 'regulator' || u === 'filter-regulator') {
+      if (u === 'filter-regulator') {
+        cx += diamond(cx, 'filter');
+        pipe(cx, cx + 2);
+        cx += 2;
+      }
+      cx += regulator(cx);
+      // 圧力計は二次側の管から立ち上げる
+      if (hint.gauge) {
+        pipe(cx, cx + 5);
+        gauge(cx + 2.5);
+        cx += 5;
+      }
     }
   }
   if (s === 'frl' || units.length > 1) pen.rect(start - 2, cy - 20, cx - start + 4, 28, { dashed: true });
-  if (hint.gauge && units.some((u) => u === 'regulator' || u === 'filter-regulator')) cx += 4;
   return { pins: { in: [start, cy], out: [cx, cy] }, box: { x: start - 2, y: cy - 20, w: cx - start + 4, h: 28 }, width: cx - start };
 }
 
@@ -452,6 +500,19 @@ export function pneumaticPages(
 
   pen.text(left, top - 10, '空圧回路図（JIS B 0125-1 の記号。概念図のエア機器とチューブから自動で作成）', { height: 3 });
 
+  // マニホールド（装着した弁の親）
+  const hostOf = (id: string) => {
+    const h = model.devices.get(id)?.device.mount?.device;
+    return h && entries.get(h)?.hint.symbol === 'manifold' ? h : undefined;
+  };
+  /** マニホールドの排気ポートに付けたサイレンサ */
+  const hostSilencer = (host: string) =>
+    [...(model.devices.get(host)?.r.air.entries() ?? [])]
+      .filter(([, a]) => a.kind === 'exhaust')
+      .flatMap(([t]) => neighbors(key(host, t)))
+      .filter((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
+  const valveBoxes: { id: string; host?: string; box: Drawn['box'] }[] = [];
+
   // 列を描く
   const mainTaps: number[] = [];
   columns.forEach((col, i) => {
@@ -459,16 +520,30 @@ export function pneumaticPages(
     let act: Drawn | undefined;
     if (col.actuator) {
       const a = col.actuator;
+      // 弁の 4 につながるポートを左に置く（線が交差しないように）
+      const toFour = col.lines.find((l) => l.valvePort === '4')?.end;
+      const ports = Object.keys(a.hint.ports).sort((p, q) => Number(a.hint.ports[q] === (toFour && portOf(toFour))) - Number(a.hint.ports[p] === (toFour && portOf(toFour))));
       act =
         a.hint.symbol === 'cylinder'
           ? drawCylinder(pen, a.hint, cx - 4, yAct)
-          : drawBoxSymbol(pen, a.hint.symbol === 'gripper' ? 'チャック' : a.hint.symbol === 'rotary' ? 'ロータリ' : 'パッド', Object.keys(a.hint.ports), cx, yAct);
-      pen.text(act.box.x, act.box.y - 6, a.id, { layer: 'TAG', height: 2.8 });
-      pen.text(act.box.x, act.box.y - 2.6, a.model, { height: 2 });
-      // オートスイッチ
-      const sw = a.hint.cylinder?.switches;
-      if (sw?.head) pen.text(act.box.x, act.box.y + act.box.h + 9, `◇${tagOf(a.id, sw.head) ?? sw.head}`, { layer: 'TAG', height: 2 });
-      if (sw?.rod) pen.text(act.box.x + 40, act.box.y + act.box.h + 9, `◇${tagOf(a.id, sw.rod) ?? sw.rod}`, { layer: 'TAG', height: 2, align: 'right' });
+          : a.hint.symbol === 'gripper' || a.hint.symbol === 'rotary'
+            ? drawGripperOrRotary(pen, a.hint.symbol, ports, cx, yAct)
+            : drawBoxSymbol(pen, 'パッド', Object.keys(a.hint.ports), cx, yAct);
+      // 機器名・型式は記号の右
+      pen.text(act.box.x + act.box.w + 3, yAct + 2.5, a.id, { layer: 'TAG', height: 2.8 });
+      pen.text(act.box.x + act.box.w + 3, yAct + 6.5, a.model, { height: 2 });
+      // オートスイッチ: 記号の上の、検出する端の側にひし形と入出力番号
+      const cs = a.hint.cylinder?.switches;
+      const switches = a.hint.switches ?? [
+        ...(cs?.head ? [{ label: '後退端', terminal: cs.head }] : []),
+        ...(cs?.rod ? [{ label: '前進端', terminal: cs.rod }] : []),
+      ];
+      switches.forEach((sw, k) => {
+        const leftSide = k === 0;
+        const sx = leftSide ? act!.box.x + 3 : act!.box.x + Math.min(act!.box.w, 40) - 3;
+        // 文字は端から外側へ（左のスイッチは左へ、右のスイッチは右へ）
+        drawSwitch(pen, sx, act!.box.y - 4, sw.label, tagOf(a.id, sw.terminal), leftSide ? 'right' : 'left');
+      });
     }
     let vd: Drawn | undefined;
     if (col.valve) {
@@ -477,20 +552,24 @@ export function pneumaticPages(
       const label = (side: 'a' | 'b') => {
         const t = sol?.[side];
         if (!t && !(v.hint.valve?.operators[side] === 'solenoid')) return undefined;
-        const addr = tagOf(v.id, t);
+        // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる
+        const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-'));
         const name = v.hint.valve?.operators.b === 'solenoid' ? `${v.id}${side.toUpperCase()}` : v.id;
         return addr ? `${name}（${addr}）` : name;
       };
       vd = drawValve(pen, v.hint, cx, yValve, { a: label('a'), b: label('b') });
       pen.text(vd.box.x + vd.box.w + 1, yValve + BOX_H + 6, v.model, { height: 2 });
       // 排気
+      const host = hostOf(v.id);
       for (const p of ['5', '3']) {
         const t = v.hint.ports[p];
         if (!t || !vd.pins[p]) continue;
-        const nb = neighbors(key(v.id, t));
-        const sil = nb.some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
-        if (!nb.length || sil) drawExhaust(pen, vd.pins[p], sil);
+        // マニホールドに装着した弁の排気は、マニホールドの排気ポートに付けたサイレンサで出す
+        const nb = host ? hostSilencer(host) : neighbors(key(v.id, t));
+        const sil = host ? nb.length > 0 : nb.some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
+        if (host || !nb.length || sil) drawExhaust(pen, vd.pins[p], sil);
       }
+      valveBoxes.push({ id: v.id, host, box: vd.box });
       // 供給（主管へ）
       const pt = v.hint.ports['1'];
       if (pt && vd.pins['1']) {
@@ -536,6 +615,16 @@ export function pneumaticPages(
     });
   });
 
+  // マニホールド: 装着した弁を破線で囲み、型式を書く
+  for (const host of new Set(valveBoxes.map((v) => v.host).filter((h): h is string => !!h))) {
+    const boxes = valveBoxes.filter((v) => v.host === host).map((v) => v.box);
+    const x0 = Math.min(...boxes.map((b) => b.x)) - 3;
+    const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + 3;
+    pen.rect(x0, yValve - 4, x1 - x0, BOX_H + 18, { dashed: true });
+    const e = entries.get(host)!;
+    pen.text(x0, yValve + BOX_H + 17.5, `${e.id}  ${e.model}（マニホールド ${boxes.length} 連）`, { height: 2.2, layer: 'TAG' });
+  }
+
   // エア源・3 点セット（主管の左、流れの順）
   const sources = [...entries.values()].filter((e) => e.hint.symbol === 'source');
   const chain: Entry[] = [];
@@ -559,14 +648,17 @@ export function pneumaticPages(
   let last: XY | undefined;
   for (const e of chain) {
     if (last) pen.line([last, [x, ySupply]], { layer: 'WIRE' });
-    const d = drawInline(pen, e.hint, x, ySupply);
+    const exh = e.hint.ports.exh;
+    const exhSilencer = !!exh && neighbors(key(e.id, exh)).some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
+    const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer });
     // エア源は型式の代わりに「エア源」と書く（工場エアなどの説明は長いため）
     const sub = e.hint.symbol === 'source' ? 'エア源' : e.model;
     pen.text(d.box.x, ySupply + 12, e.id, { layer: 'TAG', height: 2.4 });
     pen.text(d.box.x, ySupply + 15.5, sub, { height: 1.8 });
     const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([s]) => s === 'out')?.[1] ?? ''));
     if (p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator')) {
-      pen.text(d.pins.out?.[0] ?? x + d.width, ySupply - 4, `${p}MPa`, { height: 2, layer: 'TAG' });
+      // 3 点セットを囲む破線に重ならないよう、出口の少し右に書く
+      pen.text((d.pins.out?.[0] ?? x + d.width) + 3, ySupply - 3, `${p}MPa`, { height: 2, layer: 'TAG' });
     }
     last = d.pins.out ?? [x + d.width, ySupply];
     // 次の記号は、この機器の名前・型式の文字に重ならない位置から

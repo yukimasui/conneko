@@ -15,27 +15,39 @@ describe('部品表・線番表・I/O 表', () => {
     expect(cp.qty).toBe(2);
     expect(cp.ids).toEqual(['CP1', 'CP2']);
     expect(rows.some((r) => r.category === 'link')).toBe(false);
-    // 機器の台数とチューブの本数の合計
-    const tubes = sampleDiagram.wires.filter((w) => w.wireType === 'TU').length;
-    expect(rows.reduce((n, r) => n + r.qty, 0)).toBe(sampleDiagram.devices.filter((d) => lookup(d.type)?.category !== 'link').length + tubes);
+    // 機器の行の台数の合計は、リンク以外の機器の数（チューブ・継手の行は除く）
+    const ids = new Set(sampleDiagram.devices.map((d) => d.id));
+    const deviceRows = rows.filter((r) => r.ids.every((id) => ids.has(id)));
+    expect(deviceRows.reduce((n, r) => n + r.qty, 0)).toBe(sampleDiagram.devices.filter((d) => lookup(d.type)?.category !== 'link').length);
   });
 
-  it('チューブは部品表に型式（種類・外径・色）ごとの本数で入り、線番表にチューブの型式で入る', () => {
-    const tube = (id: string, color: string) => ({ id, from: { device: 'AIR1', terminal: 'OUT' }, to: { device: 'SOL1', terminal: 'P' }, color, sizeSq: 0, wireType: 'TU', tubeOD: 6 });
+  it('チューブは種類・外径・色ごとに 1 巻、ねじのポートにはワンタッチ管継手が部品表に入る。おねじを直接ねじ込んだ接続は数えない', () => {
+    const tube = (id: string, color: string, to = 'P') => ({ id, from: { device: 'AIR1', terminal: 'OUT' }, to: { device: 'SOL1', terminal: to }, color, sizeSq: 0, wireType: 'TU', tubeOD: 6 });
     const d = {
       devices: [
         { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
         { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+        { id: 'SL1', type: 'smc.an', x: 0, y: 0 },
       ],
-      wires: [tube('T1', 'blue'), tube('T2', 'blue'), tube('T3', 'black')],
+      wires: [
+        tube('T1', 'blue'),
+        tube('T2', 'blue'),
+        tube('T3', 'black'),
+        { id: 'T4', from: { device: 'SL1', terminal: 'IN' }, to: { device: 'SOL1', terminal: 'EA' }, color: 'blue', sizeSq: 0, wireType: 'TU', tubeOD: 6 },
+      ],
     };
-    const rows = bomRows(d, lookup).filter((r) => r.model.startsWith('TU'));
-    expect(rows.map((r) => [r.model, r.qty])).toEqual([
-      ['TU0604B', 1],
-      ['TU0604BU', 2],
+    const rows = bomRows(d, lookup);
+    expect(rows.filter((r) => r.model.startsWith('TU')).map((r) => [r.model, r.qty])).toEqual([
+      ['TU0604B-20', 1],
+      ['TU0604BU-20', 1],
     ]);
-    expect(wireRows(d, lookup).rows[0]).toMatchObject({ wireType: 'チューブ', spec: 'チューブ TU0604BU（φ6 青）' });
-    expect(bomRows(d, lookup).find((r) => r.ids.includes('SOL1'))?.model).toBe('SY3120-5LZ-C6');
+    expect(rows.find((r) => r.model === 'TU0604BU-20')?.spec).toContain('図面上 2 本');
+    // SY の P（M5）に φ6 の継手が 3 個。サイレンサ（直結）の EA には付けない
+    expect(rows.find((r) => r.model.startsWith('KQ2H'))).toMatchObject({ model: 'KQ2H06-M5A', qty: 3 });
+    const wires = wireRows(d, lookup).rows;
+    expect(wires.find((r) => r.id === 'T1')).toMatchObject({ wireType: 'チューブ', spec: 'チューブ TU0604BU（φ6 青）' });
+    expect(wires.find((r) => r.id === 'T4')).toMatchObject({ wireType: '直結', spec: '直結（ねじ込み）' });
+    expect(rows.find((r) => r.ids.includes('SOL1'))?.model).toBe('SY3120-5LZ-C6');
   });
 
   it('線番表は全シートの電線を含み、I/O 表は I/O ごとのコメントと接続先を持つ', () => {

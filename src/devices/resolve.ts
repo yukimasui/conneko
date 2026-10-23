@@ -31,6 +31,7 @@ export interface ResolvedAirPort {
   kind: AirPortKind;
   tubeOD?: number;
   thread?: string;
+  male?: boolean;
   pressure?: number;
   minPressure?: number;
   maxPressure?: number;
@@ -137,6 +138,7 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     air.set(t.id, {
       kind: a.kind,
       ...(a.thread ? { thread: a.thread } : {}),
+      ...(a.male ? { male: true } : {}),
       tubeOD: resolveNum(a.tubeOD, def, p),
       pressure: resolveNum(a.pressure, def, p),
       minPressure: resolveNum(a.minPressure, def, p),

@@ -69,14 +69,17 @@ const base: Diagram = {
     // エア回路: エア源 → フィルタレギュレータ → 残圧排気弁 → マニホールド（2 連）→ スピードコントローラ → シリンダ・エアチャック
     { id: 'AIR1', type: 'generic.air-source', x: 0, y: 560, sheet: 'S5' },
     { id: 'FR1', type: 'smc.aw', x: 170, y: 700, params: { setPressure: 0.4 }, sheet: 'S5', note: '装置の元圧 0.4MPa' },
-    { id: 'VHS1', type: 'smc.vhs', x: 380, y: 740, sheet: 'S5' },
+    { id: 'VHS1', type: 'smc.vhs', x: 380, y: 740, params: { tubeOD: 8 }, sheet: 'S5' },
     { id: 'MF1', type: 'smc.ss5y3-41', x: 640, y: 720, sheet: 'S5' },
     { id: 'SOL1', type: 'smc.sy3140-5lz', x: 0, y: 0, mount: { device: 'MF1', slot: 1 }, sheet: 'S5', note: 'プッシャ 前進' },
     { id: 'SOL2', type: 'smc.sy3240-5lz', x: 0, y: 0, mount: { device: 'MF1', slot: 2 }, params: { portAB: 4 }, sheet: 'S5', note: 'チャック 閉 / 開' },
-    { id: 'SC1', type: 'smc.as-f.inline', x: 140, y: -60, sheet: 'S5' },
-    { id: 'SC2', type: 'smc.as-f.inline', x: 330, y: -60, sheet: 'S5' },
-    { id: 'CY1', type: 'smc.cm2', x: 160, y: 90, params: { bore: 25, stroke: 100, switch: 'M9N' }, sheet: 'S5', note: 'ワーク押出し' },
-    { id: 'CY2', type: 'smc.mhz2', x: 1040, y: 60, params: { size: 16, switch: 'M9N' }, sheet: 'S5', note: 'ワーク把持' },
+    { id: 'SC1', type: 'smc.as-f.inline', x: 760, y: 200, sheet: 'S5' },
+    { id: 'SC2', type: 'smc.as-f.inline', x: 760, y: 90, sheet: 'S5' },
+    { id: 'CY1', type: 'smc.cm2', x: 960, y: 300, params: { bore: 25, stroke: 100, switch: 'M9N' }, sheet: 'S5', note: 'ワーク押出し' },
+    { id: 'CY2', type: 'smc.mhz2', x: 150, y: 110, params: { size: 16, switch: 'M9N' }, sheet: 'S5', note: 'ワーク把持' },
+    { id: 'SL1', type: 'smc.an', x: 544, y: 900, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL2', type: 'smc.an', x: 574, y: 920, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },
   ],
   wires: [
     // 一次側
@@ -141,6 +144,10 @@ const base: Diagram = {
     t('SC2:OUT', 'CY1:ROD', 6),
     t('SOL2:A', 'CY2:CLOSE', 4),
     t('SOL2:B', 'CY2:OPEN', 4),
+    // サイレンサ（排気ポートに直接ねじ込む）
+    t('SL1:IN', 'MF1:EA', 8),
+    t('SL2:IN', 'MF1:EB', 8),
+    t('SL3:IN', 'VHS1:EXH', 8),
     // MIL ケーブル・LAN ケーブル
     { id: 'C1', from: { device: 'IN1', terminal: 'CN1' }, to: { device: 'TB3', terminal: 'CN' }, wireNo: 'CBL-IN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
     { id: 'C2', from: { device: 'OUT1', terminal: 'CN1' }, to: { device: 'TB4', terminal: 'CN' }, wireNo: 'CBL-OUT1', color: 'black', sizeSq: 0, wireType: 'CABLE' },

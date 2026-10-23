@@ -36,8 +36,8 @@ function scSymbol(cx: number, cy: number, free: 'right' | 'left' | 'down' | 'up'
     <path d="M-3 -6 Q0 -3.5 -3 -1 M3 -6 Q0 -3.5 3 -1" fill="none" stroke="#222" stroke-width="0.6"/>
     <path d="M-4 -6.4 L4 -0.8" stroke="#222" stroke-width="0.5"/>
     <path d="M4 -0.8 l-2 -0.2 l1 -1.4 Z" fill="#222"/>
-    <circle cx="-1" cy="3.5" r="1.8" fill="#fff" stroke="#222" stroke-width="0.6"/>
-    <path d="M1.6 1.4 L0.6 3.5 L1.6 5.6" fill="none" stroke="#222" stroke-width="0.6"/>
+    <path d="M-2.6 3.5 L2.8 0.6 M-2.6 3.5 L2.8 6.4" fill="none" stroke="#222" stroke-width="0.6"/>
+    <circle cx="1.0" cy="3.5" r="1.7" fill="#fff" stroke="#222" stroke-width="0.6"/>
   </g>`;
 }
 
@@ -125,7 +125,8 @@ export function buildAsElbow(type: string, mode: 'meter-out' | 'meter-in'): Devi
   };
   const modelOf = (p: ParamValues) => {
     const [thread, od] = String(p.size).split('-');
-    return `AS${elbowSeries(thread)}2${out ? 0 : 1}1F-${thread}-${od}`;
+    // R ねじはシール剤付き（S）が標準。M5 は付けない
+    return `AS${elbowSeries(thread)}2${out ? 0 : 1}1F-${thread}-${od}${thread === 'M5' ? '' : 'S'}`;
   };
   return {
     type,
@@ -167,7 +168,7 @@ export function buildAsElbow(type: string, mode: 'meter-out' | 'meter-in'): Devi
           y: cylY,
           side: 'bottom',
           role: 'air',
-          air: { kind: 'work', thread: R_MALE[thread] },
+          air: { kind: 'work', thread: R_MALE[thread], male: true },
         },
       ];
     },

@@ -7,7 +7,7 @@
  */
 import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { text } from '../generic/parts';
-import { leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
+import { pneumaticSwitchList, leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
 
 export interface GripperSize {
   size: number;
@@ -194,7 +194,12 @@ export function buildGripper(s: GripperSeries): DeviceDefinition {
     ...(s.estimated ? { estimated: s.estimated } : {}),
     pneumatic: (p) => {
       const act = actionOf(p);
-      return { symbol: 'gripper', ports: (act === 'D' ? { open: 'OPEN', close: 'CLOSE' } : act === 'S' ? { close: 'CLOSE' } : { open: 'OPEN' }) as Record<string, string> };
+      const switches = pneumaticSwitchList(p, { 1: '開', 2: '閉' });
+      return {
+        symbol: 'gripper',
+        ports: (act === 'D' ? { open: 'OPEN', close: 'CLOSE' } : act === 'S' ? { close: 'CLOSE' } : { open: 'OPEN' }) as Record<string, string>,
+        ...(switches ? { switches } : {}),
+      };
     },
   };
 }

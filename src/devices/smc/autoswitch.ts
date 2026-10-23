@@ -197,6 +197,13 @@ export function switchLinks(p: ParamValues): InternalLink[] {
 }
 
 /** 空圧回路図に書くスイッチの出力端子（head: SW1、rod: SW2） */
+/** 空圧回路図に書くオートスイッチ（names は SW1・SW2 が検出する位置） */
+export function pneumaticSwitchList(p: ParamValues, names: { 1: string; 2: string }): { label: string; terminal: string }[] | undefined {
+  const s = switchOf(p);
+  if (!s) return undefined;
+  return switchSlots(p).map((slot) => ({ label: names[slot], terminal: switchOutId(slot, s) }));
+}
+
 export function pneumaticSwitches(p: ParamValues): { head?: string; rod?: string } | undefined {
   const s = switchOf(p);
   if (!s) return undefined;

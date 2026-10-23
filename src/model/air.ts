@@ -100,3 +100,15 @@ export function airCandidates(d: Diagram, from: TerminalRef, defs: DeviceDefinit
   fresh.sort((a, b) => rank(a) - rank(b) || (lookup(a.type)?.model ?? '').localeCompare(lookup(b.type)?.model ?? '', 'ja', { numeric: true }));
   return [...placed, ...fresh];
 }
+
+/** ポートの仕様（数値に解決したもの） */
+export function airPortOf(d: Diagram, ref: TerminalRef, lookup: DefLookup) {
+  const dev = d.devices.find((x) => x.id === ref.device);
+  const def = dev && lookup(dev.type);
+  return def ? resolveDevice(def, dev.params).air.get(ref.terminal) : undefined;
+}
+
+/** おねじのポートを直接ねじ込んだ接続（サイレンサ・エルボ形スピコンなど）か。チューブとしては数えない */
+export function isDirectTube(d: Diagram, w: Pick<DiagramWire, 'from' | 'to'>, lookup: DefLookup): boolean {
+  return !!airPortOf(d, w.from, lookup)?.male || !!airPortOf(d, w.to, lookup)?.male;
+}

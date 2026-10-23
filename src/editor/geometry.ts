@@ -104,6 +104,7 @@ export function wireLayout(
       tCenter: { x: b.x, y: b.y },
       sConnector: s.connector,
       tConnector: t.connector,
+      ...(a.t.air?.male || b.t.air?.male ? { direct: true } : {}),
     });
     inputs.push({ id: w.id, sx: a.x, sy: a.y, sSide: s.side, sStub: s.stub, tx: b.x, ty: b.y, tSide: t.side, tStub: t.stub, manual: !!w.bend || !!w.route });
   }

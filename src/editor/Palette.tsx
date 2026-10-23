@@ -53,16 +53,41 @@ function save(v: Stored) {
 
 const makerOf = (d: DeviceDefinition) => d.maker ?? GENERIC_MAKER;
 
+/**
+ * 検索の表記ゆれをそろえる: 全角・半角（NFKC）、大文字・小文字、空白、長音（シリンダー / シリンダ）、漢数字の「三」（三点セット）
+ */
+const norm = (t: string) => t.normalize('NFKC').toLowerCase().replace(/[\sー・]/g, '').replace(/三点/g, '3点');
+
+/** 現場の通称 → 機器の名前に出てくる言葉（どれかに合えば一致） */
+const SYNONYMS: Record<string, string[]> = {
+  スピコン: ['スピードコントローラ'],
+  エアシリ: ['シリンダ'],
+  frl: ['3点セット', 'フィルタ', 'レギュレータ'],
+  ソレノイドバルブ: ['電磁弁'],
+  ソレノイド: ['電磁弁'],
+  マニホ: ['マニホールド'],
+  サイレンサー: ['サイレンサ'],
+  レギュ: ['レギュレータ'],
+  チャック: ['エアチャック'],
+  継手: ['継手', 'ユニオン', 'レデューサ'],
+  ティー: ['ユニオンティ'],
+};
+
 /** 検索語にどれだけ合うか（0 は不一致）。名称・型式・メーカー・説明・type を対象にする */
 function score(d: DeviceDefinition, words: string[]): number {
   // 定格電流などのパラメータの選択肢（例: '30A'）でも探せるようにする
   const options = (d.params ?? []).flatMap((p) => p.options.map((o) => `${o.label ?? ''} ${o.value}${p.unit ?? ''}`)).join(' ');
-  const fields = [d.name, d.model, makerOf(d), d.type, d.description ?? '', CATEGORY_NAMES[d.category], options].map((f) => f.toLowerCase());
+  const fields = [d.name, d.model, makerOf(d), d.type, d.description ?? '', CATEGORY_NAMES[d.category], options].map(norm);
+  const category = norm(CATEGORY_NAMES[d.category]);
   let total = 0;
-  for (const w of words) {
-    const hit = fields.findIndex((f) => f.includes(w));
+  for (const raw of words) {
+    const w = norm(raw);
+    if (!w) continue;
+    const alts = [w, ...(SYNONYMS[w] ?? []).map(norm)];
+    const hit = fields.findIndex((f) => alts.some((a) => f.includes(a)));
     if (hit < 0) return 0;
-    total += 10 - hit;
+    // 分類の名前にも合う機器（「シリンダ」で引いたエアシリンダなど）を先に出す
+    total += 10 - hit + (alts.some((a) => category.includes(a)) ? 5 : 0);
   }
   return total;
 }

@@ -126,6 +126,11 @@ export interface AirPortSpec {
   tubeOD?: NumOrParam;
   /** ポートのねじの呼び（'M5'、'Rc1/8'、'Rc1/4' など。表示・部品表用） */
   thread?: string;
+  /**
+   * おねじのポート（サイレンサ、エルボ形スピードコントローラのシリンダ側など）。相手のめねじのポートへ直接ねじ込むので、
+   * つないだ線はチューブではなく直結として扱う（部品表・線番表のチューブに数えず、ねじの呼びの一致を確かめる）
+   */
+  male?: boolean;
   /** 供給圧力[MPa]（kind: 'supply'） */
   pressure?: NumOrParam;
   /** 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する */
@@ -598,6 +603,11 @@ export interface PneumaticHint {
     /** オートスイッチの電気端子（記号の横にスイッチの名前を書くため。ヘッド側・ロッド側の出力端子の ID） */
     switches?: { head?: string; rod?: string };
   };
+  /**
+   * アクチュエータのオートスイッチ（記号の横にスイッチの位置と PLC の入出力番号を書く）。label は検出する位置（'開'・'閉'・'A 端' など）、
+   * terminal は出力端子の ID。シリンダは cylinder.switches でもよい
+   */
+  switches?: { label: string; terminal: string }[];
   /** 3 点セット（symbol: 'frl'）の構成（左＝一次側から） */
   units?: ('filter' | 'mist-separator' | 'regulator' | 'lubricator' | 'filter-regulator')[];
   /** 圧力計付き（減圧弁・3 点セット） */

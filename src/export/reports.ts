@@ -3,7 +3,9 @@
  * 画面の接続リスト、印刷、CSV 保存で共通に使う。
  */
 import { buildModel, key } from '../check/model';
+import { fittingModel } from '../data/threads';
 import { getTubeColor, getTubeType, tubeModel } from '../data/tubes';
+import { airPortOf, isDirectTube } from '../model/air';
 import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
 import { deviceModel, paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
@@ -69,6 +71,7 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
     const sheet = dev ? sheetOf(d, dev) : sheets[0].id;
     const cable = w.wireType === CABLE_WIRE_TYPE;
     const tube = isTube(w);
+    const direct = tube && isDirectTube(d, w, lookup);
     const color = getWireColor(w.color);
     const tubeColor = getTubeColor(w.color);
     return {
@@ -81,10 +84,12 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
       to: name(w.to),
       spec: cable
         ? 'ケーブル'
-        : tube
+        : direct
+          ? '直結（ねじ込み）'
+          : tube
           ? `チューブ ${tubeModel(w.wireType, w.tubeOD ?? 6, w.color)}（φ${w.tubeOD ?? '?'} ${tubeColor?.name ?? w.color}）`
           : `${w.wireType} ${w.sizeSq}sq ${color?.name ?? w.color}`,
-      wireType: cable ? 'ケーブル' : tube ? 'チューブ' : w.wireType,
+      wireType: cable ? 'ケーブル' : direct ? '直結' : tube ? 'チューブ' : w.wireType,
       ...(cable ? {} : tube ? { colorName: tubeColor?.name ?? w.color, colorHex: tubeColor?.hex } : { sizeSq: w.sizeSq, colorName: color?.name ?? w.color, colorHex: color?.hex }),
       note: cable || tube ? '' : commentOf(w.from),
     };
@@ -166,25 +171,47 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     g.ids.push(x.id);
     groups.set(k, g);
   }
-  // チューブ（種類・外径・色ごとの本数。長さは図面にないので本数だけ）
+  // チューブ: 種類・外径・色ごとに 1 巻（20m 巻）。長さは図面にないので、図面上の本数を仕様に書く
+  // ねじのポートには、チューブの外径に合うワンタッチ管継手（ハーフユニオン）を付ける。おねじを直接ねじ込んだ接続（直結）は数えない
+  const tubeCount = new Map<string, number>();
   for (const w of d.wires) {
-    if (!isTube(w)) continue;
+    if (!isTube(w) || isDirectTube(d, w, lookup)) continue;
     const od = w.tubeOD ?? 6;
-    const model = tubeModel(w.wireType, od, w.color);
+    const model = `${tubeModel(w.wireType, od, w.color)}-20`;
     const k = `tube|${model}`;
     const g = groups.get(k) ?? {
       category: 'air-fitting' as DeviceCategory,
       maker: 'SMC',
       model,
       name: getTubeType(w.wireType)?.name ?? 'チューブ',
-      spec: `外径 φ${od}、${getTubeColor(w.color)?.name ?? w.color}（本数。長さは現物合わせ）`,
-      qty: 0,
+      spec: '',
+      qty: 1,
       ids: [],
       estimated: false,
     };
-    g.qty++;
+    tubeCount.set(k, (tubeCount.get(k) ?? 0) + 1);
+    g.spec = `外径 φ${od}・${getTubeColor(w.color)?.name ?? w.color}、20m 巻（図面上 ${tubeCount.get(k)} 本。長さは現物合わせ）`;
     g.ids.push(w.id);
     groups.set(k, g);
+    for (const r of [w.from, w.to]) {
+      const port = airPortOf(d, r, lookup);
+      const fm = port?.thread && !port.male && port.tubeOD !== undefined ? fittingModel(port.thread, port.tubeOD) : undefined;
+      if (!fm) continue;
+      const fk = `fitting|${fm}`;
+      const f = groups.get(fk) ?? {
+        category: 'air-fitting' as DeviceCategory,
+        maker: 'SMC',
+        model: fm,
+        name: 'ワンタッチ管継手（ハーフユニオン）',
+        spec: `${port!.thread} × φ${port!.tubeOD}（ねじのポートに付ける）`,
+        qty: 0,
+        ids: [],
+        estimated: false,
+      };
+      f.qty++;
+      f.ids.push(`${r.device}.${r.terminal}`);
+      groups.set(fk, f);
+    }
   }
   return [...groups.values()]
     .map((g) => ({ ...g, ids: g.ids.sort(collator.compare) }))

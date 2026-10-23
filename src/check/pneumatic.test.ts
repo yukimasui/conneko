@@ -294,3 +294,37 @@ describe('エアのポートから引いたときの候補', () => {
     expect(diagram.wires[0]).toMatchObject({ wireType: 'TU', tubeOD: 8, from: { device: 'AIR1', terminal: 'OUT' }, to: { device: 'SOL1', terminal: 'P' } });
   });
 });
+
+describe('ねじと直結', () => {
+  const base = (silencer: string): Diagram => ({
+    devices: [
+      { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0, params: { tubeOD: 6 } },
+      { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+      { id: 'CY1', type: 'test.cylinder', x: 0, y: 0 },
+      { id: 'SL1', type: 'smc.an', x: 0, y: 0, params: { thread: silencer } },
+    ],
+    wires: [tube('AIR1.OUT', 'SOL1.P'), tube('SOL1.A', 'CY1.H'), tube('SOL1.B', 'CY1.R'), tube('SL1.IN', 'SOL1.EA', 8)],
+  });
+
+  it('サイレンサを排気ポートにねじ込むのは直結（チューブの外径を問わない）。ねじの大きさが違えば指摘する', () => {
+    expect(air(base('M5'))).toEqual([]);
+    const issues = air(base('01'));
+    expect(issues.map((i) => i.rule)).toEqual(['air-thread-mismatch']);
+    expect(issues[0].message).toContain('ねじの大きさが合いません');
+  });
+
+  it('ねじのポートに付かない外径の継手を選ぶと指摘する（M5 に φ12 など）', () => {
+    const m5: DeviceDefinition = {
+      ...cylinder,
+      type: 'test.m5',
+      terminals: [port('H', { kind: 'work', tubeOD: 12, thread: 'M5' }), port('R', { kind: 'work', tubeOD: 12, thread: 'M5' })],
+    };
+    const look = (t: string) => (t === 'test.m5' ? m5 : lookup(t));
+    const d: Diagram = { ...base('M5'), devices: base('M5').devices.map((x) => (x.id === 'CY1' ? { ...x, type: 'test.m5' } : x)) };
+    const issues = checkDiagram(d, look).filter((i) => i.rule === 'air-fitting-thread');
+    expect(issues.map((i) => i.message)).toEqual([
+      'CY1: ポート H（M5）に φ12 のワンタッチ管継手は付きません（M5 に付くのは φ3.2・φ4・φ6）',
+      'CY1: ポート R（M5）に φ12 のワンタッチ管継手は付きません（M5 に付くのは φ3.2・φ4・φ6）',
+    ]);
+  });
+});

@@ -9,7 +9,7 @@ import { deviceModel, deviceSize, type DeviceDefinition, type ParamValues } from
 import { cableStyle } from '../devices/resolve';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
 import { DIR, toRoundedPath, type Point } from '../editor/routing';
-import { tubeStrokes } from '../editor/tubeStyle';
+import { DIRECT_STROKES, tubeStrokes } from '../editor/tubeStyle';
 import { wireWidth } from '../editor/WireEdge';
 import { computeBus, effectiveParams, mountedPositions } from '../model/bus';
 import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type DiagramDevice } from '../model/diagram';
@@ -148,7 +148,7 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       continue;
     }
     if (isTube(w)) {
-      for (const st of tubeStrokes(w.color, w.tubeOD)) {
+      for (const st of geo.direct ? DIRECT_STROKES : tubeStrokes(w.color, w.tubeOD)) {
         out.push(`<path d="${d0}" fill="none" stroke="${st.stroke}" stroke-width="${st.width}"${st.opacity !== undefined ? ` stroke-opacity="${st.opacity}"` : ''} stroke-linecap="round" stroke-linejoin="round"/>`);
       }
       continue;

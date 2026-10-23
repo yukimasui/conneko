@@ -7,7 +7,7 @@
  */
 import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { text } from '../generic/parts';
-import { leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
+import { pneumaticSwitchList, leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
 
 export interface RotarySize {
   size: number;
@@ -182,6 +182,9 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
     links: switchLinks,
     params,
     ...(s.estimated ? { estimated: s.estimated } : {}),
-    pneumatic: { symbol: 'rotary', ports: { a: 'A', b: 'B' } },
+    pneumatic: (p) => {
+      const switches = pneumaticSwitchList(p, { 1: 'A 端', 2: 'B 端' });
+      return { symbol: 'rotary', ports: { a: 'A', b: 'B' }, ...(switches ? { switches } : {}) };
+    },
   };
 }

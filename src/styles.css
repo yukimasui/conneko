@@ -351,6 +351,10 @@ textarea {
 .device-node.has-mounted .device-node__label {
   margin-bottom: 26px;
 }
+/* 装着したユニットのコメントは、親・隣のユニットのラベルに重なるので出さない（インスペクタで見る） */
+.device-node.is-mounted .device-node__note {
+  display: none;
+}
 /* 装着したユニットは横に詰めて並ぶため、ラベルは機器名だけにする */
 .device-node.is-mounted .device-node__label {
   font-size: 11px;

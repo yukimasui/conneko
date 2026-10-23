@@ -8,6 +8,7 @@
  * - マニホールドに装着した電磁弁のポート（P・EA・EB）は、親の bus.host.airGallery で親のポート（SUP・EXH）とつながる
  * ポートの圧力は、届く経路のうちいちばん高いもの（レギュレータを通ればその設定圧力まで）とする。
  */
+import { fittingODs, threadSize } from '../data/threads';
 import { getTubeType } from '../data/tubes';
 import type { ResolvedAirPort } from '../devices/resolve';
 import { key, type Model, type Push } from './model';
@@ -172,8 +173,55 @@ export function checkPneumatic(m: Model, push: Push) {
     });
   }
 
-  // チューブの外径と継手、チューブの最高使用圧力
+  // チューブの外径と継手、チューブの最高使用圧力。おねじのポートをつないだものは直結（ねじの呼びを確かめる）
+  const fittingChecked = new Set<string>();
   for (const w of m.tubes) {
+    const pa = ports.get(key(w.from.device, w.from.terminal));
+    const pb = ports.get(key(w.to.device, w.to.terminal));
+    if (pa?.spec.male || pb?.spec.male) {
+      const [male, other] = pa?.spec.male ? [pa, pb] : [pb!, pa];
+      if (!other) continue;
+      const name = (p: Port) => `${p.device}.${p.label}`;
+      if (other.spec.male) {
+        push({ severity: 'warning', rule: 'air-thread-mismatch', message: `${w.id}: おねじどうし（${name(male)} と ${name(other)}）はつなげません`, devices: [male.device, other.device], wires: [w.id] });
+      } else if (!other.spec.thread) {
+        push({
+          severity: 'warning',
+          rule: 'air-thread-mismatch',
+          message: `${w.id}: ${name(male)}（${male.spec.thread ?? 'おねじ'}）はめねじのポートにねじ込む部品ですが、${name(other)} はワンタッチ管継手のポートです`,
+          devices: [male.device, other.device],
+          wires: [w.id],
+        });
+      } else if (male.spec.thread && threadSize(male.spec.thread) !== threadSize(other.spec.thread)) {
+        push({
+          severity: 'warning',
+          rule: 'air-thread-mismatch',
+          message: `${w.id}: ${name(male)}（${male.spec.thread}）と ${name(other)}（${other.spec.thread}）のねじの大きさが合いません`,
+          devices: [male.device, other.device],
+          wires: [w.id],
+        });
+      }
+      continue;
+    }
+    for (const [r, p] of [
+      [w.from, pa],
+      [w.to, pb],
+    ] as const) {
+      // ねじのポートに付ける継手は、ねじの大きさで付けられる外径が決まる（M5 なら φ6 まで）
+      const ods = fittingODs(p?.spec.thread);
+      const k = key(r.device, r.terminal);
+      if (p && ods && p.spec.tubeOD !== undefined && !ods.includes(p.spec.tubeOD) && !fittingChecked.has(k)) {
+        fittingChecked.add(k);
+        push({
+          severity: 'warning',
+          rule: 'air-fitting-thread',
+          message: `${p.device}: ポート ${p.label}（${p.spec.thread}）に φ${p.spec.tubeOD} のワンタッチ管継手は付きません（${p.spec.thread} に付くのは φ${ods.join('・φ')}）`,
+          devices: [p.device],
+          wires: [w.id],
+          key: `air-fitting-thread:${k}`,
+        });
+      }
+    }
     for (const r of [w.from, w.to]) {
       const p = ports.get(key(r.device, r.terminal));
       const od = p?.spec.tubeOD;
@@ -218,6 +266,9 @@ export function checkPneumatic(m: Model, push: Push) {
   const vacuum = vacuumNet(m, ports);
   const byDevice = new Map<string, string[]>();
   for (const [k, p] of ports) if (!p.link) byDevice.set(p.device, [...(byDevice.get(p.device) ?? []), k]);
+  // エアの届かない機器と、一次側・二次側を逆につないだ機器（逆につないだ機器より下流の「届かない」はまとめて 1 件にする）
+  const reversedAt: { device: string; from: string; to: string }[] = [];
+  const noSupply: string[] = [];
   for (const [device, ks] of byDevice) {
     const info = m.devices.get(device)!;
     // 一次側・作業ポートにチューブがあるのに、どこにもエアが届いていない
@@ -225,17 +276,8 @@ export function checkPneumatic(m: Model, push: Push) {
     if (fed.length && !fed.some((k) => pressure.has(k)) && !fed.some((k) => vacuum.has(k))) {
       // 向きのある通り道の出口側だけにエアが来ているなら、つなぐ向きが逆
       const reversed = info.r.airLinks.find((l) => l.directed && pressure.has(key(device, l.to)) && !pressure.has(key(device, l.from)));
-      push(
-        reversed
-          ? {
-              severity: 'warning',
-              rule: 'air-reversed',
-              message: `${device}: ${reversed.to} 側からエアが来ています。${reversed.from}（一次側）と ${reversed.to}（二次側）を逆につないでいないか確かめてください`,
-              devices: [device],
-              wires: [],
-            }
-          : { severity: 'warning', rule: 'air-no-supply', message: `${device}: エアが届いていません（エア源から配管がつながっているか確かめてください）`, devices: [device], wires: [] },
-      );
+      if (reversed) reversedAt.push({ device, from: reversed.from, to: reversed.to });
+      else noSupply.push(device);
       continue;
     }
     // 使用圧力範囲（ポートごとに、届く圧力と比べる。指摘は機器ごとに 1 件）
@@ -254,16 +296,50 @@ export function checkPneumatic(m: Model, push: Push) {
           key: `air-over-pressure:${device}`,
         });
       } else if (lo !== undefined && v < lo - 1e-9) {
+        // レギュレータの一次側は、設定圧力に対して言う（一次側の最低使用圧力は設定圧力 + 0.05MPa など）
+        const reg = info.r.airLinks.find((l) => l.regulate !== undefined && l.from === p.id);
         push({
           severity: 'warning',
           rule: 'air-under-pressure',
-          message: `${device}: ${p.label} の圧力 ${mpa(v)} が最低使用圧力 ${mpa(lo)} に届きません`,
+          message: reg
+            ? `${device}: 設定圧力 ${mpa(reg.regulate!)} に対して一次側（${p.label}）の圧力 ${mpa(v)} が足りません（一次側は ${mpa(lo)} 以上にします）`
+            : `${device}: ${p.label} の圧力 ${mpa(v)} が最低使用圧力 ${mpa(lo)} に届きません`,
           devices: [device],
           wires: [],
           key: `air-under-pressure:${device}`,
         });
       }
     }
+  }
+  // 逆につないだ機器から（向きを問わず）配管でつながる機器の「届かない」は、逆につないだ指摘にまとめる
+  const undirected = new Map<string, string[]>();
+  const join = (a: string, b: string) => {
+    undirected.set(a, [...(undirected.get(a) ?? []), b]);
+    undirected.set(b, [...(undirected.get(b) ?? []), a]);
+  };
+  for (const w of m.tubes) join(key(w.from.device, w.from.terminal), key(w.to.device, w.to.terminal));
+  for (const [a, b] of m.labelLinks) join(a, b);
+  for (const [a, b] of airGalleryPairs(m)) join(a, b);
+  for (const { device, r } of m.devices.values()) for (const l of r.airLinks) join(key(device.id, l.from), key(device.id, l.to));
+  const suppressed = new Set<string>();
+  for (const rv of reversedAt) {
+    const seen = new Set<string>([key(rv.device, rv.from)]);
+    const queue = [key(rv.device, rv.from)];
+    while (queue.length) for (const n of undirected.get(queue.shift()!) ?? []) if (!seen.has(n)) (seen.add(n), queue.push(n));
+    const downstream = noSupply.filter((d) => d !== rv.device && [...seen].some((k) => k.startsWith(`${d}:`)));
+    downstream.forEach((d) => suppressed.add(d));
+    push({
+      severity: 'warning',
+      rule: 'air-reversed',
+      message:
+        `${rv.device}: ${rv.to} 側からエアが来ています。${rv.from}（一次側）と ${rv.to}（二次側）を逆につないでいないか確かめてください` +
+        (downstream.length ? `（このため ${downstream.join('・')} にもエアが届いていません）` : ''),
+      devices: [rv.device, ...downstream],
+      wires: [],
+    });
+  }
+  for (const device of noSupply.filter((d) => !suppressed.has(d))) {
+    push({ severity: 'warning', rule: 'air-no-supply', message: `${device}: エアが届いていません（エア源から配管がつながっているか確かめてください）`, devices: [device], wires: [] });
   }
 }
 

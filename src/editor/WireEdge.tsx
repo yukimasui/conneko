@@ -6,7 +6,7 @@ import type { TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode, WireFlowEdge } from './flow';
 import { CableGraphics } from './CableGraphics';
-import { tubeStrokes } from './tubeStyle';
+import { DIRECT_STROKES, tubeStrokes } from './tubeStyle';
 import {
   autoInner,
   DIR,
@@ -163,7 +163,7 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
           target={{ point: tPt, side: tSide, connector: geo!.tConnector! }}
         />
       ) : isTube ? (
-        tubeStrokes(data.color, data.tubeOD).map((st, i) => (
+        (geo?.direct ? DIRECT_STROKES : tubeStrokes(data.color, data.tubeOD)).map((st, i) => (
           <path key={i} d={path} fill="none" stroke={st.stroke} strokeWidth={st.width} strokeOpacity={st.opacity} strokeLinecap="round" strokeLinejoin="round" />
         ))
       ) : (
@@ -208,7 +208,9 @@ function WireEdgeView({ id, data, selected, sourceX, sourceY, targetX, targetY, 
               {isCable
                 ? ` ケーブル（${geo?.sConnector?.kind}）`
                 : isTube
-                  ? ` ${tubeModel(data.wireType, data.tubeOD ?? 6, data.color)}（φ${data.tubeOD ?? '?'}）`
+                  ? geo?.direct
+                    ? ' 直結（ねじ込み）'
+                    : ` ${tubeModel(data.wireType, data.tubeOD ?? 6, data.color)}（φ${data.tubeOD ?? '?'}）`
                   : ` ${data?.wireType ?? ''} ${data?.sizeSq ?? ''}sq`}
             </span>
           </div>

@@ -15,6 +15,13 @@ export function tubeWidth(od: number | undefined): number {
   return Math.max(3.5, Math.min(11, (od ?? 6) * 0.85));
 }
 
+/** おねじを直接ねじ込んだ接続（サイレンサ・エルボ形スピコンなど）: 金属の短い継ぎ目として描く */
+export const DIRECT_STROKES: StrokeSpec[] = [
+  { stroke: 'rgba(0,0,0,0.55)', width: 5.2 },
+  { stroke: '#a7adb3', width: 3.6 },
+  { stroke: '#ffffff', width: 1, opacity: 0.5 },
+];
+
 /** 重ねて描く線（下から順） */
 export function tubeStrokes(color: string, od: number | undefined): StrokeSpec[] {
   const c = getTubeColor(color);

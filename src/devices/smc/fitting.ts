@@ -203,7 +203,7 @@ export function buildAn(type: string): DeviceDefinition {
         y: 2,
         side: 'top',
         role: 'air',
-        air: { kind: 'exhaust', thread: R_MALE[String(p.thread)] },
+        air: { kind: 'exhaust', thread: R_MALE[String(p.thread)], male: true },
       },
     ],
     params: [

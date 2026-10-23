@@ -18,7 +18,7 @@ const cylinder: DeviceDefinition = {
   height: 10,
   svg: '',
   category: 'actuator',
-  terminals: [port('H', { kind: 'work', tubeOD: 6, minPressure: 0.05, maxPressure: 0.7 }), port('R', { kind: 'work', tubeOD: 6, minPressure: 0.05, maxPressure: 0.7 })],
+  terminals: [port('H', { kind: 'work', tubeOD: 6, thread: 'Rc1/8', minPressure: 0.05, maxPressure: 0.7 }), port('R', { kind: 'work', tubeOD: 6, thread: 'Rc1/8', minPressure: 0.05, maxPressure: 0.7 })],
 };
 const lookup = (type: string) => (type === cylinder.type ? cylinder : getDeviceDefinition(type));
 
@@ -68,9 +68,9 @@ describe('SMC の 3 点セット・エア周辺機器の定義', () => {
     expect(m('smc.al')).toBe('AL20-02-A');
     expect(m('smc.afm')).toBe('AFM20-02-A');
     expect(m('smc.vhs', { body: '30-03' })).toBe('VHS30-03A');
-    expect(m('smc.as2201f', { size: '02-08' })).toBe('AS2201F-02-08');
+    expect(m('smc.as2201f', { size: '02-08' })).toBe('AS2201F-02-08S');
     expect(m('smc.as2201f', { size: 'M5-04' })).toBe('AS1201F-M5-04');
-    expect(m('smc.as2211f')).toBe('AS2211F-01-06');
+    expect(m('smc.as2211f')).toBe('AS2211F-01-06S');
     expect(m('smc.as-f.inline', { tubeOD: 4 })).toBe('AS1002F-04');
     expect(m('smc.kq2t', { tubeOD: 8 })).toBe('KQ2T08-00A');
     expect(m('smc.kq2u')).toBe('KQ2U06-00A');
@@ -166,7 +166,9 @@ describe('SMC の機器を通るエアの圧力', () => {
     const d = line();
     d.wires[1] = tube('FR1.OUT', 'VHS1.OUT');
     d.wires[3] = tube('VHS1.IN', 'J1.A');
-    expect(rules(d)).toContain('air-reversed:VHS1');
+    expect(rules(d).some((r) => r.startsWith('air-reversed:VHS1'))).toBe(true);
+    // 逆につないだ機器より下流の「届かない」は、逆につないだ指摘にまとめる
+    expect(rules(d).some((r) => r.startsWith('air-no-supply'))).toBe(false);
 
     const cv = (from: string, to: string): Diagram => ({
       devices: [dev('AIR1', 'generic.air-source', { tubeOD: 6 }), dev('CV1', 'smc.akh'), dev('CY1', 'test.cylinder')],
@@ -174,7 +176,7 @@ describe('SMC の機器を通るエアの圧力', () => {
     });
     expect(pressures(cv('CV1.IN', 'CV1.OUT')).get('CY1:H')).toBe(0.5);
     expect(pressures(cv('CV1.OUT', 'CV1.IN')).has('CY1:H')).toBe(false);
-    expect(rules(cv('CV1.OUT', 'CV1.IN'))).toContain('air-reversed:CV1');
+    expect(rules(cv('CV1.OUT', 'CV1.IN')).some((r) => r.startsWith('air-reversed:CV1'))).toBe(true);
   });
 
   it('スピコン・フィンガバルブ・ユニオン Y はどちら向きにも通す', () => {

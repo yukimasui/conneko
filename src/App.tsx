@@ -21,6 +21,7 @@ import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagr
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
+import { deviceSize } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
@@ -504,20 +505,36 @@ function Editor() {
     (type: string, at?: { x: number; y: number }) => {
       const def = getDeviceDefinition(type);
       if (!def) return;
+      const center = !at;
       let pos = at;
       if (!pos) {
         const r = canvasRef.current?.getBoundingClientRect();
-        const c = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
-        pos = { x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40 };
+        pos = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
       }
       setNodes((ns) => {
         const id = nextDeviceId(def.labelPrefix, ns.map((n) => n.id));
+        // クリックで置くときは、同じシートのほかの機器に重ならない位置まで右（端まで行ったら下の段）へずらす
+        if (center && pos) {
+          const boxes = ns
+            .filter((n) => n.data.sheet === sheet)
+            .map((n) => {
+              const d = getDeviceDefinition(n.data.deviceType);
+              const size = d ? deviceSize(d, n.data.params) : { width: 100, height: 100 };
+              return { x: n.position.x, y: n.position.y, w: size.width, h: size.height };
+            });
+          const hits = (x: number, y: number) => boxes.some((b) => x < b.x + b.w + 20 && x + def.width + 20 > b.x && y < b.y + b.h + 40 && y + def.height + 40 > b.y);
+          const start = { x: pos.x - def.width / 2, y: pos.y - def.height / 2 };
+          let p = start;
+          for (let i = 0; i < 60 && hits(p.x, p.y); i++) p = { x: start.x + ((i + 1) % 6) * (def.width + 40), y: start.y + Math.floor((i + 1) / 6) * (def.height + 60) };
+          pos = { x: p.x + def.width / 2, y: p.y + def.height / 2 };
+        }
+        const place = pos!;
         return [
           ...ns.map((n) => ({ ...n, selected: false })),
           {
             id,
             type: 'device',
-            position: { x: Math.round(pos.x - def.width / 2), y: Math.round(pos.y - def.height / 2) },
+            position: { x: Math.round(place.x - def.width / 2), y: Math.round(place.y - def.height / 2) },
             data: { deviceType: type, sheet },
             selected: true,
           },
