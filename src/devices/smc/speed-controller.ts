@@ -131,7 +131,7 @@ export function buildAsElbow(type: string, mode: 'meter-out' | 'meter-in'): Devi
   return {
     type,
     name: out ? 'スピードコントローラ（エルボ形・メータアウト）' : 'スピードコントローラ（エルボ形・メータイン）',
-    model: out ? 'AS2201F-01-06' : 'AS2211F-01-06',
+    model: out ? 'AS2201F-01-06S' : 'AS2211F-01-06S',
     modelOf,
     maker: 'SMC',
     category: 'air-fitting',

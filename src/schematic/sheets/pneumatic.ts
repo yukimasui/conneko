@@ -141,8 +141,9 @@ function drawValve(pen: Pen, hint: PneumaticHint, cx: number, y: number, solLabe
   const cy = y + BOX_H / 2;
   const left = operator(pen, v.operators.a, x0, cy, -1);
   const right = operator(pen, v.operators.b, x0 + total, cy, 1);
-  if (solLabel.a) pen.text(left - 1, y - 2.5, solLabel.a, { align: 'right', layer: 'TAG', height: 2.2 });
-  if (solLabel.b) pen.text(right + 1, y - 2.5, solLabel.b, { align: 'left', layer: 'TAG', height: 2.2 });
+  // ソレノイドの名前は操作部の真上に（隣の弁の名前とくっつかないよう、箱の外へは出さない）
+  if (solLabel.a) pen.text(x0 - 2.5, y - 2.5, solLabel.a, { align: 'center', layer: 'TAG', height: 2.2 });
+  if (solLabel.b) pen.text(x0 + total + 2.5, y - 2.5, solLabel.b, { align: 'center', layer: 'TAG', height: 2.2 });
   // 外部の配管をつなぐ箱
   const bx = x0 + (n === 3 ? BOX_W : BOX_W);
   const pins: Record<string, XY> = {};
@@ -622,7 +623,11 @@ export function pneumaticPages(
     const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + 3;
     pen.rect(x0, yValve - 4, x1 - x0, BOX_H + 18, { dashed: true });
     const e = entries.get(host)!;
-    pen.text(x0, yValve + BOX_H + 17.5, `${e.id}  ${e.model}（マニホールド ${boxes.length} 連）`, { height: 2.2, layer: 'TAG' });
+    // 連数はブランクプレートも数える（型式の連数と合わせる）。主管へ下ろす線に重ならないよう、枠の右下の外に書く
+    const stations = [...model.devices.values()].filter((x) => x.device.mount?.device === host).length;
+    const blanks = stations - boxes.length;
+    pen.text(x1 + 2, yValve + BOX_H + 10, e.id, { height: 2.4, layer: 'TAG' });
+    pen.text(x1 + 2, yValve + BOX_H + 13.5, `${e.model}（${stations} 連${blanks > 0 ? `、ブランク ${blanks}` : ''}）`, { height: 1.9 });
   }
 
   // エア源・3 点セット（主管の左、流れの順）

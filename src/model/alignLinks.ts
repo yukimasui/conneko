@@ -23,6 +23,7 @@ const COLUMN_GAP = 90;
 const LANE_GAP = 9;
 /** 上下の端子: 機器の外形から最初のリンクまでの距離と、端子からリンクの電線をつなぐ端までの横の距離 */
 const BELOW_GAP = 40;
+const ABOVE_GAP = 70;
 const SIDE_SHIFT = 26;
 
 /** 機器 deviceId の端子につないだリンク（その端子とだけつながっているもの）と、つないだ端子 */
@@ -94,7 +95,8 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
       h.forEach((it, i) => {
         const ldef = lookup(it.link.type)!;
         const x = k === 0 ? it.x - SIDE_SHIFT - ldef.width : it.x + SIDE_SHIFT;
-        const y = side === 'bottom' ? dev.y + size.height + BELOW_GAP + i * LINK_PITCH : dev.y - BELOW_GAP - ldef.height - i * LINK_PITCH;
+        // 上は機器名のラベル（装着した親はユニットのラベルの上にもう 1 段）を避けて離す
+        const y = side === 'bottom' ? dev.y + size.height + BELOW_GAP + i * LINK_PITCH : dev.y - ABOVE_GAP - ldef.height - i * LINK_PITCH;
         moved.set(it.link.id, { x: Math.round(x), y: Math.round(y) });
       }),
     );
