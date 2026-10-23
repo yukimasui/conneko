@@ -3,15 +3,22 @@ import { createPortal } from 'react-dom';
 import type { CheckIssue, Severity } from '../check/checkDiagram';
 import { getDeviceDefinition } from '../devices/registry';
 import { bomRows, ioRows, wireRows } from '../export/reports';
+import { pageNameOf, printableArea, printPageCss } from '../export/printPages';
 import { renderSheetSvg } from '../export/sheetSvg';
 import { sheetsOf, type Diagram } from '../model/diagram';
+import { buildSchematic } from '../schematic/layout';
+import type { PaperSize } from '../schematic/model';
+import { sheetSvg } from '../schematic/svg';
 
-export type PaperSize = 'A4' | 'A3';
+export type { PaperSize };
 
 export interface PrintOptions {
+  /** 概念図のシートと一覧の用紙（展開図はシートごとの用紙） */
   paper: PaperSize;
   /** 印刷するシートのID */
   sheets: string[];
+  /** 印刷する展開図のシートのID（端子台接続図など複数ページになるシートはすべてのページ） */
+  schematic: string[];
   bom: boolean;
   wires: boolean;
   io: boolean;
@@ -19,12 +26,6 @@ export interface PrintOptions {
   markers: boolean;
   notes: boolean;
 }
-
-/** 用紙（横向き）の印刷できる範囲[mm]（余白 8mm） */
-const PAPER: Record<PaperSize, { w: number; h: number }> = {
-  A4: { w: 297 - 16, h: 210 - 16 },
-  A3: { w: 420 - 16, h: 297 - 16 },
-};
 
 const SEVERITY_NAMES: Record<Severity, string> = { error: 'エラー', warning: '警告', info: '情報' };
 
@@ -70,17 +71,24 @@ function TitleBlock({ diagram, page, pages, sheetName }: { diagram: Diagram; pag
 }
 
 /**
- * 印刷用のページ（印刷のときだけ表示する）。シートごとの図面と、部品表・線番表・I/O 表・チェック結果。
+ * 印刷用のページ（印刷のときだけ表示する）。シートごとの図面と、展開図のページ、部品表・線番表・I/O 表・チェック結果。
  * 表示したらブラウザの印刷を開き、印刷が終わったら onDone を呼ぶ。
  */
 export function PrintView({ diagram, issues, options, onDone }: { diagram: Diagram; issues: CheckIssue[]; options: PrintOptions; onDone: () => void }) {
-  const paper = PAPER[options.paper];
+  const paper = printableArea(options.paper);
   const sheets = sheetsOf(diagram).filter((s) => options.sheets.includes(s.id));
   const drawings = useMemo(
     () => sheets.map((s) => ({ sheet: s, ...renderSheetSvg(diagram, s.id, getDeviceDefinition, { markers: options.markers, notes: options.notes }) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [diagram, options],
   );
+  // 展開図のページ（図面枠・表題欄・ページ番号は展開図の中に描いてある）
+  const schematicPages = useMemo(() => {
+    if (!options.schematic.length || !diagram.schematic?.sheets.length) return [];
+    const { doc } = buildSchematic(diagram, getDeviceDefinition);
+    return doc.sheets.filter((p) => options.schematic.includes(p.source ?? p.id)).map((p) => ({ page: p, svg: sheetSvg(doc, p) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagram, options]);
   const bom = options.bom ? bomRows(diagram, getDeviceDefinition) : [];
   const wires = options.wires ? wireRows(diagram, getDeviceDefinition).rows : [];
   const io = options.io ? ioRows(diagram, getDeviceDefinition) : [];
@@ -105,12 +113,21 @@ export function PrintView({ diagram, issues, options, onDone }: { diagram: Diagr
   let n = 0;
   return createPortal(
     <div className="print-root">
-      <style>{`@page { size: ${options.paper} landscape; margin: 8mm; }`}</style>
+      <style>{printPageCss(options.paper, schematicPages.map((p) => p.page.paper))}</style>
       {drawings.map((d) => (
         <section key={d.sheet.id} className="print-page" style={pageStyle}>
           <div className="print-drawing" dangerouslySetInnerHTML={{ __html: d.svg.replace('<svg ', '<svg preserveAspectRatio="xMidYMid meet" ').replace(/ width="\d+" height="\d+"/, ' width="100%" height="100%"') }} />
           <TitleBlock diagram={diagram} page={++n} pages={pages} sheetName={`シート「${d.sheet.name}」`} />
         </section>
+      ))}
+      {schematicPages.map(({ page: p, svg }) => (
+        <section
+          key={p.id}
+          className="print-page is-schematic"
+          // 用紙ちょうどの高さにすると、丸めで次のページにはみ出すことがあるので少し小さくする
+          style={{ width: `${p.paper.width - 1}mm`, height: `${p.paper.height - 1}mm`, page: pageNameOf(p.paper) }}
+          dangerouslySetInnerHTML={{ __html: svg.replace(/ width="[\d.]+mm" height="[\d.]+mm"/, ' width="100%" height="100%"') }}
+        />
       ))}
       {options.bom && (
         <section className="print-page is-report" style={{ width: `${paper.w}mm` }}>

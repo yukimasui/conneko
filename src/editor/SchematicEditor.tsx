@@ -3,6 +3,7 @@
  *
  * 左: 要素の一覧（機器ごと。用紙へドラッグ、またはダブルクリックで置く）
  * 中央: 用紙。記号をドラッグで動かし、R で回転、Delete で外す。線は概念図の接続から自動で引く
+ *       （空圧回路図は記号を自動で並べ、記号のまとまりをドラッグで動かせる。Delete で自動の位置に戻す）
  * 右: 選んだ要素の情報と、シートの設定（母線・用紙）、展開図 JSON の書き出し
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -11,6 +12,7 @@ import type { Point, SymbolDef } from '../schematic/format';
 import { autoLayout, nextPosition } from '../schematic/autoLayout';
 import { canBeVertical, canFlip, itemSymbol, type ElementEntry, type SchematicBuild } from '../schematic/layout';
 import { paperOf, snap, type Rotation, type Schematic, type SchematicItem } from '../schematic/model';
+import type { PneumaticGroup } from '../schematic/sheets/pneumatic';
 import { NewSheetDialog, SheetSettings } from './SchematicSheetPanel';
 import { placedBounds, symbolBounds } from '../schematic/place';
 import { sheetSvgBody, symbolSvg } from '../schematic/svg';
@@ -76,6 +78,24 @@ function updateItem(s: Schematic, element: string, patch: (it: SchematicItem) =>
   };
 }
 
+/** 空圧回路図の記号のまとまりを、指定のシートの位置へ動かす（items に位置を入れる） */
+export function movePneumatic(s: Schematic, sheetId: string, element: string, at: { x: number; y: number }): Schematic {
+  return {
+    ...s,
+    sheets: s.sheets.map((sh) =>
+      sh.id !== sheetId ? sh : { ...sh, items: [...sh.items.filter((i) => i.element !== element), { element, x: snap(at.x), y: snap(at.y) }] },
+    ),
+  };
+}
+
+/** 空圧回路図の記号のまとまりを自動の位置に戻す（element を省くとシートのすべて） */
+export function resetPneumatic(s: Schematic, sheetId: string, element?: string): Schematic {
+  return {
+    ...s,
+    sheets: s.sheets.map((sh) => (sh.id !== sheetId ? sh : { ...sh, items: element ? sh.items.filter((i) => i.element !== element) : [] })),
+  };
+}
+
 const rotate = (r: Rotation | undefined, delta: number): Rotation => ((((r ?? 0) + delta) % 360) + 360) % 360 as Rotation;
 
 export function SchematicEditor(props: Props) {
@@ -85,11 +105,15 @@ export function SchematicEditor(props: Props) {
   const current = schematic.sheets.find((s) => s.id === sheet) ?? schematic.sheets[0];
   const paper = paperOf(schematic, current);
   const selectedEntry = selected ? build.byId.get(selected) : undefined;
+  // 空圧回路図: 記号のまとまりをドラッグで動かす
+  const pneumatic = current?.kind === 'pneumatic';
+  const groups = useMemo(() => (pneumatic && current ? (build.pneumaticGroups.get(current.id) ?? []) : []), [build, current, pneumatic]);
+  const selectedGroup = pneumatic ? groups.find((g) => g.element === selected) : undefined;
 
   // 選んだ要素が消えたら（元に戻すなど）選択を外す
   useEffect(() => {
-    if (selected && !build.byId.get(selected)?.placed) setSelected(null);
-  }, [build, selected]);
+    if (selected && !build.byId.get(selected)?.placed && !groups.some((g) => g.element === selected)) setSelected(null);
+  }, [build, selected, groups]);
 
   const place = useCallback(
     (element: string, at?: { x: number; y: number }) => {
@@ -135,6 +159,21 @@ export function SchematicEditor(props: Props) {
       if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
       if (!selected || e.ctrlKey || e.metaKey || e.altKey) return;
       const step = e.shiftKey ? 10 : 2.5;
+      if (pneumatic && current) {
+        // 空圧回路図: 矢印キーで動かし、Delete で自動の位置に戻す（回転・入れ替えはない）
+        const g = groups.find((x) => x.element === selected);
+        if (!g) return;
+        const move = (dx: number, dy: number) => onChange((s) => movePneumatic(s, current.id, selected, { x: g.origin[0] + dx, y: g.origin[1] + dy }));
+        if (e.key === 'Delete' || e.key === 'Backspace') onChange((s) => resetPneumatic(s, current.id, selected));
+        else if (e.key === 'Escape') setSelected(null);
+        else if (e.key === 'ArrowLeft') move(-step, 0);
+        else if (e.key === 'ArrowRight') move(step, 0);
+        else if (e.key === 'ArrowUp') move(0, -step);
+        else if (e.key === 'ArrowDown') move(0, step);
+        else return;
+        e.preventDefault();
+        return;
+      }
       const move = (dx: number, dy: number) => onChange((s) => updateItem(s, selected, (i) => ({ ...i, x: snap(i.x + dx), y: snap(i.y + dy) })));
       if (e.key === 'r' || e.key === 'R') turn(selected, e.shiftKey ? -90 : 90);
       else if (e.key === 'f' || e.key === 'F') flip(selected);
@@ -150,14 +189,14 @@ export function SchematicEditor(props: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, onChange, turn, flip, toggleVertical, remove]);
+  }, [selected, onChange, turn, flip, toggleVertical, remove, pneumatic, current, groups]);
 
   const sheetsMeta = schematic.sheets.map((s) => ({ id: s.id, name: s.name }));
   const counts = useMemo(() => new Map(schematic.sheets.map((s) => [s.id, s.items.length])), [schematic]);
 
   return (
     <>
-      <ElementList build={build} schematic={schematic} selected={selected} generated={!!current?.kind} onPlace={place} onSelect={(id) => {
+      <ElementList build={build} schematic={schematic} selected={selected} generated={!!current?.kind} pneumatic={pneumatic} onPlace={place} onSelect={(id) => {
         const e = build.byId.get(id);
         if (e?.placed && e.placed.sheet !== sheet) props.onSheet(e.placed.sheet);
         setSelected(id);
@@ -177,7 +216,7 @@ export function SchematicEditor(props: Props) {
           onDelete={(id) => {
             const sh = schematic.sheets.find((x) => x.id === id);
             if (schematic.sheets.length <= 1) return void window.alert('展開図のシートは 1 枚以上必要です');
-            if (sh?.items.length && !window.confirm(`展開図「${sh.name}」を削除しますか？（置いた ${sh.items.length} 個の記号は未配置に戻ります）`)) return;
+            if (!sh?.kind && sh?.items.length && !window.confirm(`展開図「${sh.name}」を削除しますか？（置いた ${sh.items.length} 個の記号は未配置に戻ります）`)) return;
             onChange((s) => ({ ...s, sheets: s.sheets.filter((x) => x.id !== id) }));
             if (id === sheet) props.onSheet(schematic.sheets.find((x) => x.id !== id)!.id);
           }}
@@ -200,12 +239,24 @@ export function SchematicEditor(props: Props) {
             selected={selected}
             onSelect={setSelected}
             onDropElement={place}
-            onMove={(element, x, y) => onChange((s) => updateItem(s, element, (i) => ({ ...i, x: snap(x), y: snap(y) })))}
+            groups={pneumatic ? groups : undefined}
+            onMove={(element, x, y) =>
+              pneumatic
+                ? onChange((s) => movePneumatic(s, current.id, element, { x, y }))
+                : onChange((s) => updateItem(s, element, (i) => ({ ...i, x: snap(x), y: snap(y) })))
+            }
           />
         )}
       </main>
       <aside className="inspector schem-inspector">
-        {selectedEntry?.placed ? (
+        {selectedGroup && current ? (
+          <PneumaticGroupInfo
+            group={selectedGroup}
+            moved={current.items.some((i) => i.element === selectedGroup.element)}
+            onReset={() => onChange((s) => resetPneumatic(s, current.id, selectedGroup.element))}
+            onShowDevice={() => props.onShowDevice(selectedGroup.device)}
+          />
+        ) : selectedEntry?.placed ? (
           <ElementInfo
             entry={selectedEntry}
             row={build.rows.get(selectedEntry.id)}
@@ -230,6 +281,7 @@ export function SchematicEditor(props: Props) {
                 if (r.placed) onChange(() => r.schematic);
                 return r.placed ? `${r.placed} 個の記号を並べました（元に戻す: Ctrl+Z）` : (r.message ?? '');
               }}
+              onResetPneumatic={() => onChange((s) => resetPneumatic(s, current.id))}
             />
           )
         )}
@@ -259,6 +311,8 @@ function ElementList(props: {
   selected: string | null;
   /** 表示中のシートが内容を自動で作るシート（記号を置けない） */
   generated: boolean;
+  /** 表示中のシートが空圧回路図（記号は用紙の上で動かす） */
+  pneumatic?: boolean;
   onPlace: (element: string) => void;
   onSelect: (element: string) => void;
 }) {
@@ -289,7 +343,9 @@ function ElementList(props: {
           置いたものも表示（{placed} / {total} を配置済み）
         </label>
         <p className="small muted">
-          {props.generated
+          {props.pneumatic
+            ? '空圧回路図は概念図のエア機器から記号を自動で並べます。用紙の上で記号をドラッグすると動かせます（Delete で自動の位置に戻す）。'
+            : props.generated
             ? '表示中のシートは内容を概念図から自動で作るので、記号は置けません（展開接続図のシートに切り替えて置きます）。'
             : '用紙へドラッグするか、ダブルクリックで表示中の展開図に置きます。'}
         </p>
@@ -347,6 +403,8 @@ function SheetCanvas(props: {
   onSelect: (element: string | null) => void;
   onDropElement: (element: string, at: { x: number; y: number }) => void;
   onMove: (element: string, x: number, y: number) => void;
+  /** 空圧回路図の、ドラッグで動かせる記号のまとまり */
+  groups?: PneumaticGroup[];
 }) {
   const { width: W, height: H } = props.paper;
   const view = useRef<HTMLDivElement>(null);
@@ -449,7 +507,11 @@ function SheetCanvas(props: {
         <span className="small muted">{Math.round((zoom / 3.78) * 100)}%</span>
         <button type="button" onClick={() => zoomAt(1.25)} aria-label="拡大">＋</button>
         <button type="button" onClick={fit}>用紙に合わせる</button>
-        <span className="small muted schem-canvas__hint">ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、V で縦/横、F で端子の入れ替え、Delete で外す</span>
+        <span className="small muted schem-canvas__hint">
+          {props.groups
+            ? 'ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動（配管は引き直します）、矢印キーで少しずつ、Delete で自動の位置に戻す'
+            : 'ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、V で縦/横、F で端子の入れ替え、Delete で外す'}
+        </span>
       </div>
       <div
         className={`schem-canvas__view${panning ? ' is-panning' : ''}`}
@@ -506,6 +568,30 @@ function SheetCanvas(props: {
                   }}
                 >
                   <title>{`${e.device} ${e.element.name}`}</title>
+                </rect>
+              );
+            })}
+            {props.groups?.map((g) => {
+              const pad = 1.5;
+              const sel = props.selected === g.element;
+              return (
+                <rect
+                  key={g.element}
+                  className={`schem-hit${sel ? ' is-selected' : ''}`}
+                  x={g.bounds.x - pad}
+                  y={g.bounds.y - pad}
+                  width={g.bounds.w + 2 * pad}
+                  height={g.bounds.h + 2 * pad}
+                  rx={1}
+                  data-element={g.element}
+                  onPointerDown={(ev) => {
+                    if (ev.button !== 0) return;
+                    ev.stopPropagation();
+                    props.onSelect(g.element);
+                    drag.current = { element: g.element, start: toPaper(ev.clientX, ev.clientY), origin: g.origin };
+                  }}
+                >
+                  <title>{g.label}</title>
                 </rect>
               );
             })}
@@ -573,6 +659,26 @@ function ElementInfo(props: {
         <button type="button" className="danger" onClick={props.onRemove}>
           展開図から外す
         </button>
+      </div>
+    </div>
+  );
+}
+
+function PneumaticGroupInfo(props: { group: PneumaticGroup; moved: boolean; onReset: () => void; onShowDevice: () => void }) {
+  const { group: g } = props;
+  return (
+    <div className="schem-info">
+      <div className="panel-title">選んだ記号（空圧回路図）</div>
+      <div className="device-info__name">{g.label}</div>
+      <div className="small muted">
+        {props.moved ? `動かした位置（左上 ${g.origin[0]}, ${g.origin[1]} mm）に置いています。` : '自動の位置に置いています。'}
+        ドラッグか矢印キー（Shift で 10mm）で動かすと、配管を引き直します。
+      </div>
+      <div className="schem-info__actions">
+        <button type="button" onClick={props.onReset} disabled={!props.moved} title="この記号を自動で決めた位置に戻します（Delete）">
+          自動配置に戻す
+        </button>
+        <button type="button" onClick={props.onShowDevice}>概念図で表示</button>
       </div>
     </div>
   );

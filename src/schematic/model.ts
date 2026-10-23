@@ -42,6 +42,7 @@ export interface SchematicSheet {
   /**
    * シートの種類。省略時は展開接続図（記号を置く。母線がなければ主回路）。ほかは内容を概念図から自動で作り、items は使わない:
    * 'terminal' 端子台接続図 / 'io' PLC の I/O 図 / 'rack' PLC のユニット構成図 / 'bom' 部品表 / 'cover' 表紙・図面目次 / 'pneumatic' 空圧回路図
+   * （空圧回路図だけは、エディタで動かした記号のまとまりの位置を items に持つ。pneumaticElement を参照）
    */
   kind?: SheetKind;
   /** このシートの用紙（省略時は settings.paper） */
@@ -62,6 +63,12 @@ export interface SchematicSettings {
   paper?: PaperSize;
 }
 
+/**
+ * 空圧回路図で動かした記号のまとまり（アクチュエータ・速度制御弁・電磁弁・マニホールド・3 点セットなど、機器ごと）の要素 ID。
+ * items の x, y は、そのまとまりの記号の外形の左上[mm]（用紙の左上が原点・y は下向き）。items にない機器は自動で置く
+ */
+export const pneumaticElement = (device: string) => `${device}:pneumatic`;
+
 /** 内容を自動で作るシートの種類 */
 export type SheetKind = 'terminal' | 'io' | 'rack' | 'bom' | 'cover' | 'pneumatic';
 export const SHEET_KINDS: SheetKind[] = ['terminal', 'io', 'rack', 'bom', 'cover', 'pneumatic'];
@@ -75,6 +82,11 @@ export interface Schematic {
 export const SCHEMATIC_GRID = 2.5;
 
 export const snap = (v: number) => Math.round(v / SCHEMATIC_GRID) * SCHEMATIC_GRID;
+
+/** 用紙の名前（'A2' など）か。知らない名前・'toString' などは undefined */
+export function paperSizeOf(v: unknown): PaperSize | undefined {
+  return typeof v === 'string' && Object.hasOwn(PAPER_SIZES, v) ? (v as PaperSize) : undefined;
+}
 
 export function paperOf(s: Schematic | undefined, sheet?: SchematicSheet): { width: number; height: number } {
   return PAPER_SIZES[sheet?.paper ?? s?.settings?.paper ?? 'A3'];
@@ -150,13 +162,18 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
     const id = typeof v.id === 'string' && v.id ? v.id : `D${i + 1}`;
     if (sheets.some((s) => s.id === id)) return;
     const name = typeof v.name === 'string' && v.name ? v.name : `展開図${i + 1}`;
+    const kind = SHEET_KINDS.find((k) => k === v.kind);
     const seen = new Set<string>();
     const items: SchematicItem[] = [];
     for (const it of Array.isArray(v.items) ? v.items : []) {
       if (!isObj(it) || typeof it.element !== 'string' || typeof it.x !== 'number' || typeof it.y !== 'number') continue;
-      // 1 つの要素は 1 か所にだけ置く（後から書いた方を無視する）
-      if (seen.has(it.element) || sheets.some((s) => s.items.some((x) => x.element === it.element))) continue;
+      // 1 つの要素は 1 か所にだけ置く（後から書いた方を無視する）。空圧回路図の記号の位置はシートごと
+      if (seen.has(it.element) || (!kind && sheets.some((s) => !s.kind && s.items.some((x) => x.element === it.element)))) continue;
       seen.add(it.element);
+      if (kind === 'pneumatic') {
+        items.push({ element: it.element, x: it.x, y: it.y });
+        continue;
+      }
       const rot = Number(it.rotation);
       items.push({
         element: it.element,
@@ -178,11 +195,10 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
           }).filter(([, x]) => x !== undefined),
         )
       : undefined;
-    const kind = SHEET_KINDS.find((k) => k === v.kind);
     const strings = (x: unknown) => (Array.isArray(x) ? x.filter((b): b is string => typeof b === 'string' && !!b) : undefined);
     const blocks = strings(v.blocks);
     const units = strings(v.units);
-    const paper = typeof v.paper === 'string' && v.paper in PAPER_SIZES ? (v.paper as PaperSize) : undefined;
+    const paper = paperSizeOf(v.paper);
     sheets.push({
       id,
       name,
@@ -192,11 +208,11 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
       ...((kind === 'io' || kind === 'rack') && typeof v.plc === 'string' && v.plc ? { plc: v.plc } : {}),
       ...(kind === 'io' && units ? { units } : {}),
       ...(rails && Object.keys(rails).length ? { rails } : {}),
-      items: kind ? [] : items,
+      items: !kind || kind === 'pneumatic' ? items : [],
     });
   });
   if (!sheets.length) return undefined;
-  const paper = isObj(raw.settings) && typeof raw.settings.paper === 'string' && raw.settings.paper in PAPER_SIZES ? (raw.settings.paper as PaperSize) : undefined;
+  const paper = isObj(raw.settings) ? paperSizeOf(raw.settings.paper) : undefined;
   return { ...(paper ? { settings: { paper } } : {}), sheets };
 }
 
@@ -222,7 +238,7 @@ export function serializeSchematic(s: Schematic): Schematic {
             },
           }
         : {}),
-      items: sh.items.map((it) => ({
+      items: (sh.kind && sh.kind !== 'pneumatic' ? [] : sh.items).map((it) => ({
         element: it.element,
         x: r(it.x),
         y: r(it.y),

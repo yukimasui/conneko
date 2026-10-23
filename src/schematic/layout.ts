@@ -29,7 +29,7 @@ import { librarySymbol } from './symbols';
 import { bomPages } from './sheets/bom';
 import { coverPageCount, coverPages, type CoverEntry } from './sheets/cover';
 import { ioPages, ioPlcHosts } from './sheets/io';
-import { pneumaticPages } from './sheets/pneumatic';
+import { pneumaticLayout, type PneumaticGroup } from './sheets/pneumatic';
 import { rackHosts, rackPages } from './sheets/rack';
 import { ioSystem } from '../model/io';
 import { terminalPages } from './sheets/terminal';
@@ -125,6 +125,8 @@ export interface SchematicBuild {
   ioHosts: { id: string; model: string; units: { id: string; model: string }[] }[];
   /** ユニット構成図にできる PLC（ユニットを装着できる親） */
   rackHosts: { id: string; model: string }[];
+  /** 空圧回路図のシートの、ドラッグで動かせる記号のまとまり（シートの ID → まとまり） */
+  pneumaticGroups: Map<string, PneumaticGroup[]>;
 }
 
 /** 端子を入れ替えて置ける記号（端子 1 と 2 だけを持つ記号） */
@@ -408,6 +410,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     wireNoOf: (net: string) => [...(circuitWireNos.get(net) ?? [])].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true })).join(','),
     addSymbol: (id: string, def: SymbolDef) => extraSymbols.set(id, def),
   };
+  const pneumaticGroups = new Map<string, PneumaticGroup[]>();
   const generated = schematic.sheets.map((sh): SchematicSheetOut[] | null => {
     const p = paperBySheet.get(sh.id)!;
     switch (sh.kind) {
@@ -421,8 +424,11 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
         return rackPages(sh, model, lookup, p);
       case 'bom':
         return bomPages(sh, diagram, lookup, p);
-      case 'pneumatic':
-        return pneumaticPages(sh, diagram, model, lookup, p);
+      case 'pneumatic': {
+        const r = pneumaticLayout(sh, diagram, model, lookup, p);
+        pneumaticGroups.set(sh.id, r.groups);
+        return r.pages;
+      }
       case 'cover':
         return null;
     }
@@ -473,7 +479,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     units: (ioSystem(diagram, id, lookup)?.units ?? []).map((u) => ({ id: u.device.id, model: u.def.model })),
   }));
   const racks = rackHosts(model).map((id) => ({ id, model: modelOf(id) }));
-  return { doc, elements, byId, rows: rowOf, ioHosts, rackHosts: racks, railCandidates, rowsOf: (id) => rowsBySheet.get(id) ?? rowsPerSheet(paperOf(schematic).height), netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
+  return { doc, elements, byId, rows: rowOf, ioHosts, rackHosts: racks, pneumaticGroups, railCandidates, rowsOf: (id) => rowsBySheet.get(id) ?? rowsPerSheet(paperOf(schematic).height), netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
 }
 
 /** 図面枠と表題欄（図面名・作成者・版・シート名・ページ） */

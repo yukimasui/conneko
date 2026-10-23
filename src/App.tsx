@@ -65,6 +65,7 @@ import {
 } from './model/diagram';
 import { sampleDiagram } from './model/sample';
 import { buildSchematic, defaultRails } from './schematic/layout';
+import { sheetSvg as schematicSheetSvg } from './schematic/svg';
 import { newSchematicSheet, pruneSchematic, renameSchematicDevice, type Schematic } from './schematic/model';
 
 const nodeTypes = { device: DeviceNode };
@@ -452,6 +453,16 @@ function Editor() {
     notify('展開図 JSON を書き出しました。tools/dxf の Python スクリプトで DXF に変換できます');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schematic, schematicBuild, diagram, notify]);
+
+  /** 表示中の展開図のシートを SVG で保存する（複数ページのシートはページごとに 1 ファイル） */
+  const exportSchematicSvg = useCallback(() => {
+    if (!schematic?.sheets.length) return;
+    const id = schematic.sheets.some((x) => x.id === schematicSheet) ? schematicSheet : schematic.sheets[0].id;
+    const doc = (schematicBuild ?? buildSchematic(diagram, getDeviceDefinition)).doc;
+    const pages = doc.sheets.filter((p) => (p.source ?? p.id) === id);
+    pages.forEach((p) => download(schematicSheetSvg(doc, p), `schematic-${p.id}`, 'svg', 'image/svg+xml'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schematic, schematicSheet, schematicBuild, diagram]);
 
   // --- シートの編集 ---
   const addSheet = useCallback(() => {
@@ -914,9 +925,15 @@ function Editor() {
           onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, `sheet${sheets.findIndex((s) => s.id === sheet) + 1}`, 'svg', 'image/svg+xml'),
         },
         {
+          label: '展開図の表示中のシートの画像（SVG）',
+          hint: schematic?.sheets.length ? (schematic.sheets.find((x) => x.id === schematicSheet) ?? schematic.sheets[0]).name : '展開図なし',
+          separator: true,
+          disabled: !schematic?.sheets.length,
+          onClick: exportSchematicSvg,
+        },
+        {
           label: '展開図 JSON（DXF 用）',
           hint: schematic?.sheets.length ? `${schematic.sheets.length} 枚` : '展開図なし',
-          separator: true,
           disabled: !schematic?.sheets.length,
           onClick: exportSchematic,
         },
@@ -1130,6 +1147,8 @@ function Editor() {
       {printDialog && (
         <PrintDialog
           sheets={sheets}
+          schematicSheets={(schematic?.sheets ?? []).map((s) => ({ id: s.id, name: s.name, paper: s.paper ?? schematic?.settings?.paper ?? 'A3' }))}
+          schematicFirst={mode === 'schematic'}
           settings={settings}
           onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           onClose={() => setPrintDialog(false)}
