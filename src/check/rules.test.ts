@@ -492,7 +492,8 @@ describe('装着（iQ-R ベースユニット）', () => {
       getDeviceDefinition,
     );
     expect(swapped.problems.map((p) => p.rule)).toContain('mount-slot-role');
-  });
+    // 全機器定義（registry）の読み込みがテスト時間に含まれ、機器が増えるほど既定の 5 秒に近づくため延ばす
+  }, 30_000);
 });
 
 describe('リンク', () => {
