@@ -115,7 +115,8 @@ textarea {
   margin-right: 8px;
 }
 .brand img {
-  height: 30px;
+  height: 32px;
+  border-radius: 8px;
 }
 .brand__version {
   font-size: 11px;
@@ -819,6 +820,11 @@ textarea {
   padding: 18px 20px;
   width: min(720px, calc(100vw - 32px));
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+.about__logo {
+  display: block;
+  width: 200px;
+  margin: 0 auto 8px;
 }
 .modal h2 {
   margin: 0 0 6px;

@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
-import iconUrl from './assets/conneko-icon.svg?inline';
+import iconUrl from './assets/conneko-face.png?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';

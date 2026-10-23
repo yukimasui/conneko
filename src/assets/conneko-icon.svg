@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 40 512 412" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" color="#1d1d1f">
-<title>Conneko</title>
-<defs><g id="term"><rect x="-1" y="-4.5" width="13" height="9" rx="2"/><path d="M12,-5 L18,-9.5 L31,-9.5 L31,-4.5 L23,-3 A3,3 0 0 0 23,3 L31,4.5 L31,9.5 L18,9.5 L12,5"/></g><g id="plug"><path d="M0,-5 L4,-8 L20,-8 L20,8 L4,8 L0,5"/><path d="M8,-8 V8 M14,-8 V8"/><rect x="20" y="-10" width="24" height="20" rx="3"/><rect x="44" y="-6" width="16" height="12" rx="1.5"/></g></defs>
-<path d="M220,152 Q199,152 178,160 C160,143 135,122 120,117 Q112,115 111,125 C108,165 102,205 103,245 C104,310 158,348 220,348 C282,348 336,310 337,245 C338,205 332,165 329,125 Q328,115 320,117 C305,122 280,143 262,160 Q241,152 220,152 Z"/>
-<path d="M211,270 L229,270 L220,280 Z"/>
-<g stroke-width="6"><path d="M200,282 C160,268 110,240 66,236"/><path d="M240,282 C280,268 330,240 374,236"/><path d="M200,290 C150,290 100,290 58,292"/><path d="M240,290 C290,290 340,290 382,292"/><path d="M200,298 C160,312 110,340 70,350"/><path d="M240,298 C280,312 330,340 370,350"/>
-<path d="M222,348 C232,402 290,432 350,417 C410,402 446,345 433,270 C423,215 396,175 401,135 C406,103 440,94 462,118"/></g>
-<g stroke-width="4"><use href="#term" transform="translate(66 236) rotate(-174.8)"/><use href="#term" transform="translate(374 236) rotate(-5.2)"/><use href="#term" transform="translate(58 292) rotate(177.3)"/><use href="#term" transform="translate(382 292) rotate(2.7)"/><use href="#term" transform="translate(70 350) rotate(166.0)"/><use href="#term" transform="translate(370 350) rotate(14.0)"/><use href="#plug" transform="translate(462 118) rotate(47.5)"/></g>
-</svg>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 丸形圧着端子（R 形・絶縁被覆付き）を斜めに置いたファビコン。16px でも形が分かるよう太めに描く -->
+  <defs>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4f6f8"/>
+      <stop offset="0.55" stop-color="#bfc6cd"/>
+      <stop offset="1" stop-color="#858e97"/>
+    </linearGradient>
+    <linearGradient id="sleeve" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6aa8f0"/>
+      <stop offset="0.5" stop-color="#2f7fd8"/>
+      <stop offset="1" stop-color="#1c5aa6"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-45 32 32)">
+    <!-- 銅の芯線 -->
+    <rect x="58" y="28" width="9" height="8" fill="#d9874a" stroke="#8a4f22" stroke-width="1.2"/>
+    <!-- 絶縁スリーブ -->
+    <path d="M30 21 H55 Q59 21 59 25 V39 Q59 43 55 43 H30 Z" fill="url(#sleeve)" stroke="#173f73" stroke-width="2"/>
+    <path d="M34 25.5 H54" stroke="#ffffff" stroke-opacity="0.6" stroke-width="2.4" stroke-linecap="round"/>
+    <!-- 丸形の舌（ねじを通す穴付き） -->
+    <path d="M31 26 H25 A16 16 0 1 0 25 38 H31 Z" fill="url(#metal)" stroke="#4f575f" stroke-width="2"/>
+    <circle cx="13" cy="32" r="6.5" fill="#ffffff" stroke="#4f575f" stroke-width="2"/>
+  </g>
+</svg>
