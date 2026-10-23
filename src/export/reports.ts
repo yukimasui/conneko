@@ -3,12 +3,13 @@
  * 画面の接続リスト、印刷、CSV 保存で共通に使う。
  */
 import { buildModel, key } from '../check/model';
+import { getTubeColor, tubeModel } from '../data/tubes';
 import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
-import { paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
-import { CABLE_WIRE_TYPE, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
+import { deviceModel, paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
+import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
 import { compareAddress, ioHosts, ioSystem } from '../model/io';
-import { LINK_TYPE } from '../model/ops';
+import { AIR_LINK_TYPE, LINK_TYPE } from '../model/ops';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
 
@@ -66,7 +67,9 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
     const dev = devices.get(w.from.device);
     const sheet = dev ? sheetOf(d, dev) : sheets[0].id;
     const cable = w.wireType === CABLE_WIRE_TYPE;
+    const tube = isTube(w);
     const color = getWireColor(w.color);
+    const tubeColor = getTubeColor(w.color);
     return {
       id: w.id,
       sheet,
@@ -75,10 +78,14 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
       wireNo: w.wireNo ?? '',
       from: name(w.from),
       to: name(w.to),
-      spec: cable ? 'ケーブル' : `${w.wireType} ${w.sizeSq}sq ${color?.name ?? w.color}`,
-      wireType: cable ? 'ケーブル' : w.wireType,
-      ...(cable ? {} : { sizeSq: w.sizeSq, colorName: color?.name ?? w.color, colorHex: color?.hex }),
-      note: cable ? '' : commentOf(w.from),
+      spec: cable
+        ? 'ケーブル'
+        : tube
+          ? `チューブ ${tubeModel(w.wireType, w.tubeOD ?? 6, w.color)}（φ${w.tubeOD ?? '?'} ${tubeColor?.name ?? w.color}）`
+          : `${w.wireType} ${w.sizeSq}sq ${color?.name ?? w.color}`,
+      wireType: cable ? 'ケーブル' : tube ? 'チューブ' : w.wireType,
+      ...(cable ? {} : tube ? { colorName: tubeColor?.name ?? w.color, colorHex: tubeColor?.hex } : { sizeSq: w.sizeSq, colorName: color?.name ?? w.color, colorHex: color?.hex }),
+      note: cable || tube ? '' : commentOf(w.from),
     };
   });
   rows.sort((a, b) => a.sheetIndex - b.sheetIndex || collator.compare(a.wireNo || '~', b.wireNo || '~') || collator.compare(a.id, b.id));
@@ -86,7 +93,7 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
   for (const x of d.devices) {
     const def = lookup(x.type);
     if (!def?.netLabel) continue;
-    const n = `${x.type === LINK_TYPE ? '' : 'LAN '}${String(x.params?.name ?? '').trim()}`;
+    const n = `${x.type === LINK_TYPE ? '' : x.type === AIR_LINK_TYPE ? 'AIR ' : 'LAN '}${String(x.params?.name ?? '').trim()}`;
     const s = sheetOf(d, x);
     byName.set(n, [...(byName.get(n) ?? []), { id: x.id, sheet: s, sheetName: sheetName(s) }]);
   }
@@ -110,7 +117,24 @@ export interface BomRow {
   estimated: boolean;
 }
 
-const CATEGORY_ORDER: DeviceCategory[] = ['power-source', 'breaker', 'contactor', 'power-supply', 'plc', 'safety', 'control', 'sensor', 'load', 'terminal', 'network', 'link'];
+const CATEGORY_ORDER: DeviceCategory[] = [
+  'power-source',
+  'breaker',
+  'contactor',
+  'power-supply',
+  'plc',
+  'safety',
+  'control',
+  'sensor',
+  'load',
+  'terminal',
+  'network',
+  'air-supply',
+  'valve',
+  'actuator',
+  'air-fitting',
+  'link',
+];
 /** 部品表に入れないパラメータ（装着で決まるもの・リンクの向きなど） */
 const NOT_SPEC = new Set(['ioIn', 'ioOut', 'side', 'name']);
 
@@ -123,11 +147,11 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
       .filter((p) => !NOT_SPEC.has(p.key))
       .map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`)
       .join('、');
-    const k = `${def.type}|${spec}`;
+    const k = `${def.type}|${deviceModel(def, x.params)}|${spec}`;
     const g = groups.get(k) ?? {
       category: def.category,
       maker: def.maker ?? '汎用',
-      model: def.model,
+      model: deviceModel(def, x.params),
       name: def.name,
       spec,
       qty: 0,

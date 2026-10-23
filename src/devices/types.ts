@@ -33,8 +33,9 @@ export type TerminalSide = 'top' | 'bottom' | 'left' | 'right';
  * - ground: 接地端子
  * - signal: 信号端子（接点・センサー出力など。電源チェックの対象外）
  * - connector: コネクタ（MIL コネクタ、LAN ポートなど）。同じ種類のコネクタどうしをケーブルでつなぐ
+ * - air: エアのポート（air を必ず指定）。エアのポートどうしをチューブでつなぐ。電気のチェックの対象外
  */
-export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal' | 'connector';
+export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal' | 'connector' | 'air';
 
 /** 電源出力の仕様（role: 'supply' の端子に指定） */
 export interface SupplySpec {
@@ -101,6 +102,55 @@ export interface ConnectorSpec {
   facing?: 'front';
   /** facing: 'front' のときのプラグの長さ[px]（side 方向）。省略時は 12 */
   length?: number;
+}
+
+/**
+ * エアのポートの用途。
+ * - supply: エア源の出口（工場エアの供給口など。pressure を指定）
+ * - in: 一次側（電磁弁の P、レギュレータの IN など。上流からエアを受ける）
+ * - out: 二次側（レギュレータの OUT など。下流へエアを送る）
+ * - work: 作業ポート（電磁弁の A・B、シリンダのポートなど。給気と排気の両方がある）
+ * - exhaust: 排気ポート（電磁弁の R・EA・EB など。大気へ逃がす。未接続でも警告しない）
+ * - pilot: パイロットポート（外部パイロット・パイロット操作の信号）
+ * - vacuum: 真空ポート（真空発生器・吸着パッドなど）
+ */
+export type AirPortKind = 'supply' | 'in' | 'out' | 'work' | 'exhaust' | 'pilot' | 'vacuum';
+
+/** エアのポートの仕様（role: 'air' の端子に指定） */
+export interface AirPortSpec {
+  kind: AirPortKind;
+  /**
+   * 適合チューブの外径[mm]（ワンタッチ管継手）。ねじポートで継手を別に付ける機器でも、付ける継手のチューブ外径を書く
+   * （パラメータで選べる場合は { param }）。つないだチューブの外径と違えば警告する
+   */
+  tubeOD?: NumOrParam;
+  /** ポートのねじの呼び（'M5'、'Rc1/8'、'Rc1/4' など。表示・部品表用） */
+  thread?: string;
+  /** 供給圧力[MPa]（kind: 'supply'） */
+  pressure?: NumOrParam;
+  /** 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する */
+  minPressure?: NumOrParam;
+  maxPressure?: NumOrParam;
+}
+
+/**
+ * 機器の中のエアの通り道（電磁弁の切り換え、レギュレータの減圧、継手の分岐など）。
+ * エアの届く範囲と圧力の計算に使う（src/check/pneumatic.ts）。
+ */
+export interface AirLink {
+  from: string;
+  to: string;
+  /** true の場合 from → to の一方向のみ（レギュレータの IN → OUT、逆止弁など） */
+  directed?: boolean;
+  /** 減圧する通り道の二次側の設定圧力[MPa]（レギュレータ）。from → to の向きに、この圧力を上限にして通す */
+  regulate?: NumOrParam;
+  /**
+   * 切り換わる通り道（電磁弁の P→A など）。届く範囲は、すべての位置の通り道を合わせて求める。
+   * - on: ソレノイドに通電した位置（またはパイロットで切り換えた位置）で通る
+   * - off: 通電していない位置（スプリングで戻った位置）で通る
+   * - always: どの位置でも通る（3 位置のプレッシャセンタの中立など、位置を問わず通る経路）
+   */
+  valve?: 'on' | 'off' | 'always';
 }
 
 /**
@@ -171,6 +221,8 @@ interface TerminalBase {
   accepts?: AcceptSpec | AcceptSpec[];
   /** 信号の種類（role: 'signal' の端子） */
   signal?: SignalSpec;
+  /** エアのポートの仕様（role: 'air'） */
+  air?: AirPortSpec;
   /** 安全回路での機能 */
   function?: TerminalFunction | TerminalFunction[];
   /** 2 チャンネル構成の安全回路でのチャンネル番号 */
@@ -358,6 +410,10 @@ export type DeviceCategory =
   | 'sensor'
   | 'safety'
   | 'network'
+  | 'air-supply'
+  | 'valve'
+  | 'actuator'
+  | 'air-fitting'
   | 'link';
 
 /**
@@ -374,8 +430,13 @@ export interface DeviceDefinition {
   type: string;
   /** 一般名称（例: '漏電遮断器'） */
   name: string;
-  /** 型式（例: 'NV32-SV 3P'） */
+  /** 型式（例: 'NV32-SV 3P'）。パラメータで型式が変わる機器は、シリーズの代表の型式を書き、modelOf で組み立てる */
   model: string;
+  /**
+   * パラメータから組み立てた型式（例: シリンダのチューブ内径・ストロークから 'CDM2B25-100Z'）。
+   * 画面の機器名の横・部品表・AI 用の説明に使う。省略時は model。引数は既定値を補完済みのパラメータ
+   */
+  modelOf?: (params: ParamValues) => string;
   maker?: string;
   category: DeviceCategory;
   description?: string;
@@ -401,6 +462,8 @@ export interface DeviceDefinition {
   /** コネクタのピン定義（ピンごとの名称・電気的仕様） */
   pins?: ParamDependent<PinDef[]>;
   links?: ParamDependent<InternalLink[]>;
+  /** 機器の中のエアの通り道 */
+  airLinks?: ParamDependent<AirLink[]>;
   params?: ParamDef[];
   /** 保護機器の定格（遮断）電流[A]。protects: true の経路に適用 */
   protectionCurrent?: NumOrParam;
@@ -472,6 +535,11 @@ export function resolveNum(
   const raw = params?.[v.param] ?? def.params?.find((p) => p.key === v.param)?.default;
   const n = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** パラメータに応じた型式（modelOf があれば組み立てたもの） */
+export function deviceModel(def: DeviceDefinition, params: ParamValues | undefined): string {
+  return def.modelOf ? def.modelOf(paramsWithDefaults(def, params)) : def.model;
 }
 
 /** 既定値を補完したパラメータを返す */

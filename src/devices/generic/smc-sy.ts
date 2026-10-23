@@ -7,8 +7,13 @@
  *   型式: SY + サイズ + 1（2 位置シングル）/ 2（2 位置ダブル）+ 20 + 5（DC24V）+ L（L 形プラグ）+ Z（表示灯・サージ電圧保護回路付き）
  *   消費電力: DC 0.35W、表示灯付き 0.4W（省電力回路付き T は 0.1W）。許容電圧変動 ±10%
  *   極性（p.1-4-204）: S・Z タイプは極性あり（逆接続保護ダイオード付き）。リード線は赤が +、黒が −。U・R タイプは無極性
+ *   ボディ配管（SY3000）: 1(P)・5(EA)・3(EB) は M5、4(A)・2(B) は ワンタッチ管継手 C4 / C6 または M5
+ *   使用圧力範囲: 2 位置シングル 0.15〜0.7MPa、2 位置ダブル 0.1〜0.7MPa
+ *
+ * エアのポート: 上面に 4(A)・2(B)、下面に 5(EA)・1(P)・3(EB)。M5 のポートには φ6 用のワンタッチ管継手（KQ2H06-M5 など）を付けたものとする。
+ * 機器の中の通り道: 通電していない位置は P→B・A→EA、通電した位置（ダブルは A 側に通電した位置）は P→A・B→EB。
  */
-import type { DeviceDefinition, TerminalDef } from '../types';
+import type { AirLink, DeviceDefinition, TerminalDef } from '../types';
 import { text } from './parts';
 
 export interface SySpec {
@@ -68,6 +73,13 @@ export function buildSy(s: SySpec): DeviceDefinition {
     { x: bodyX + bodyW * 0.36, label: '4(A)' },
     { x: bodyX + bodyW * 0.64, label: '2(B)' },
   ];
+  /** 下面のポート（5(EA)・1(P)・3(EB)） */
+  const lower = [
+    { id: 'EA', label: '5(EA)', x: bodyX + bodyW * 0.2 },
+    { id: 'P', label: '1(P)', x: bodyX + bodyW * 0.5 },
+    { id: 'EB', label: '3(EB)', x: bodyX + bodyW * 0.8 },
+  ];
+  const lowY = BODY_Y + BODY_H;
   const svg = `
   <defs>
     <linearGradient id="valve-{{uid}}" x1="0" y1="0" x2="0" y2="1">
@@ -90,6 +102,13 @@ export function buildSy(s: SySpec): DeviceDefinition {
   ${text(p.x, BODY_Y + 9, p.label, 4.2, '#333', 'normal')}`,
     )
     .join('')}
+  ${lower
+    .map(
+      (p) => `<rect x="${p.x - 5}" y="${lowY - 1}" width="10" height="6" rx="1" fill="#9aa0a6" stroke="#5c6166" stroke-width="0.5"/>
+  <circle cx="${p.x}" cy="${lowY + 4}" r="2.6" fill="#3a3c3f"/>
+  ${text(p.x, lowY - 3, p.label, 3.6, '#333', 'normal')}`,
+    )
+    .join('')}
   ${text(bodyX + bodyW / 2, BODY_Y + 22, 'SMC', 6, '#1f5fa8')}
   ${text(bodyX + bodyW / 2, BODY_Y + 30, s.model, 4, '#333', 'normal')}
   ${pilots.map((p) => pilot(p.x, p.side, p.leads)).join('')}
@@ -105,12 +124,45 @@ export function buildSy(s: SySpec): DeviceDefinition {
     ];
   });
 
+  // エアのポート
+  const pRange = { minPressure: double ? 0.1 : 0.15, maxPressure: 0.7 };
+  const airPorts: TerminalDef[] = [
+    ...ports.map((p, i) => ({
+      id: i === 0 ? 'A' : 'B',
+      label: p.label,
+      hint: i === 0 ? '出力 A' : '出力 B',
+      note: i === 0 ? '出力ポート 4(A)（通電した位置で P とつながる）' : '出力ポート 2(B)（通電していない位置で P とつながる）',
+      x: p.x,
+      y: BODY_Y - 9,
+      side: 'top' as const,
+      role: 'air' as const,
+      air: { kind: 'work' as const, tubeOD: { param: 'portAB' } },
+    })),
+    ...lower.map((p) => ({
+      id: p.id,
+      label: p.label,
+      hint: p.id === 'P' ? '供給 P' : `排気 ${p.id}`,
+      note: p.id === 'P' ? '供給ポート 1(P)（M5）' : `排気ポート ${p.label}（M5。サイレンサを付けるか、配管で集合排気する）`,
+      x: p.x,
+      y: lowY + 9,
+      side: 'bottom' as const,
+      role: 'air' as const,
+      air: p.id === 'P' ? { kind: 'in' as const, tubeOD: 6, thread: 'M5', ...pRange } : { kind: 'exhaust' as const, tubeOD: 6, thread: 'M5' },
+    })),
+  ];
+  const airLinks: AirLink[] = [
+    { from: 'P', to: 'B', directed: true, valve: 'off' },
+    { from: 'A', to: 'EA', directed: true, valve: 'off' },
+    { from: 'P', to: 'A', directed: true, valve: 'on' },
+    { from: 'B', to: 'EB', directed: true, valve: 'on' },
+  ];
+
   return {
     type: s.type,
     name: double ? '電磁弁（ダブルソレノイド）' : '電磁弁（シングルソレノイド）',
     model: s.model,
     maker: 'SMC',
-    category: 'load',
+    category: 'valve',
     description:
       `SMC の 5 ポート電磁弁 SY${s.size}000 シリーズ（2 位置${double ? 'ダブル' : 'シングル'}、DC24V、L 形プラグコネクタ・リード線 300mm、表示灯・サージ電圧保護回路付き）。` +
       `消費電力 0.4W（表示灯込み、約 17mA）、許容電圧変動 ±10%。極性あり: 赤（+）を PLC の出力・リレー接点の側、黒（−）を 0V につなぐ。` +
@@ -121,7 +173,21 @@ export function buildSy(s: SySpec): DeviceDefinition {
     width: W,
     height: H,
     svg,
-    terminals,
+    terminals: [...terminals, ...airPorts],
+    airLinks,
+    params: [
+      {
+        key: 'portAB',
+        label: 'A・B ポートの継手',
+        unit: 'mm',
+        options: [
+          { value: 4, label: 'C4（φ4 ワンタッチ管継手）' },
+          { value: 6, label: 'C6（φ6 ワンタッチ管継手）' },
+        ],
+        default: 6,
+      },
+    ],
+    modelOf: (p) => `${s.model}-C${p.portAB}`,
     loadCurrent: COIL_CURRENT,
     schematic: { elements: pilots.map((p) => ({ kind: 'coil' as const, terminals: [`${p.side}+`, `${p.side}-`] })) },
   };

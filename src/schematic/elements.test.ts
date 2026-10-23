@@ -24,9 +24,9 @@ describe('全機器の切り出し', () => {
       // 端子は 1 つの要素にだけ入る
       const ids = els.flatMap((e) => Object.keys(e.pinOf));
       expect(ids.length - new Set(ids).size, where).toBe(0);
-      // コネクタ以外の端子・ピンはどれかの要素に入る（リンクは要素を持たない）
+      // コネクタ・エアのポート以外の端子・ピンはどれかの要素に入る（リンクは要素を持たない）
       if (def.category !== 'link') {
-        const all = [...r.terminals.filter((t) => t.role !== 'connector'), ...r.pins].map((t) => t.id);
+        const all = [...r.terminals.filter((t) => t.role !== 'connector' && t.role !== 'air'), ...r.pins].map((t) => t.id);
         expect(all.filter((id) => !ids.includes(id)), where).toEqual([]);
       }
       for (const e of els) {

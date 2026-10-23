@@ -3,7 +3,7 @@ import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflo
 import { getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
 import { linkKey } from '../model/ops';
-import type { TerminalSide } from '../devices/types';
+import { deviceModel, type TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode } from './flow';
 import { TerminalCallouts, TerminalPopup } from './TerminalHints';
@@ -90,7 +90,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
           </div>
         )}
         <strong>{id}</strong>
-        <span>{def.model}</span>
+        <span>{deviceModel(def, data.params)}</span>
       </div>
       <svg
         className="device-node__svg"

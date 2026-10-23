@@ -78,7 +78,7 @@ export function wireLayout(
     const sideOf = (me: NonNullable<typeof a>, other: NonNullable<typeof a>, manual?: TerminalSide): TerminalSide => {
       if (manual) return manual;
       const horizontal = me.t.side === 'left' || me.t.side === 'right';
-      if (horizontal && !me.t.connector && other.n.type === LINK_TYPE && me.n.type !== LINK_TYPE && linkDef) {
+      if (horizontal && !me.t.connector && !other.t.connector && other.def.netLabel && !me.def.netLabel && linkDef) {
         return other.n.x + linkDef.width / 2 < me.x ? 'left' : 'right';
       }
       return me.t.side;

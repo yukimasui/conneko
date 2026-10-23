@@ -10,6 +10,7 @@
  *   電線の許容電流や負荷電流と比較する。
  * - 信号の種類の相性（signals.ts）と、安全回路のルール（safety.ts）も確認する。
  */
+import { checkPneumatic } from './pneumatic';
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
@@ -66,6 +67,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkSafety(m, push);
   checkWireColors(m, push);
   checkWireNumbers(m, push);
+  checkPneumatic(m, push);
 
   // 推定の値を含む機器定義が関わる指摘に印を付ける（電線だけの指摘は、両端の機器で判断する）
   const wireEnds = new Map(diagram.wires.map((w) => [w.id, [w.from.device, w.to.device]]));
@@ -88,7 +90,8 @@ function checkUnconnected(m: Model, push: Push) {
   const cabled = new Set(m.cablePairs.flat());
   for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
-    if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector') continue;
+    // エアのポートはエアのチェック（pneumatic.ts）で確かめる
+    if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector' || t.role === 'air') continue;
     if (m.wiresAt.has(k) || cabled.has(k)) continue;
     if (t.role === 'ground') {
       push({ severity: 'warning', rule: 'ground-missing', message: `${device.id}: 接地端子 ${t.id} が接地されていません`, devices: [device.id], wires: [], key: `unconnected:${k}` });

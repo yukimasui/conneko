@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../data/tubes';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/types';
+import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
@@ -270,7 +271,7 @@ export function Inspector(props: Props) {
               <div className="device-info__name">{def.name}</div>
               <div className="muted">
                 {def.maker ? `${def.maker} ` : ''}
-                {def.model}
+                {deviceModel(def, node.data.params)}
               </div>
               {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
               {hasEstimates(def) && (
@@ -379,6 +380,37 @@ export function Inspector(props: Props) {
     );
   }
 
+  if (edge && edge.data && isTubeType(edge.data.wireType)) {
+    const data = edge.data;
+    const issues = props.issues.filter((i) => i.wires.includes(edge.id));
+    return (
+      <aside className="inspector">
+        <div className="panel-title">チューブ {edge.id}</div>
+        <p className="muted">
+          {edge.source}.{edge.sourceHandle} ↔ {edge.target}.{edge.targetHandle}
+        </p>
+        <label className="field">
+          <span>配管番号</span>
+          <input value={data.wireNo ?? ''} placeholder="例: A1" onChange={(e) => props.onWireChange(edge.id, { wireNo: e.target.value || undefined })} />
+        </label>
+        <TubeFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
+        <p className="muted small">つまみをドラッグすると線分を動かせます。</p>
+        {(data.bend || data.route) && (
+          <button type="button" onClick={() => props.onWireChange(edge.id, { bend: undefined, route: undefined })}>
+            曲がりを自動に戻す
+          </button>
+        )}
+        <div className="field">
+          <span>チェック</span>
+          <IssueList issues={issues} />
+        </div>
+        <button type="button" className="danger" onClick={props.onDelete}>
+          チューブを削除
+        </button>
+      </aside>
+    );
+  }
+
   if (edge && edge.data) {
     const data = edge.data;
     const issues = props.issues.filter((i) => i.wires.includes(edge.id));
@@ -454,5 +486,50 @@ export function Inspector(props: Props) {
         <p>機器や電線をクリックすると、ここで詳細を編集できます。Delete キーで削除します。</p>
       </div>
     </aside>
+  );
+}
+
+/** チューブの種類・外径・色 */
+function TubeFields({ value, onChange }: { value: Pick<WireEdgeData, 'wireType' | 'tubeOD' | 'color'>; onChange: (patch: Partial<WireEdgeData>) => void }) {
+  const od = value.tubeOD ?? 6;
+  return (
+    <>
+      <label className="field">
+        <span>種類</span>
+        <select value={value.wireType} onChange={(e) => onChange({ wireType: e.target.value })}>
+          {TUBE_TYPES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.series}（{t.name}・最高 {t.maxPressure}MPa）
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>外径</span>
+        <select value={od} onChange={(e) => onChange({ tubeOD: Number(e.target.value) })}>
+          {TUBE_ODS.map((v) => (
+            <option key={v} value={v}>
+              φ{v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="field">
+        <span>色</span>
+        <div className="swatches">
+          {TUBE_COLORS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              title={c.name}
+              className={`swatch${value.color === c.id ? ' is-active' : ''}`}
+              style={{ background: c.hex }}
+              onClick={() => onChange({ color: c.id })}
+            />
+          ))}
+        </div>
+      </div>
+      <p className="muted small">型式: {tubeModel(value.wireType, od, value.color)}</p>
+    </>
   );
 }

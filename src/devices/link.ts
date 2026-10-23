@@ -25,6 +25,8 @@ interface LinkOptions {
   terminal: string;
   /** コネクタ（ネットワークリンク）。省略時は電線をつなぐ中継端子 */
   connector?: ConnectorSpec;
+  /** エアのポート（エアのリンク）。チューブをつなぐ */
+  air?: boolean;
 }
 
 export function buildLink(o: LinkOptions): DeviceDefinition {
@@ -59,7 +61,7 @@ export function buildLink(o: LinkOptions): DeviceDefinition {
       { key: 'name', label: '名前', input: 'text', options: [], default: '' },
       {
         key: 'side',
-        label: o.connector ? 'ケーブルをつなぐ側' : '電線をつなぐ側',
+        label: o.connector ? 'ケーブルをつなぐ側' : o.air ? 'チューブをつなぐ側' : '電線をつなぐ側',
         // 自動: つないだ相手の端子のある側に向ける（アプリが位置から left / right に決める。決まらなければ左）
         options: [
           { value: 'auto', label: '自動（相手の側）' },
@@ -72,6 +74,7 @@ export function buildLink(o: LinkOptions): DeviceDefinition {
     terminals: (p) => {
       const right = p.side === 'right';
       const base = { id: o.terminal, label: '接続', x: right ? W - 1 : 1, y: H / 2, side: right ? ('right' as const) : ('left' as const) };
+      if (o.air) return [{ ...base, role: 'air', air: { kind: 'work' } }];
       return [o.connector ? { ...base, role: 'connector', connector: o.connector } : { ...base, role: 'pass' }];
     },
     netLabel: { param: 'name', terminal: o.terminal },

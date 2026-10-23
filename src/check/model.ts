@@ -99,8 +99,12 @@ export interface Model {
   diagram: Diagram;
   devices: Map<string, DeviceInfo>;
   terminals: Map<string, TerminalInfo>;
-  /** 端子どうしをつなぐ電線（ケーブルを除く） */
+  /** 端子どうしをつなぐ電線（ケーブル・エアのチューブを除く） */
   wires: DiagramWire[];
+  /** エアのポートどうしをつなぐチューブ */
+  tubes: DiagramWire[];
+  /** ポートの端子キー → つないだチューブ */
+  tubesAt: Map<string, DiagramWire[]>;
   /** ケーブルで導通するピンの組 */
   cablePairs: [string, string][];
   wiresAt: Map<string, DiagramWire[]>;
@@ -224,6 +228,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
   }
 
   const wires: DiagramWire[] = [];
+  const tubes: DiagramWire[] = [];
   const cablePairs: [string, string][] = [];
   /** ケーブルでつないだコネクタの組（通信ポートも含む） */
   const cables: { a: string; b: string; wire: string }[] = [];
@@ -240,6 +245,24 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
       continue;
     }
     if (w.from.device === w.to.device && w.from.terminal === w.to.terminal) continue;
+    // エアのポートどうしはチューブ。エアのポートと電気の端子はつなげない
+    const airA = terminals.get(key(w.from.device, w.from.terminal))!.terminal.role === 'air';
+    const airB = terminals.get(key(w.to.device, w.to.terminal))!.terminal.role === 'air';
+    if (airA && airB) {
+      tubes.push(w);
+      continue;
+    }
+    if (airA || airB) {
+      const [air, elec] = airA ? [w.from, w.to] : [w.to, w.from];
+      push({
+        severity: 'error',
+        rule: 'air-electric-mismatch',
+        message: `${w.id}: エアのポート ${air.device}.${air.terminal} と電気の端子 ${elec.device}.${elec.terminal} がつながっています`,
+        devices: [w.from.device, w.to.device],
+        wires: [w.id],
+      });
+      continue;
+    }
     const a = terminals.get(key(w.from.device, w.from.terminal))!.terminal.connector;
     const b = terminals.get(key(w.to.device, w.to.terminal))!.terminal.connector;
     if (a || b) {
@@ -283,6 +306,14 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     }
   }
 
+  const tubesAt = new Map<string, DiagramWire[]>();
+  for (const w of tubes) {
+    for (const r of [w.from, w.to]) {
+      const k = key(r.device, r.terminal);
+      tubesAt.set(k, [...(tubesAt.get(k) ?? []), w]);
+    }
+  }
+
   const fixedLinks: [string, string][] = [];
   const switchLinks: SwitchLink[] = [];
   for (const { device, r } of devices.values()) {
@@ -309,8 +340,10 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     const net = linkNets.get(`${def.type}|${name}`) ?? { name, kind: def.name, keys: [] };
     net.keys.push(k);
     linkNets.set(`${def.type}|${name}`, net);
-    if (!wiresAt.has(k) && !cabled.has(k)) {
-      push({ severity: 'warning', rule: 'link-unwired', message: `${device.id}: ${def.name}「${name}」に${r.terminal(def.netLabel.terminal)?.connector ? 'ケーブル' : '電線'}がつながっていません`, devices: [device.id], wires: [] });
+    if (!wiresAt.has(k) && !cabled.has(k) && !tubesAt.has(k)) {
+      const port = r.terminal(def.netLabel.terminal);
+      const what = port?.connector ? 'ケーブル' : port?.role === 'air' ? 'チューブ' : '電線';
+      push({ severity: 'warning', rule: 'link-unwired', message: `${device.id}: ${def.name}「${name}」に${what}がつながっていません`, devices: [device.id], wires: [] });
     }
   }
   for (const { name, kind, keys: ks } of linkNets.values()) {
@@ -377,6 +410,8 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     devices,
     terminals,
     wires,
+    tubes,
+    tubesAt,
     cablePairs,
     wiresAt,
     fixedLinks,

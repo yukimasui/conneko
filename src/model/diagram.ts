@@ -4,6 +4,7 @@
  * 生成AIが読み書きしやすいよう、機器は id（= 機器名。例: 'ELB1'）で参照し、
  * 電線は from/to に { device, terminal } を持つ単純な構造にしている。
  */
+import { DEFAULT_TUBE, isTubeType } from '../data/tubes';
 import { DEFAULT_WIRE } from '../data/wires';
 import type { ParamValues, TerminalSide } from '../devices/types';
 import { parseSchematic, serializeSchematic, type Schematic } from '../schematic/model';
@@ -13,6 +14,9 @@ export const DIAGRAM_VERSION = 1;
 
 /** コネクタどうしをつなぐケーブルの wireType（色・太さは使わない） */
 export const CABLE_WIRE_TYPE = 'CABLE';
+
+/** エアのチューブか（wireType がチューブの種類） */
+export const isTube = (w: Pick<DiagramWire, 'wireType'>) => isTubeType(w.wireType);
 
 export interface DiagramDevice {
   /** 機器名（図面内で一意。例: 'ELB1'） */
@@ -59,8 +63,10 @@ export interface DiagramWire {
   color: string;
   /** 太さ（公称断面積 mm²） */
   sizeSq: number;
-  /** 電線の種類ID（src/data/wires.ts の WIRE_TYPES） */
+  /** 電線の種類ID（src/data/wires.ts の WIRE_TYPES）。エアのチューブはチューブの種類ID（src/data/tubes.ts の TUBE_TYPES。'TU' など） */
   wireType: string;
+  /** エアのチューブの外径[mm]（チューブのときだけ。color はチューブの色ID、sizeSq は使わない） */
+  tubeOD?: number;
   /** 配線の曲がり位置の調整量[px]。自動配置からのずれ */
   bend?: number;
   /**
@@ -143,6 +149,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       color: w.color,
       sizeSq: w.sizeSq,
       wireType: w.wireType,
+      ...(w.tubeOD ? { tubeOD: w.tubeOD } : {}),
       ...(w.bend ? { bend: Math.round(w.bend) } : {}),
       ...(w.route ? { route: w.route.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })) } : {}),
       ...(w.fromSide ? { fromSide: w.fromSide } : {}),
@@ -230,7 +237,9 @@ export function parseDiagram(input: string | unknown): Diagram {
       ...(typeof w.wireNo === 'string' && w.wireNo ? { wireNo: w.wireNo } : {}),
       color: typeof w.color === 'string' ? w.color : DEFAULT_WIRE.color,
       sizeSq: typeof w.sizeSq === 'number' ? w.sizeSq : DEFAULT_WIRE.sizeSq,
-      wireType: typeof w.wireType === 'string' ? w.wireType : DEFAULT_WIRE.wireType,
+      // 外径だけ書いたチューブは、ポリウレタンチューブとする
+      wireType: typeof w.wireType === 'string' ? w.wireType : typeof w.tubeOD === 'number' ? DEFAULT_TUBE.wireType : DEFAULT_WIRE.wireType,
+      ...(typeof w.tubeOD === 'number' && w.tubeOD > 0 ? { tubeOD: w.tubeOD } : {}),
       ...(typeof w.bend === 'number' ? { bend: w.bend } : {}),
       ...(isSide(w.fromSide) ? { fromSide: w.fromSide } : {}),
       ...(isSide(w.toSide) ? { toSide: w.toSide } : {}),

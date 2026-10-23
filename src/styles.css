@@ -395,6 +395,16 @@ textarea {
 .react-flow__handle.terminal.connectingto.valid {
   background: var(--accent);
 }
+/* エアのポート: 青い二重丸（電気の端子と見分ける） */
+.react-flow__handle.terminal.terminal--air {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #1e6fc8;
+  background: radial-gradient(circle, #1e6fc8 0 2px, rgba(255, 255, 255, 0.85) 2.5px);
+}
+.react-flow__handle.terminal.terminal--air.connectingto.valid {
+  background: #1e6fc8;
+}
 
 /* 選択中の機器の端子の横に出す呼び名。電線が出る向きの外側に置き、上下の端子は縦書きにして隣と重ねない */
 .terminal-callout {

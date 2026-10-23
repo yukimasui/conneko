@@ -17,6 +17,10 @@ const CATEGORY_NAMES: Record<DeviceCategory, string> = {
   sensor: 'センサー',
   safety: '安全機器',
   network: 'ネットワーク機器',
+  'air-supply': 'エア源・3 点セット',
+  valve: '電磁弁・バルブ',
+  actuator: 'シリンダ・アクチュエータ',
+  'air-fitting': '継手・速度制御・エア周辺',
 };
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_NAMES) as DeviceCategory[];

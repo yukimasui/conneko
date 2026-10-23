@@ -5,13 +5,14 @@
  */
 import { getWireColor } from '../data/wires';
 import { instantiateSvg } from '../devices/registry';
-import type { DeviceDefinition, ParamValues } from '../devices/types';
+import { deviceModel, type DeviceDefinition, type ParamValues } from '../devices/types';
 import { cableStyle } from '../devices/resolve';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
 import { DIR, toRoundedPath, type Point } from '../editor/routing';
+import { tubeStrokes } from '../editor/tubeStyle';
 import { wireWidth } from '../editor/WireEdge';
 import { computeBus, effectiveParams, mountedPositions } from '../model/bus';
-import { CABLE_WIRE_TYPE, sheetOf, sheetsOf, type Diagram, type DiagramDevice } from '../model/diagram';
+import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type DiagramDevice } from '../model/diagram';
 import { linkKey } from '../model/ops';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -114,7 +115,7 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       continue;
     }
     out.push(
-      `<text x="${px}" y="${py - 8}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(def.model)}</tspan></text>`,
+      `<text x="${px}" y="${py - 8}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
     );
     if (notes && x.note) {
       const w = Math.min(240, 14 + x.note.length * 10);
@@ -136,6 +137,12 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
         const mid = tx(pts[Math.floor(pts.length / 2)]);
         out.push(`<rect x="${mid.x - 3 - w.wireNo.length * 3}" y="${mid.y - 7}" width="${6 + w.wireNo.length * 6}" height="12" rx="2" fill="#fffbe6" stroke="#b8a660"/>`);
         out.push(`<text x="${mid.x}" y="${mid.y + 2.5}" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold">${esc(w.wireNo)}</text>`);
+      }
+      continue;
+    }
+    if (isTube(w)) {
+      for (const st of tubeStrokes(w.color, w.tubeOD)) {
+        out.push(`<path d="${d0}" fill="none" stroke="${st.stroke}" stroke-width="${st.width}"${st.opacity !== undefined ? ` stroke-opacity="${st.opacity}"` : ''} stroke-linecap="round" stroke-linejoin="round"/>`);
       }
       continue;
     }

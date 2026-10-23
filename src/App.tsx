@@ -42,6 +42,8 @@ import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { alignableLinkCount, alignLinks } from './model/alignLinks';
+import { isAirPort, normalizeTubes, tubeAttrs } from './model/air';
+import { isTubeType } from './data/tubes';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
@@ -536,6 +538,10 @@ function Editor() {
   const onConnect = useCallback(
     (c: Connection) => {
       const isCable = !!terminalOf(c.source, c.sourceHandle)?.connector;
+      // エアのポートどうしはチューブ（種類・色は前回引いたチューブに合わせる）
+      const air = isAirPort(terminalOf(c.source, c.sourceHandle)) && isAirPort(terminalOf(c.target, c.targetHandle));
+      const lastTube = air ? [...edges].reverse().find((e) => e.data && isTubeType(e.data.wireType))?.data : undefined;
+      const tube = air ? tubeAttrs(diagram, { device: c.source, terminal: c.sourceHandle ?? '' }, { device: c.target, terminal: c.targetHandle ?? '' }, getDeviceDefinition, lastTube) : undefined;
       setEdges((es) => [
         ...es,
         {
@@ -545,11 +551,11 @@ function Editor() {
           sourceHandle: c.sourceHandle,
           target: c.target,
           targetHandle: c.targetHandle,
-          data: isCable ? { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE } : { ...wireDefaults },
+          data: tube ? { ...tube } : isCable ? { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE } : { ...wireDefaults },
         },
       ]);
     },
-    [setEdges, wireDefaults, terminalOf],
+    [setEdges, wireDefaults, terminalOf, edges, diagram],
   );
 
   // 端子から引いた電線を何もないところで離したら、接続先の候補（電源・PLC の空き入出力・リンク）を出す
@@ -560,6 +566,8 @@ function Editor() {
       const target = event.target as Element | null;
       if (!target?.closest('.react-flow__pane')) return;
       const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
+      // エアのポートは電気の接続先の候補を出さない
+      if (isAirPort(terminalOf(from.device, from.terminal))) return;
       // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
       const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];
@@ -607,6 +615,8 @@ function Editor() {
   const isValidConnection = useCallback(
     (c: Connection | WireFlowEdge) => {
       if (c.source === c.target && c.sourceHandle === c.targetHandle) return false;
+      // エアのポートはエアのポートとだけ（チューブで）つなぐ
+      if (isAirPort(terminalOf(c.source, c.sourceHandle)) !== isAirPort(terminalOf(c.target, c.targetHandle))) return false;
       const a = terminalOf(c.source, c.sourceHandle)?.connector;
       const b = terminalOf(c.target, c.targetHandle)?.connector;
       return a || b ? !!a && !!b && connectorsMate(a, b) : true;
@@ -783,7 +793,7 @@ function Editor() {
   const loadDiagram = useCallback(
     (raw: Diagram) => {
       // シートをまたぐ電線（AI が書いたものなど）はリンクに置き換える
-      const d = splitCrossSheetWires(raw, getDeviceDefinition);
+      const d = splitCrossSheetWires(normalizeTubes(raw, getDeviceDefinition), getDeviceDefinition);
       skipPromote.current = true;
       const flow = diagramToFlow(d);
       setNodes(flow.nodes);

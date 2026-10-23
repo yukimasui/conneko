@@ -164,6 +164,45 @@ pins: (p) => Array.from({ length: 16 }, (_, i) => ({ id: `CN1#${i + 1}`, label: 
   機器定義に `cable: true` を書くと、同じ分類でも候補に出る。パラメータでコネクタの種類が変わる機器（IAI の適応コントローラーなど）は、
   パラメータを 1 つ変えればつながる相手も「変更点つき」で候補に出る。
 
+## エア機器（ポート・エアの通り道）
+
+エア機器（電磁弁・3 点セット・シリンダ・継手など）は、エアのポートを `role: 'air'` の端子として書き、`air` に仕様を書く。
+
+```ts
+{ id: 'P', label: '1(P)', x: 40, y: 75, side: 'bottom', role: 'air',
+  air: { kind: 'in', tubeOD: 6, thread: 'M5', minPressure: 0.15, maxPressure: 0.7 } }
+```
+
+- `kind`（`AirPortKind`）: `supply`（エア源の出口。`pressure` を書く）、`in`（一次側）、`out`（二次側）、`work`（電磁弁の A・B、シリンダのポートなど）、`exhaust`（排気。未接続でも警告しない）、`pilot`、`vacuum`
+- `tubeOD`: 適合チューブの外径[mm]。ねじポートの機器は、付ける継手のチューブ外径を書く（パラメータで選べるなら `{ param: 'portSize' }`）
+- `minPressure` / `maxPressure`: 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する
+- 使わないことがあるポート（パイロットポート、片側だけ使うポートなど）は `optional: true`
+- 電磁弁のソレノイド、オートスイッチ・圧力スイッチのリード線は、ふつうの電気の端子（`input`・`signal` など）として同じ機器に書く。エアのポートと電気の端子は 1 つの機器に混ぜてよい
+
+機器の中のエアの通り道は `airLinks`（`AirLink`）に書く。圧力の計算（`src/check/pneumatic.ts`）に使う。
+
+```ts
+airLinks: [
+  { from: 'IN', to: 'OUT', directed: true, regulate: { param: 'setPressure' } }, // レギュレータ
+  { from: 'P', to: 'A', directed: true, valve: 'on' },   // 電磁弁: 通電した位置
+  { from: 'P', to: 'B', directed: true, valve: 'off' },  // 通電していない位置
+  { from: 'A', to: 'EA', directed: true, valve: 'off' }, // 排気（排気ポートへの通り道は圧力の計算に使わない）
+]
+```
+
+- `directed`: 一方向だけ通す（レギュレータ・逆止弁など）。向きのある機器を逆につなぐと「逆につないでいないか」と指摘する
+- `regulate`: 二次側の設定圧力[MPa]。この圧力を上限にして通す
+- `valve`: 切り換わる通り道（`on` / `off` / `always`）。届く範囲はすべての位置を合わせて求める
+- シリンダのように中で通り抜けない機器は `airLinks` を書かない
+
+型式がパラメータで変わる機器（シリンダのチューブ内径・ストローク、電磁弁の継手など）は `modelOf` で型式を組み立てる（部品表・画面の機器名の横に出る）。
+
+```ts
+modelOf: (p) => `CDM2B${p.bore}-${p.stroke}Z`,
+```
+
+カテゴリは `air-supply`（エア源・3 点セット）、`valve`（電磁弁・バルブ）、`actuator`（シリンダ・アクチュエータ）、`air-fitting`（継手・速度制御・エア周辺）を使う。
+
 ## 展開図の記号（`schematic`）
 
 展開図（[schematic-dxf.md](schematic-dxf.md)）では、機器を端子・内部経路からコイル・接点・遮断器の極などの記号に自動で切り出す
