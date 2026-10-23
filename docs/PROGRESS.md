@@ -2,8 +2,8 @@
 
 ## 現在地
 
-- ブランチ `feature/terminal-hints`（PR #26）: 端子の案内。ユーザー確認済み、マージ待ち（auto mode がマージを止めたため、ユーザーが実行する）
-- ブランチ `feature/connector-candidates`（#26 の上に積んでいる）: コネクタの「つなげる機器」の候補。実装・テスト完了、ユーザーの目視確認待ち
+- 端子の案内は PR #26 でマージ済み（2026-10-23）。auto mode はマージを止めるため、マージはユーザーが `gh pr merge` で実行する
+- ブランチ `feature/connector-candidates`（push 済み、PR 未作成）: コネクタの「つなげる機器」の候補。実装・テスト完了、ユーザーの目視確認待ち
 - 設計判断は [DECISIONS.md](DECISIONS.md) の ADR-001〜004
 
 ## 作業リスト
