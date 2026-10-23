@@ -28,6 +28,13 @@ export function terminalHint(t: Pick<TerminalDef, 'id' | 'label' | 'hint' | 'not
   return n || fromLabel(t);
 }
 
+/** 端子の印字の括弧より前（'EMGin IN（8）' → 'EMGin IN'）。吹き出しの最大の文字数で省く */
+export function terminalPrinted(t: Pick<TerminalDef, 'id' | 'label'>): string {
+  const printed = t.label ?? t.id;
+  const short = beforeParen(printed) || printed;
+  return short.length > CALLOUT_MAX ? `${short.slice(0, CALLOUT_MAX - 1)}…` : short;
+}
+
 /**
  * 吹き出しの文字（'14 コイル+'、'茶 +V' など）。端子の印字（括弧より前）と呼び名を並べる。
  * 印字が端子IDそのままで呼び名もない端子（意味の情報がない端子）は undefined（吹き出しを出さない）

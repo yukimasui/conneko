@@ -41,6 +41,7 @@ import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
+import { alignableLinkCount, alignLinks } from './model/alignLinks';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
@@ -714,6 +715,14 @@ function Editor() {
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
+        ...(alignableLinkCount(diagram, node.id, getDeviceDefinition)
+          ? [
+              {
+                label: 'リンクを端子の横にそろえる',
+                onClick: () => applyDiagram(alignLinks(diagram, node.id, getDeviceDefinition), `${node.id} のリンクを端子の横にそろえました`),
+              },
+            ]
+          : []),
         {
           label: node.data.mount ? '別のシートへ移動（親と一緒に）' : '別のシートへ移動',
           children: [
@@ -725,7 +734,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements],
+    [sheets, linkPeers, ioDevices, plcDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
   );
 
   const onEdgeContextMenu = useCallback(

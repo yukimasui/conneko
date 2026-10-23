@@ -411,10 +411,10 @@ textarea {
   pointer-events: none;
 }
 .terminal-callout--left {
-  transform: translate(calc(-100% - 7px), -50%);
+  transform: translate(-100%, -50%);
 }
 .terminal-callout--right {
-  transform: translate(7px, -50%);
+  transform: translate(0, -50%);
 }
 .terminal-callout--top,
 .terminal-callout--bottom {
@@ -424,10 +424,37 @@ textarea {
   padding: 3px 1px;
 }
 .terminal-callout--top {
-  transform: translate(-50%, calc(-100% - 7px));
+  transform: translate(-50%, -100%);
 }
 .terminal-callout--bottom {
-  transform: translate(-50%, 7px);
+  transform: translate(-50%, 0);
+}
+/* 吹き出しの大きさを測るための、見えない置き場 */
+.terminal-callout-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.terminal-callout-measure .terminal-callout {
+  left: 0;
+  top: 0;
+  transform: none;
+}
+/* 並べ直した吹き出しと端子をつなぐ引出線（機器の座標系。位置は calloutLayout が決める） */
+.terminal-callout-leaders {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  overflow: visible;
+  pointer-events: none;
+}
+.terminal-callout-leaders polyline {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 0.6;
 }
 
 /* 端子にマウスを乗せたときのポップアップ（body に描く。遅延なしで出す） */
