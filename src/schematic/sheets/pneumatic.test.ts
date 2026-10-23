@@ -3,8 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { getDeviceDefinition } from '../../devices/registry';
 import type { DeviceDefinition, TerminalDef } from '../../devices/types';
 import type { Diagram, DiagramWire } from '../../model/diagram';
+import { movePneumatic, resetPneumatic } from '../../editor/SchematicEditor';
+import { sampleDiagram } from '../../model/sample';
 import { buildSchematic } from '../layout';
+import { parseSchematic, pneumaticElement, serializeSchematic, type Schematic, type SchematicItem } from '../model';
+import { hits } from '../wiring';
 import { sheetSvg } from '../svg';
+import { pipeRoute } from './pneumatic';
 
 const port = (id: string, air: TerminalDef['air'], extra: Partial<TerminalDef> = {}): TerminalDef => ({ id, x: 0, y: 0, side: 'top', role: 'air', air, ...extra });
 const base = { name: '', labelPrefix: 'X', width: 10, height: 10, svg: '' };
@@ -153,5 +158,103 @@ describe('空圧回路図', () => {
   it('エア機器がなければ案内を書く', () => {
     const d: Diagram = { devices: [], wires: [], schematic: { sheets: [{ id: 'D1', name: '空圧', kind: 'pneumatic', items: [] }] } };
     expect(buildSchematic(d, lookup).doc.sheets[0].texts.some((t) => t.text.includes('エア機器'))).toBe(true);
+  });
+});
+
+describe('空圧回路図の記号をドラッグで動かす', () => {
+  const withItems = (items: SchematicItem[], paper?: 'A1'): Diagram => ({
+    ...circuit(),
+    schematic: { sheets: [{ id: 'D1', name: '空圧回路図', kind: 'pneumatic', ...(paper ? { paper } : {}), items }] },
+  });
+  const textAt = (b: ReturnType<typeof buildSchematic>, text: string) => b.doc.sheets[0].texts.find((t) => t.text === text)!.at;
+
+  it('機器ごとに動かせるまとまりがあり、動かしていなければ自動の位置に置く', () => {
+    const b = buildSchematic(circuit(), lookup);
+    const groups = b.pneumaticGroups.get('D1')!;
+    expect(groups.map((g) => g.device).sort()).toEqual(['AIR1', 'CY1', 'CY2', 'FR1', 'SC1', 'SC2', 'SOL1', 'SOL2']);
+    for (const g of groups) {
+      expect(g.element).toBe(pneumaticElement(g.device));
+      // つかむ範囲は外形の左上を含む
+      expect(g.bounds.x).toBeLessThanOrEqual(g.origin[0]);
+      expect(g.bounds.y).toBeLessThanOrEqual(g.origin[1]);
+    }
+  });
+
+  it('items の位置（外形の左上）へ動かし、ほかの記号は動かさない。配管は動かした記号の端へ引き直す', () => {
+    const before = buildSchematic(circuit(), lookup);
+    const g = before.pneumaticGroups.get('D1')!.find((x) => x.device === 'CY1')!;
+    const after = buildSchematic(withItems([{ element: 'CY1:pneumatic', x: g.origin[0] + 200, y: g.origin[1] + 20 }]), lookup);
+    const moved = after.pneumaticGroups.get('D1')!.find((x) => x.device === 'CY1')!;
+    expect(moved.origin).toEqual([g.origin[0] + 200, g.origin[1] + 20]);
+    // 機器名・型式も一緒に動く（展開図 JSON は y が上向き）
+    const [x0, y0] = textAt(before, 'CY1');
+    expect(textAt(after, 'CY1')).toEqual([x0 + 200, y0 - 20]);
+    expect(textAt(after, 'SC1')).toEqual(textAt(before, 'SC1'));
+    // シリンダの下端（ポート）に配管がつながる
+    const H = after.doc.sheets[0].paper.height;
+    const bottom = H - (moved.origin[1] + 10);
+    const ends = after.doc.sheets[0].polylines.filter((p) => p.layer === 'WIRE').flatMap((p) => [p.points[0], p.points[p.points.length - 1]]);
+    const atCylinder = ends.filter(([x, y]) => Math.abs(y - bottom) < 0.01 && x > moved.origin[0] && x < moved.origin[0] + 52);
+    expect(atCylinder.length).toBe(2);
+  });
+
+  it('自動配置に戻すと、動かす前と同じ図になる', () => {
+    const s0: Schematic = withItems([]).schematic!;
+    const moved = movePneumatic(s0, 'D1', 'SC1:pneumatic', { x: 101.2, y: 49.9 });
+    expect(moved.sheets[0].items).toEqual([{ element: 'SC1:pneumatic', x: 100, y: 50 }]);
+    const reset = resetPneumatic(movePneumatic(moved, 'D1', 'CY2:pneumatic', { x: 300, y: 50 }), 'D1', 'CY2:pneumatic');
+    expect(reset.sheets[0].items.map((i) => i.element)).toEqual(['SC1:pneumatic']);
+    expect(resetPneumatic(reset, 'D1').sheets[0].items).toEqual([]);
+    const a = buildSchematic(circuit(), lookup).doc.sheets[0];
+    const b = buildSchematic({ ...circuit(), schematic: resetPneumatic(moved, 'D1') }, lookup).doc.sheets[0];
+    expect(b).toEqual(a);
+  });
+
+  it('マニホールドは装着した弁ごと動かす', () => {
+    const sheet = sampleDiagram.schematic!.sheets.find((s) => s.kind === 'pneumatic')!;
+    const build = (items: SchematicItem[]) => buildSchematic({ ...sampleDiagram, schematic: { sheets: [{ ...sheet, items }] } }, getDeviceDefinition);
+    const before = build([]);
+    const groups = before.pneumaticGroups.get(sheet.id)!;
+    const mf = groups.find((g) => g.device === 'MF1')!;
+    // 装着した弁は単独では動かさない
+    expect(groups.some((g) => g.device === 'SOL1')).toBe(false);
+    const after = build([{ element: 'MF1:pneumatic', x: mf.origin[0] + 50, y: mf.origin[1] + 30 }]);
+    const page = (b: typeof before) => b.doc.sheets.find((p) => p.source === sheet.id)!;
+    const find = (b: typeof before, prefix: string) => page(b).texts.find((t) => t.text.startsWith(prefix))!.at;
+    expect(find(after, 'SOL1')).toEqual([find(before, 'SOL1')[0] + 50, find(before, 'SOL1')[1] - 30]);
+    expect(find(after, 'MF1')).toEqual([find(before, 'MF1')[0] + 50, find(before, 'MF1')[1] - 30]);
+    expect(find(after, 'CY1')).toEqual(find(before, 'CY1'));
+  });
+
+  it('動かした位置を保存して読み戻す（回転などは持たない。シートごとに別の位置）', () => {
+    const back = parseSchematic({
+      sheets: [
+        { id: 'P1', name: '空圧 1', kind: 'pneumatic', items: [{ element: 'CY1:pneumatic', x: 10.004, y: 20, rotation: 90 }, { element: 'CY1:pneumatic', x: 1, y: 1 }] },
+        { id: 'P2', name: '空圧 2', kind: 'pneumatic', items: [{ element: 'CY1:pneumatic', x: 30, y: 40 }] },
+        { id: 'B', name: '部品表', kind: 'bom', items: [{ element: 'CY1:pneumatic', x: 30, y: 40 }] },
+      ],
+    })!;
+    expect(back.sheets.map((s) => s.items)).toEqual([[{ element: 'CY1:pneumatic', x: 10.004, y: 20 }], [{ element: 'CY1:pneumatic', x: 30, y: 40 }], []]);
+    expect(serializeSchematic(back).sheets[0].items).toEqual([{ element: 'CY1:pneumatic', x: 10, y: 20 }]);
+  });
+
+  it('用紙が大きければその用紙で描く', () => {
+    const b = buildSchematic(withItems([], 'A1'), lookup);
+    expect(b.doc.sheets[0].paper).toEqual({ width: 841, height: 594 });
+  });
+
+  it('配管は記号を横切らないよう脇を回り、別の配管と重ならない', () => {
+    // a（上向き）から b（下向き）へ。間に記号がある
+    const box = { x1: 20, y1: 40, x2: 80, y2: 60 };
+    const pl = pipeRoute({ pos: [50, 100], dir: [0, -1] }, { pos: [50, 10], dir: [0, 1] }, 'n1', [box], []);
+    expect(hits(pl, [box])).toBe(0);
+    expect(pl[0]).toEqual([50, 100]);
+    expect(pl[pl.length - 1]).toEqual([50, 10]);
+    for (let i = 0; i + 1 < pl.length; i++) expect(pl[i][0] === pl[i + 1][0] || pl[i][1] === pl[i + 1][1]).toBe(true);
+    // 向かい合っていればまっすぐ
+    expect(pipeRoute({ pos: [0, 5], dir: [1, 0] }, { pos: [30, 5], dir: [-1, 0] }, 'n2', [], [])).toEqual([
+      [0, 5],
+      [30, 5],
+    ]);
   });
 });

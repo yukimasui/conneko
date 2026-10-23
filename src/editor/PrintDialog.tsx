@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import type { DiagramSettings, Sheet } from '../model/diagram';
+import { PAPER_SIZES } from '../schematic/format';
+import type { PaperSize } from '../schematic/model';
 import type { PrintOptions } from './PrintView';
+
+/** 印刷できる展開図のシート */
+export interface PrintSchematicSheet {
+  id: string;
+  name: string;
+  /** シートの用紙（'A2' など） */
+  paper: PaperSize;
+}
 
 interface Props {
   sheets: Sheet[];
+  /** 展開図のシート（展開図がなければ空） */
+  schematicSheets?: PrintSchematicSheet[];
+  /** 展開図のシートを、はじめから印刷するものに入れる（展開図の画面から開いたとき） */
+  schematicFirst?: boolean;
   settings: DiagramSettings;
   onSettings: (patch: Partial<DiagramSettings>) => void;
   onPrint: (options: PrintOptions) => void;
@@ -11,10 +25,11 @@ interface Props {
 }
 
 /** 印刷・PDF の設定（図面枠の内容、用紙、印刷するシートと一覧） */
-export function PrintDialog({ sheets, settings, onSettings, onPrint, onClose }: Props) {
+export function PrintDialog({ sheets, schematicSheets = [], schematicFirst, settings, onSettings, onPrint, onClose }: Props) {
   const [opts, setOpts] = useState<PrintOptions>({
     paper: 'A3',
-    sheets: sheets.map((s) => s.id),
+    sheets: schematicFirst ? [] : sheets.map((s) => s.id),
+    schematic: schematicFirst ? schematicSheets.map((s) => s.id) : [],
     bom: true,
     wires: true,
     io: true,
@@ -24,6 +39,7 @@ export function PrintDialog({ sheets, settings, onSettings, onPrint, onClose }: 
   });
   const set = (patch: Partial<PrintOptions>) => setOpts((o) => ({ ...o, ...patch }));
   const toggleSheet = (id: string) => set({ sheets: opts.sheets.includes(id) ? opts.sheets.filter((x) => x !== id) : [...opts.sheets, id] });
+  const toggleSchematic = (id: string) => set({ schematic: opts.schematic.includes(id) ? opts.schematic.filter((x) => x !== id) : [...opts.schematic, id] });
   const text = (key: 'title' | 'author' | 'revision', label: string, placeholder: string) => (
     <label className="field">
       <span>{label}</span>
@@ -47,9 +63,9 @@ export function PrintDialog({ sheets, settings, onSettings, onPrint, onClose }: 
             {text('revision', '版', '例: A')}
           </section>
           <section>
-            <h3>用紙（横向き）</h3>
+            <h3>用紙（横向き。概念図と一覧）</h3>
             <div className="print-dialog__row">
-              {(['A3', 'A4'] as const).map((p) => (
+              {(Object.keys(PAPER_SIZES) as PaperSize[]).map((p) => (
                 <label key={p}>
                   <input type="radio" checked={opts.paper === p} onChange={() => set({ paper: p })} /> {p}
                 </label>
@@ -61,6 +77,17 @@ export function PrintDialog({ sheets, settings, onSettings, onPrint, onClose }: 
                 <input type="checkbox" checked={opts.sheets.includes(s.id)} onChange={() => toggleSheet(s.id)} /> {i + 1}. {s.name}
               </label>
             ))}
+            {schematicSheets.length > 0 && (
+              <>
+                <h3>展開図（シートごとの用紙）</h3>
+                {schematicSheets.map((s) => (
+                  <label key={s.id} className="print-dialog__check">
+                    <input type="checkbox" checked={opts.schematic.includes(s.id)} onChange={() => toggleSchematic(s.id)} /> {s.name}
+                    <span className="muted small">（{s.paper}）</span>
+                  </label>
+                ))}
+              </>
+            )}
             <h3>一覧・表示</h3>
             {(
               [
@@ -82,7 +109,7 @@ export function PrintDialog({ sheets, settings, onSettings, onPrint, onClose }: 
           <button type="button" onClick={onClose}>
             キャンセル
           </button>
-          <button type="button" className="primary" disabled={!opts.sheets.length && !opts.bom && !opts.wires && !opts.io && !opts.issues} onClick={() => onPrint(opts)}>
+          <button type="button" className="primary" disabled={!opts.sheets.length && !opts.schematic.length && !opts.bom && !opts.wires && !opts.io && !opts.issues} onClick={() => onPrint(opts)}>
             印刷・PDF に保存…
           </button>
         </div>

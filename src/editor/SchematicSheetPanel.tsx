@@ -23,6 +23,13 @@ const NEW_KINDS: { kind: NewKind; label: string; name: string; description: stri
 
 const PAPERS = Object.keys(PAPER_SIZES) as PaperSize[];
 
+/** 用紙の選択肢（大きさも書く） */
+const paperOptions = PAPERS.map((p) => (
+  <option key={p} value={p}>
+    {p} 横（{PAPER_SIZES[p].width}×{PAPER_SIZES[p].height}）
+  </option>
+));
+
 export function NewSheetDialog(props: {
   build: SchematicBuild;
   schematic: Schematic;
@@ -73,11 +80,7 @@ export function NewSheetDialog(props: {
           <label className="field">
             <span>用紙</span>
             <select value={paper} onChange={(e) => setPaper(e.target.value as PaperSize)}>
-              {PAPERS.map((p) => (
-                <option key={p} value={p}>
-                  {p} 横
-                </option>
-              ))}
+              {paperOptions}
             </select>
           </label>
           {needsPlc && (
@@ -116,6 +119,8 @@ export function SheetSettings(props: {
   onExport: () => void;
   /** 自動で並べ、結果の説明を返す */
   onAuto: () => string;
+  /** 空圧回路図の記号をすべて自動の位置に戻す */
+  onResetPneumatic: () => void;
   settings: DiagramSettings;
   onSettings: (patch: Partial<DiagramSettings>) => void;
 }) {
@@ -129,7 +134,8 @@ export function SheetSettings(props: {
     if (ref && !options.some((o) => o.ref === ref)) options.push({ ref, label: ref, conductor: '+' });
   }
   const placed = build.elements.filter((e) => e.placed).length;
-  const paper = sheet.paper ?? props.schematic.settings?.paper ?? 'A3';
+  const defaultPaper = props.schematic.settings?.paper ?? 'A3';
+  const paper = sheet.paper ?? defaultPaper;
 
   const railSelect = (label: string, value: string | undefined, onSet: (ref: string | undefined) => void) => (
     <label className="field">
@@ -233,9 +239,17 @@ export function SheetSettings(props: {
       break;
     case 'pneumatic':
       body = (
-        <p className="small muted">
-          上の段にシリンダなどのアクチュエータ、その下に速度制御弁と電磁弁を弁ごとに縦に並べ、下の主管の左にエア源と 3 点セットを描きます。ソレノイド・オートスイッチの横には、つないだ PLC の入出力番号を書きます。配管は概念図で変えます。
-        </p>
+        <>
+          <p className="small muted">
+            上の段にシリンダなどのアクチュエータ、その下に速度制御弁と電磁弁を弁ごとに縦に並べ、下の主管の左にエア源と 3 点セットを描きます。ソレノイド・オートスイッチの横には、つないだ PLC の入出力番号を書きます。
+          </p>
+          <p className="small muted">
+            記号（機器ごと。マニホールドは装着した弁ごと）は用紙の上でドラッグして動かせます。配管は動かした位置に合わせて引き直します。つなぎ方は概念図で変えます。
+          </p>
+          <button type="button" onClick={props.onResetPneumatic} disabled={!sheet.items.length}>
+            自動配置に戻す（動かした {sheet.items.length} 個）
+          </button>
+        </>
       );
       break;
     case 'cover':
@@ -278,12 +292,9 @@ export function SheetSettings(props: {
       </div>
       <label className="field">
         <span>このシートの用紙</span>
-        <select value={paper} onChange={(e) => setSheet({ paper: e.target.value as PaperSize })}>
-          {PAPERS.map((p) => (
-            <option key={p} value={p}>
-              {p} 横
-            </option>
-          ))}
+        {/* 図面の既定と同じ用紙を選んだら、シートの指定を省く（既定を変えるとこのシートも変わる） */}
+        <select value={paper} onChange={(e) => setSheet({ paper: e.target.value === defaultPaper ? undefined : (e.target.value as PaperSize) })}>
+          {paperOptions}
         </select>
       </label>
       {body}
@@ -294,6 +305,18 @@ export function SheetSettings(props: {
         <input type="text" placeholder="作成者" value={props.settings.author ?? ''} onChange={(e) => props.onSettings({ author: e.target.value || undefined })} />
         <input type="text" placeholder="版（例: A）" value={props.settings.revision ?? ''} onChange={(e) => props.onSettings({ revision: e.target.value || undefined })} />
       </div>
+      <label className="field">
+        <span>図面の既定の用紙（用紙を指定していないシート）</span>
+        <select
+          value={defaultPaper}
+          onChange={(e) => {
+            const next = e.target.value as PaperSize;
+            props.onChange((s) => ({ ...s, settings: { ...s.settings, paper: next === 'A3' ? undefined : next } }));
+          }}
+        >
+          {paperOptions}
+        </select>
+      </label>
       <hr />
       <button type="button" className="primary" onClick={props.onExport}>
         展開図 JSON を書き出す（DXF 用）

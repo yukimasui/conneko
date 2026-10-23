@@ -2003,6 +2003,13 @@ textarea {
   .print-drawing svg {
     display: block;
   }
+  /* 展開図のページ: 用紙いっぱいに図を描く（余白なしの名前付きページ。図面枠は図の中にある）。
+     overflow: hidden を付けると Chrome が名前付きページの大きさを使わなくなるので付けない */
+  .print-page.is-schematic svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
   .print-page h2 {
     font-size: 14pt;
     margin: 0 0 3mm;
