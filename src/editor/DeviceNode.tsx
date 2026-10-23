@@ -1,11 +1,12 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
 import { linkKey } from '../model/ops';
-import type { TerminalDef, TerminalSide } from '../devices/types';
+import type { TerminalSide } from '../devices/types';
 import { useEditorContext } from './EditorContext';
 import type { DeviceFlowNode } from './flow';
+import { TerminalCallouts, TerminalPopup } from './TerminalHints';
 
 const POSITION: Record<TerminalSide, Position> = {
   top: Position.Top,
@@ -14,37 +15,8 @@ const POSITION: Record<TerminalSide, Position> = {
   right: Position.Right,
 };
 
-const ROLE_NAMES: Record<string, string> = {
-  line: '一次側',
-  load: '二次側',
-  pass: '中継',
-  supply: '電源出力',
-  input: '受電',
-  ground: '接地',
-  signal: '信号',
-  connector: 'コネクタ',
-};
-
 /** コネクタの接続点（Handle）の厚み。ケーブルの始点は Handle の side 側の端になる */
 export const HANDLE_DEPTH = 10;
-
-export const SIGNAL_NAMES: Record<string, string> = {
-  npn: 'NPN出力',
-  pnp: 'PNP出力',
-  contact: '無電圧接点',
-  '2wire': '2線式',
-  dc: 'DC入力',
-  dry: '無電圧入力',
-  'analog-v': 'アナログ電圧',
-  'analog-i': 'アナログ電流',
-  'line-driver': 'ラインドライバ',
-};
-
-/** 端子のツールチップ（印字・機能・役割） */
-export function terminalTitle(t: TerminalDef): string {
-  const kind = t.signal ? SIGNAL_NAMES[t.signal.kind] : ROLE_NAMES[t.role] ?? t.role;
-  return `${t.label ?? t.id}${t.note ? ` ${t.note}` : ''}（${kind}）`;
-}
 
 /** リンクの相手（同じ名前のリンク）があるシート。クリックでそのシートのリンクへ移動する */
 function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: string; sheet: string; sheetName: string }[]; sheet: string; onJump: (id: string) => void }) {
@@ -77,11 +49,14 @@ function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: 
 
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
+  // マウスを乗せている端子（ポップアップを出す）
+  const [hover, setHover] = useState<{ id: string; rect: DOMRect } | null>(null);
   const { deviceSeverity, params: effective, hosts, linkPeers, onJump, showNotes } = useEditorContext();
   const severity = deviceSeverity.get(id);
   const params = effective.get(id) ?? data.params;
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
-  const terminals = useMemo(() => (def ? resolveDevice(def, params).terminals : []), [def, params]);
+  const resolved = useMemo(() => (def ? resolveDevice(def, params) : undefined), [def, params]);
+  const terminals = useMemo(() => resolved?.terminals ?? [], [resolved]);
   // パラメータで端子が変わる機器があるため、端子の位置を React Flow に知らせ直す
   // （初回の描画では不要。初回にも呼ぶと全体表示（fitView）が計測前に走ってしまう）
   // 元の端子に戻った場合も知らせ直すため、直前の端子と比べる
@@ -151,9 +126,14 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
                 ? { width: t.connector.width, height: HANDLE_DEPTH, borderRadius: 3 }
                 : { width: HANDLE_DEPTH, height: t.connector.width, borderRadius: 3 })),
           }}
-          title={terminalTitle(t)}
+          onMouseEnter={(e) => setHover({ id: t.id, rect: e.currentTarget.getBoundingClientRect() })}
+          onMouseLeave={() => setHover(null)}
         />
       ))}
+      {selected && <TerminalCallouts terminals={terminals} />}
+      {hover && resolved?.terminal(hover.id) && (
+        <TerminalPopup device={id} terminal={resolved.terminal(hover.id)!} resolved={resolved} comment={data.comments?.[hover.id]} anchor={hover.rect} />
+      )}
     </div>
   );
 }

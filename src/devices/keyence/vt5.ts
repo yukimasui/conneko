@@ -206,7 +206,7 @@ export function buildVt5(s: Vt5Spec): DeviceDefinition {
     height: H,
     svg,
     terminals: [
-      { id: 'FG', label: 'FG', x: POWER[0].x, y: PY, side: 'bottom', role: 'ground' },
+      { id: 'FG', label: 'FG', hint: '機能接地', x: POWER[0].x, y: PY, side: 'bottom', role: 'ground' },
       { id: '24V+', label: '+', x: POWER[1].x, y: PY, side: 'bottom', role: 'input', accepts: acc('+') },
       { id: '24V-', label: '−', x: POWER[2].x, y: PY, side: 'bottom', role: 'input', accepts: acc('-') },
       { id: 'LAN', x: LAN.x, y: LAN.y, side: 'bottom', role: 'connector', connector: rj45Connector(PROTO.ethernet), optional: true },

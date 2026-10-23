@@ -160,6 +160,11 @@ interface TerminalBase {
   label?: string;
   /** 端子の機能・用途の説明（例: 'COM0'、'安全入力 CH1'）。label は印字、note は意味を書く */
   note?: string;
+  /**
+   * 端子の短い呼び名（例: 'コイル+'、'COM1'、'NO1'、'+V'、'一次 R'）。選択中の機器の端子の横に吹き出しで出す。
+   * 8 文字程度まで。省略時は note の括弧より前を使う（hint.ts の terminalHint）
+   */
+  hint?: string;
   role: TerminalRole;
   supply?: SupplySpec;
   /** 受電できる電源の条件。AC と DC のどちらも受けられる端子（リレー出力のコモンなど）は配列で書き、いずれかを満たせばよい */

@@ -52,14 +52,14 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: '1/L1', x: MAIN_XS[0], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '3/L2', x: MAIN_XS[1], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '5/L3', x: MAIN_XS[2], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '2/T1', x: MAIN_XS[0], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    { id: '4/T2', x: MAIN_XS[1], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    { id: '6/T3', x: MAIN_XS[2], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    { id: 'A1', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
-    { id: 'A2', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
+    { id: '1/L1', hint: '一次側', x: MAIN_XS[0], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '3/L2', hint: '一次側', x: MAIN_XS[1], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '5/L3', hint: '一次側', x: MAIN_XS[2], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '2/T1', hint: '二次側', x: MAIN_XS[0], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    { id: '4/T2', hint: '二次側', x: MAIN_XS[1], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    { id: '6/T3', hint: '二次側', x: MAIN_XS[2], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    { id: 'A1', hint: 'コイル', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
+    { id: 'A2', hint: 'コイル', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
   ],
   // 主接点の ratedCurrent は AC-3（AC220〜240V）の定格使用電流 32A
   links: [

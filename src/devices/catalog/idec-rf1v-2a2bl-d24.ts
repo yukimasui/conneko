@@ -87,6 +87,20 @@ const svg = `
 
 const coil = { system: 'DC' as const, minVoltage: 18, maxVoltage: 26.4 };
 
+/** 吹き出しの呼び名（端子の印字の括弧の中を短くしたもの） */
+const HINTS: Record<string, string> = {
+  '10': 'a 接点 9-10',
+  '9': 'a 接点 9-10',
+  '7': 'a 接点 7-8',
+  '8': 'a 接点 7-8',
+  '6': 'b 接点 5-6',
+  '5': 'b 接点 5-6',
+  '4': 'b 接点 3-4',
+  '3': 'b 接点 3-4',
+  '2': 'コイル−',
+  '1': 'コイル+',
+};
+
 const LEFT_LABELS: Record<string, string> = {
   '9': '9（a 接点 9-10）',
   '6': '6（b 接点 5-6）',
@@ -108,11 +122,12 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: '10', label: '10（a 接点 9-10）', x: COL[0], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
-    { id: '7', label: '7（a 接点 7-8）', x: COL[1], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
-    { id: '8', label: '8（a 接点 7-8）', x: COL[2], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
+    { id: '10', hint: HINTS['10'], label: '10（a 接点 9-10）', x: COL[0], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
+    { id: '7', hint: HINTS['7'], label: '7（a 接点 7-8）', x: COL[1], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
+    { id: '8', hint: HINTS['8'], label: '8（a 接点 7-8）', x: COL[2], y: ROW_TOP, side: 'top', role: 'signal', optional: true },
     ...LEFT_ROWS.map((r) => ({
       id: r.id,
+      hint: HINTS[r.id],
       label: LEFT_LABELS[r.id],
       x: COL[0],
       y: r.y,
@@ -120,9 +135,9 @@ const def: DeviceDefinition = {
       role: 'signal' as const,
       optional: true,
     })),
-    { id: '3', label: '3（b 接点 3-4・EDM 用）', x: COL[0], y: ROW_BOT, side: 'bottom', role: 'signal', optional: true },
-    { id: '2', label: '2（コイル −）', x: COL[1], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['-'] } },
-    { id: '1', label: '1（コイル +）', x: COL[2], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['+'] } },
+    { id: '3', hint: HINTS['3'], label: '3（b 接点 3-4・EDM 用）', x: COL[0], y: ROW_BOT, side: 'bottom', role: 'signal', optional: true },
+    { id: '2', hint: HINTS['2'], label: '2（コイル −）', x: COL[1], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['-'] } },
+    { id: '1', hint: HINTS['1'], label: '1（コイル +）', x: COL[2], y: ROW_BOT, side: 'bottom', role: 'input', accepts: { ...coil, conductors: ['+'] } },
   ],
   // b 接点 3-4・5-6 と a 接点 7-8・9-10 はすべて強制ガイド（a 接点が溶着すると b 接点は開いたままになる）
   links: [

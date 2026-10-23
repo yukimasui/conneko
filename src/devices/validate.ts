@@ -4,6 +4,9 @@
 import { resolveDevice } from './resolve';
 import { paramsWithDefaults, type DeviceDefinition, type ParamValues } from './types';
 
+/** 端子の呼び名（hint）の最大文字数。吹き出しが隣の端子と重なりにくい長さにする */
+export const HINT_MAX = 10;
+
 /** パラメータの既定値と、各パラメータの全選択肢（ひとつずつ変えたもの）の組み合わせ */
 export function paramVariants(def: DeviceDefinition): ParamValues[] {
   const variants: ParamValues[] = [{}];
@@ -44,7 +47,8 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
     }
     if (t.signal?.common && !ids.has(t.signal.common)) problems.push(`signal.common に存在しない端子: ${t.id} -> ${t.signal.common}`);
     if (t.signal && t.role !== 'signal') problems.push(`signal は role: 'signal' の端子に指定する: ${t.id}`);
-    for (const v of [t.label, t.note]) if (v !== undefined && /undefined|NaN/.test(v)) problems.push(`ラベルが不正: ${t.id} "${v}"`);
+    for (const v of [t.label, t.note, t.hint]) if (v !== undefined && /undefined|NaN/.test(v)) problems.push(`ラベルが不正: ${t.id} "${v}"`);
+    if (t.hint !== undefined && (!t.hint.trim() || t.hint.length > HINT_MAX)) problems.push(`hint は 1〜${HINT_MAX} 文字にする: ${t.id} "${t.hint}"`);
   }
   for (const l of r.links) {
     if (!ids.has(l.from) || !ids.has(l.to)) problems.push(`links に存在しない端子: ${l.from} -> ${l.to}`);

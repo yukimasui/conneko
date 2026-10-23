@@ -7,7 +7,7 @@ import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
-import { terminalTitle } from './DeviceNode';
+import { terminalFacts } from './terminalInfo';
 import { wireWidth } from './WireEdge';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
@@ -338,13 +338,25 @@ export function Inspector(props: Props) {
             )}
             <div className="field">
               <span>端子</span>
-              <div className="terminal-list">
-                {resolved!.terminals.map((t) => (
-                  <span key={t.id} className={`terminal-chip${connected.has(t.id) ? ' is-connected' : ''}`} title={terminalTitle(t)}>
-                    {t.label ?? t.id}
-                  </span>
-                ))}
-              </div>
+              <table className="terminal-table">
+                <tbody>
+                  {resolved!.terminals.map((t) => {
+                    const f = terminalFacts(t, resolved!);
+                    return (
+                      <tr key={t.id} className={connected.has(t.id) ? 'is-connected' : undefined}>
+                        <td className="terminal-table__printed" title={connected.has(t.id) ? '接続済み' : '未接続'}>
+                          {f.printed}
+                        </td>
+                        <td>
+                          {f.hint && <strong>{f.hint}</strong>}
+                          {f.note && f.note !== f.hint && <div className="muted">{f.note}</div>}
+                          <div className="muted">{[f.kind, f.power].filter(Boolean).join('・')}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </>
         )}

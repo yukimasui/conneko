@@ -1,4 +1,5 @@
 import type { DeviceDefinition, ParamValues } from '../types';
+import { poleHint } from '../mitsubishi/pole-hint';
 
 /**
  * 三菱電機 サーキットプロテクタ CP30-BA 3P（3極品）。
@@ -113,8 +114,8 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    ...POLES.map((q) => ({ id: q.line, x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
-    ...POLES.map((q) => ({ id: q.load, x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
+    ...POLES.map((q, i) => ({ id: q.line, hint: poleHint(POLES.length, i, '一次'), x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
+    ...POLES.map((q, i) => ({ id: q.load, hint: poleHint(POLES.length, i, '二次'), x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
   ],
   links: POLES.map((q) => ({ from: q.line, to: q.load, directed: true, protects: true })),
   params: [

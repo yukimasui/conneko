@@ -110,6 +110,7 @@ const def: DeviceDefinition = {
   terminals: [
     {
       id: 'X1',
+      hint: 'ランプ+',
       x: TX,
       y: X1Y,
       side: 'right',
@@ -118,6 +119,7 @@ const def: DeviceDefinition = {
     },
     {
       id: 'X2',
+      hint: 'ランプ−',
       x: TX,
       y: X2Y,
       side: 'right',

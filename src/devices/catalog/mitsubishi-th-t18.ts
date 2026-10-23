@@ -180,18 +180,18 @@ const def: DeviceDefinition = {
   svg: (p) => svg(Number(p.heater) || DEFAULT_HEATER),
   terminals: [
     // 一次側（上部の接続ピン）
-    { id: '1/L1', x: PIN_X[0], y: PIN_Y, side: 'top', role: 'line' },
-    { id: '3/L2', x: PIN_X[1], y: PIN_Y, side: 'top', role: 'line' },
-    { id: '5/L3', x: PIN_X[2], y: PIN_Y, side: 'top', role: 'line' },
+    { id: '1/L1', hint: '一次側', x: PIN_X[0], y: PIN_Y, side: 'top', role: 'line' },
+    { id: '3/L2', hint: '一次側', x: PIN_X[1], y: PIN_Y, side: 'top', role: 'line' },
+    { id: '5/L3', hint: '一次側', x: PIN_X[2], y: PIN_Y, side: 'top', role: 'line' },
     // 二次側
-    { id: '2/T1', x: MAIN_X[0], y: BOT_Y, side: 'bottom', role: 'load' },
-    { id: '4/T2', x: MAIN_X[1], y: BOT_Y, side: 'bottom', role: 'load' },
-    { id: '6/T3', x: MAIN_X[2], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '2/T1', hint: '二次側', x: MAIN_X[0], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '4/T2', hint: '二次側', x: MAIN_X[1], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '6/T3', hint: '二次側', x: MAIN_X[2], y: BOT_Y, side: 'bottom', role: 'load' },
     // 補助接点 97-98(a) / 95-96(b)
-    { id: '97', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '95', note: 'b 接点（トリップで開）', x: AUX_X[1], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '98', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
-    { id: '96', note: 'b 接点（トリップで開）', x: AUX_X[1], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '97', hint: 'a 接点', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '95', hint: 'b 接点', note: 'b 接点（トリップで開）', x: AUX_X[1], y: AUX_TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '98', hint: 'a 接点', note: 'a 接点（トリップで閉）', x: AUX_X[0], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '96', hint: 'b 接点', note: 'b 接点（トリップで開）', x: AUX_X[1], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
   ],
   links: [
     { from: '1/L1', to: '2/T1', directed: true, protects: true },

@@ -122,6 +122,7 @@ const def: DeviceDefinition = {
   svg,
   terminals: TERMINALS.map((t) => ({
     id: t.id,
+    hint: 'AC200V入力',
     x: t.x,
     y: TY,
     side: 'bottom' as const,

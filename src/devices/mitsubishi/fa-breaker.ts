@@ -9,6 +9,7 @@
  * 端子記号は 3 極品の写真（同カタログ p.3 の NF50-FAU）で上 1・3・5、下 2・4・6（LOAD）。
  */
 import type { DeviceDefinition, ParamDef, ParamValues } from '../types';
+import { poleHint } from './pole-hint';
 
 export interface FaBreakerSpec {
   type: string;
@@ -202,8 +203,8 @@ export function buildFaBreaker(spec: FaBreakerSpec): DeviceDefinition {
     height: H,
     svg,
     terminals: [
-      ...poles.map((q) => ({ id: q.line, x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
-      ...poles.map((q) => ({ id: q.load, x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
+      ...poles.map((q, i) => ({ id: q.line, hint: poleHint(poles.length, i, '一次'), x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
+      ...poles.map((q, i) => ({ id: q.load, hint: poleHint(poles.length, i, '二次'), x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
     ],
     links: poles.map((q) => ({ from: q.line, to: q.load, directed: true, protects: true })),
     params,

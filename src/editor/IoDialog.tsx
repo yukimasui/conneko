@@ -6,7 +6,7 @@ import type { DeviceDefinition, TerminalDef } from '../devices/types';
 
 import { addTerminalBlock, compareAddress, connectIo, disconnectIo, ioSystem, setComment, swapIo, terminalBlocksFor, type IoPoint } from '../model/io';
 import { sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
-import { SIGNAL_NAMES } from './DeviceNode';
+import { SIGNAL_NAMES } from './terminalInfo';
 
 interface Props {
   diagram: Diagram;

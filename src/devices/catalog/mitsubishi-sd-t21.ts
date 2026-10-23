@@ -120,8 +120,9 @@ const svg = `
 
 const coil = { system: 'DC' as const, minVoltage: 20.4, maxVoltage: 26.4 };
 
-const aux = (id: string, x: number, y: number, side: 'left' | 'right', nc: boolean) => ({
+const aux = (id: string, x: number, y: number, side: 'left' | 'right', nc: boolean, no: number) => ({
   id,
+  hint: `${nc ? 'b' : 'a'} 接点${no}`,
   label: `${id}（補助 ${nc ? 'b 接点・ミラー接点' : 'a 接点'}）`,
   x,
   y,
@@ -144,22 +145,22 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: '1/L1', x: MAIN_XS[0], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '3/L2', x: MAIN_XS[1], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '5/L3', x: MAIN_XS[2], y: MAIN_TOP, side: 'top', role: 'line' },
-    { id: '2/T1', x: MAIN_XS[0], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    { id: '4/T2', x: MAIN_XS[1], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    { id: '6/T3', x: MAIN_XS[2], y: MAIN_BOT, side: 'bottom', role: 'load' },
-    aux('13', AUX_L, AUX_YS.a, 'left', false),
-    aux('21', AUX_L, AUX_YS.b, 'left', true),
-    aux('22', AUX_L, AUX_YS.c, 'left', true),
-    aux('14', AUX_L, AUX_YS.d, 'left', false),
-    aux('43', AUX_R, AUX_YS.a, 'right', false),
-    aux('31', AUX_R, AUX_YS.b, 'right', true),
-    aux('32', AUX_R, AUX_YS.c, 'right', true),
-    aux('44', AUX_R, AUX_YS.d, 'right', false),
-    { id: 'A1', label: 'A1(+)', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['+'] } },
-    { id: 'A2', label: 'A2(−)', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['-'] } },
+    { id: '1/L1', hint: '一次側', x: MAIN_XS[0], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '3/L2', hint: '一次側', x: MAIN_XS[1], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '5/L3', hint: '一次側', x: MAIN_XS[2], y: MAIN_TOP, side: 'top', role: 'line' },
+    { id: '2/T1', hint: '二次側', x: MAIN_XS[0], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    { id: '4/T2', hint: '二次側', x: MAIN_XS[1], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    { id: '6/T3', hint: '二次側', x: MAIN_XS[2], y: MAIN_BOT, side: 'bottom', role: 'load' },
+    aux('13', AUX_L, AUX_YS.a, 'left', false, 1),
+    aux('21', AUX_L, AUX_YS.b, 'left', true, 1),
+    aux('22', AUX_L, AUX_YS.c, 'left', true, 1),
+    aux('14', AUX_L, AUX_YS.d, 'left', false, 1),
+    aux('43', AUX_R, AUX_YS.a, 'right', false, 2),
+    aux('31', AUX_R, AUX_YS.b, 'right', true, 2),
+    aux('32', AUX_R, AUX_YS.c, 'right', true, 2),
+    aux('44', AUX_R, AUX_YS.d, 'right', false, 2),
+    { id: 'A1', label: 'A1(+)', hint: 'コイル+', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['+'] } },
+    { id: 'A2', label: 'A2(−)', hint: 'コイル−', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: { ...coil, conductors: ['-'] } },
   ],
   // 主接点・補助 a 接点 13-14・43-44 は a 接点、補助 b 接点 21-22・31-32 はミラー接点
   links: [

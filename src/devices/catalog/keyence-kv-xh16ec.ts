@@ -45,7 +45,7 @@ const def: DeviceDefinition = {
   svg,
   terminals: [
     { id: 'PORT', label: 'EtherCAT (RJ45)', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: rj45Connector(PROTO.ethercat), optional: true },
-    { id: 'FG', label: 'FG', x: FG.x, y: FG.y, side: 'bottom', role: 'ground' },
+    { id: 'FG', label: 'FG', hint: '機能接地', x: FG.x, y: FG.y, side: 'bottom', role: 'ground' },
   ],
   bus: kvUnitBus(160),
 };

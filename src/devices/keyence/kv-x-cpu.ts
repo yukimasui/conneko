@@ -33,7 +33,7 @@ const PWR_Y = 204;
 const PWR = [
   { id: '24V+', label: '+', x: 22 },
   { id: '24V-', label: '−', x: 32 },
-  { id: 'FG', label: 'FG', x: 42 },
+  { id: 'FG', label: 'FG', hint: '機能接地', x: 42 },
 ];
 
 export function buildKvXCpu(s: KvXCpuSpec): DeviceDefinition {
@@ -117,7 +117,7 @@ export function buildKvXCpu(s: KvXCpuSpec): DeviceDefinition {
   const terminals: TerminalDef[] = [
     { id: '24V+', label: '+ (DC24V)', x: PWR[0].x, y: PWR_Y, side: 'bottom', role: 'input', accepts: accepts('+') },
     { id: '24V-', label: '− (0V)', x: PWR[1].x, y: PWR_Y, side: 'bottom', role: 'input', accepts: accepts('-') },
-    { id: 'FG', label: 'FG', x: PWR[2].x, y: PWR_Y, side: 'bottom', role: 'ground' },
+    { id: 'FG', label: 'FG', hint: '機能接地', x: PWR[2].x, y: PWR_Y, side: 'bottom', role: 'ground' },
     ...ports.map(
       (p, i): TerminalDef => ({
         id: p.id,

@@ -100,8 +100,8 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: '1', x: TX, y: TY_LINE, side: 'top', role: 'line' },
-    { id: '2', x: TX, y: TY_LOAD, side: 'bottom', role: 'load' },
+    { id: '1', hint: '一次側', x: TX, y: TY_LINE, side: 'top', role: 'line' },
+    { id: '2', hint: '二次側', x: TX, y: TY_LOAD, side: 'bottom', role: 'load' },
   ],
   links: [{ from: '1', to: '2', directed: true, protects: true }],
   params: [

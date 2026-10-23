@@ -62,8 +62,13 @@ export function buildSrT5(arr: SrT5Arrangement, coil: CoilKind = 'AC200V'): Devi
   ${COLS.map((x) => screw(x, BOT_Y)).join('')}
   <rect x="8" y="${H - 5}" width="${W - 16}" height="5" rx="1.5" fill="#1d1d1d"/>
 `;
+  // 同じ種類（a 接点・b 接点）が複数あるときだけ、左から数えた番号を付ける
+  const kindNo = (i: number): number | undefined => {
+    const same = poles.filter((p) => p.kind === poles[i].kind);
+    return same.length > 1 ? same.indexOf(poles[i]) + 1 : undefined;
+  };
   const terminals: TerminalDef[] = [
-    ...poles.flatMap((p, i) => [auxTerminal(p.top, COLS[i], TOP_Y, 'top', p.kind), auxTerminal(p.bot, COLS[i], BOT_Y, 'bottom', p.kind)]),
+    ...poles.flatMap((p, i) => [auxTerminal(p.top, COLS[i], TOP_Y, 'top', p.kind, false, kindNo(i)), auxTerminal(p.bot, COLS[i], BOT_Y, 'bottom', p.kind, false, kindNo(i))]),
     ...coilTerminals(coil, A1_X, A2_X, COIL_Y),
   ];
   // 印字は番号だけ。注記は「補助」ではなく継電器の接点
