@@ -1,5 +1,7 @@
 import { getDeviceDefinition } from '../devices/registry';
 import type { Diagram, DiagramWire } from './diagram';
+import { alignLinks } from './alignLinks';
+import { mountedPositions } from './bus';
 import { splitCrossSheetWires } from './ops';
 
 /**
@@ -11,6 +13,8 @@ import { splitCrossSheetWires } from './ops';
  *
  * 回路の意味ごとに 4 枚のシートに分け、シートをまたぐ電線はリンク（同じ名前どうしがつながる記号）に置き換える。
  * 入出力機器のシートには、入力 R000 の光電センサー（PH1）と、出力 R200 の表示灯（PL2）を置く。
+ * エア回路のシートには、エア源・フィルタレギュレータ・残圧排気弁・マニホールド（電磁弁 2 連）・スピードコントローラ・
+ * オートスイッチ付きのシリンダ・エアチャックを置き、ソレノイドを出力 R201〜R203、オートスイッチを入力 R001〜R004 へつなぐ。
  */
 
 let n = 0;
@@ -28,12 +32,20 @@ function w(from: string, to: string, wireNo: string, color: string, sizeSq: numb
   };
 }
 
+/** エアのチューブ（ポリウレタン、青） */
+function t(from: string, to: string, od: number): DiagramWire {
+  const [fd, ft] = from.split(':');
+  const [td, tt] = to.split(':');
+  return { id: `W${++n}`, from: { device: fd, terminal: ft }, to: { device: td, terminal: tt }, color: 'blue', sizeSq: 0, wireType: 'TU', tubeOD: od };
+}
+
 const base: Diagram = {
   sheets: [
     { id: 'S1', name: '主回路' },
     { id: 'S2', name: 'DC24V電源' },
     { id: 'S3', name: 'PLC' },
     { id: 'S4', name: '入出力機器' },
+    { id: 'S5', name: 'エア回路' },
   ],
   devices: [
     { id: 'PS1', type: 'generic.power-source.3p200v', x: 100, y: 0 },
@@ -47,13 +59,27 @@ const base: Diagram = {
     { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 120, y: 380, sheet: 'S2', note: 'DC24V 電源表示' },
     { id: 'FAN1', type: 'generic.panel-fan.ac200v', x: 600, y: 470, note: '盤内換気' },
     { id: 'PLC1', type: 'keyence.kv-8000.cpu', x: 200, y: 260, sheet: 'S3' },
-    { id: 'IN1', type: 'keyence.kv-c32xc.input', x: 0, y: 0, mount: { device: 'PLC1', slot: 1 }, sheet: 'S3', comments: { 'CN1#1': 'PH1 ワーク検出' } },
-    { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 0, y: 0, mount: { device: 'PLC1', slot: 2 }, sheet: 'S3', comments: { 'CN1#1': 'PL2 運転中表示' } },
+    { id: 'IN1', type: 'keyence.kv-c32xc.input', x: 0, y: 0, mount: { device: 'PLC1', slot: 1 }, sheet: 'S3', comments: { 'CN1#1': 'PH1 ワーク検出', 'CN1#3': 'CY1 後退端', 'CN1#5': 'CY1 前進端', 'CN1#7': 'CY2 開', 'CN1#9': 'CY2 閉' } },
+    { id: 'OUT1', type: 'keyence.kv-c32tc.output', x: 0, y: 0, mount: { device: 'PLC1', slot: 2 }, sheet: 'S3', comments: { 'CN1#1': 'PL2 運転中表示', 'CN1#3': 'SOL1 プッシャ前進', 'CN1#5': 'SOL2A チャック閉', 'CN1#7': 'SOL2B チャック開' } },
     { id: 'TB3', type: 'generic.mil-terminal-block.34p', x: 120, y: 690, sheet: 'S3' },
     { id: 'TB4', type: 'generic.mil-terminal-block.34p', x: 420, y: 690, sheet: 'S3' },
     { id: 'HMI1', type: 'keyence.vt5-w07', x: 520, y: 0, sheet: 'S3' },
     { id: 'PH1', type: 'keyence.pz-g41', x: 120, y: 120, sheet: 'S4', note: 'ワーク検出（コンベア入口）' },
     { id: 'PL2', type: 'generic.pilot-lamp.dc24v', x: 420, y: 140, sheet: 'S4', note: '運転中表示' },
+    // エア回路: エア源 → フィルタレギュレータ → 残圧排気弁 → マニホールド（2 連）→ スピードコントローラ → シリンダ・エアチャック
+    { id: 'AIR1', type: 'generic.air-source', x: 0, y: 560, sheet: 'S5' },
+    { id: 'FR1', type: 'smc.aw', x: 170, y: 700, params: { setPressure: 0.4 }, sheet: 'S5', note: '装置の元圧 0.4MPa' },
+    { id: 'VHS1', type: 'smc.vhs', x: 380, y: 740, params: { tubeOD: 8 }, sheet: 'S5' },
+    { id: 'MF1', type: 'smc.ss5y3-41', x: 640, y: 720, sheet: 'S5' },
+    { id: 'SOL1', type: 'smc.sy3140-5lz', x: 0, y: 0, mount: { device: 'MF1', slot: 1 }, sheet: 'S5', note: 'プッシャ 前進' },
+    { id: 'SOL2', type: 'smc.sy3240-5lz', x: 0, y: 0, mount: { device: 'MF1', slot: 2 }, params: { portAB: 4 }, sheet: 'S5', note: 'チャック 閉 / 開' },
+    { id: 'SC1', type: 'smc.as-f.inline', x: 760, y: 200, sheet: 'S5' },
+    { id: 'SC2', type: 'smc.as-f.inline', x: 760, y: 90, sheet: 'S5' },
+    { id: 'CY1', type: 'smc.cm2', x: 960, y: 300, params: { bore: 25, stroke: 100, switch: 'M9N' }, sheet: 'S5', note: 'ワーク押出し' },
+    { id: 'CY2', type: 'smc.mhz2', x: 150, y: 110, params: { size: 16, switch: 'M9N' }, sheet: 'S5', note: 'ワーク把持' },
+    { id: 'SL1', type: 'smc.an', x: 544, y: 900, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL2', type: 'smc.an', x: 574, y: 920, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },
   ],
   wires: [
     // 一次側
@@ -96,6 +122,32 @@ const base: Diagram = {
     w('TB3:1', 'PH1:BK', 'R000', 'blue', 0.75),
     w('PSU1:+V1', 'PL2:X1', 'P24', 'blue', 0.75),
     w('TB4:1', 'PL2:X2', 'R200', 'blue', 0.75),
+    // エア回路: ソレノイド（+ は P24、− は出力ユニットのシンク出力）・オートスイッチ（出力は入力ユニットへ）
+    w('PSU1:+V1', 'SOL1:A+', 'P24', 'blue', 0.75),
+    w('TB4:3', 'SOL1:A-', 'R201', 'blue', 0.75),
+    w('PSU1:+V1', 'SOL2:A+', 'P24', 'blue', 0.75),
+    w('TB4:5', 'SOL2:A-', 'R202', 'blue', 0.75),
+    w('PSU1:+V1', 'SOL2:B+', 'P24', 'blue', 0.75),
+    w('TB4:7', 'SOL2:B-', 'R203', 'blue', 0.75),
+    ...(['CY1:SW1', 'CY1:SW2', 'CY2:SW1', 'CY2:SW2'] as const).flatMap((sw, i) => [
+      w('PSU1:+V1', `${sw}.BN`, 'P24', 'blue', 0.75),
+      w('PSU1:-V1', `${sw}.BU`, 'N24', 'blue', 0.75),
+      w(`TB3:${i * 2 + 3}`, `${sw}.BK`, `R00${i + 1}`, 'blue', 0.75),
+    ]),
+    // エア配管（チューブ）
+    t('AIR1:OUT', 'FR1:IN', 8),
+    t('FR1:OUT', 'VHS1:IN', 8),
+    t('VHS1:OUT', 'MF1:P', 8),
+    t('SOL1:A', 'SC1:IN', 6),
+    t('SC1:OUT', 'CY1:HEAD', 6),
+    t('SOL1:B', 'SC2:IN', 6),
+    t('SC2:OUT', 'CY1:ROD', 6),
+    t('SOL2:A', 'CY2:CLOSE', 4),
+    t('SOL2:B', 'CY2:OPEN', 4),
+    // サイレンサ（排気ポートに直接ねじ込む）
+    t('SL1:IN', 'MF1:EA', 8),
+    t('SL2:IN', 'MF1:EB', 8),
+    t('SL3:IN', 'VHS1:EXH', 8),
     // MIL ケーブル・LAN ケーブル
     { id: 'C1', from: { device: 'IN1', terminal: 'CN1' }, to: { device: 'TB3', terminal: 'CN' }, wireNo: 'CBL-IN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
     { id: 'C2', from: { device: 'OUT1', terminal: 'CN1' }, to: { device: 'TB4', terminal: 'CN' }, wireNo: 'CBL-OUT1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
@@ -133,8 +185,19 @@ const base: Diagram = {
           { element: 'OUT1:CN1#1', x: 330, y: 45 },
         ],
       },
+      { id: 'D9', name: '空圧回路図', kind: 'pneumatic', items: [] },
     ],
   },
 };
 
-export const sampleDiagram: Diagram = splitCrossSheetWires(base, getDeviceDefinition);
+/** シートをまたぐ電線をリンクにし、エア回路のシートの機器のリンクを端子の横にそろえる（装着した電磁弁はマニホールドに並べた位置で） */
+function build(): Diagram {
+  const lookup = getDeviceDefinition;
+  let d = splitCrossSheetWires(base, lookup);
+  const pos = mountedPositions(d.devices, lookup);
+  d = { ...d, devices: d.devices.map((x) => (pos.has(x.id) ? { ...x, ...pos.get(x.id)! } : x)) };
+  for (const id of ['CY1', 'CY2', 'MF1']) d = alignLinks(d, id, lookup);
+  return d;
+}
+
+export const sampleDiagram: Diagram = build();

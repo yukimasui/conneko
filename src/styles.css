@@ -351,6 +351,10 @@ textarea {
 .device-node.has-mounted .device-node__label {
   margin-bottom: 26px;
 }
+/* 装着したユニットのコメントは、親・隣のユニットのラベルに重なるので出さない（インスペクタで見る） */
+.device-node.is-mounted .device-node__note {
+  display: none;
+}
 /* 装着したユニットは横に詰めて並ぶため、ラベルは機器名だけにする */
 .device-node.is-mounted .device-node__label {
   font-size: 11px;
@@ -394,6 +398,16 @@ textarea {
 }
 .react-flow__handle.terminal.connectingto.valid {
   background: var(--accent);
+}
+/* エアのポート: 青い二重丸（電気の端子と見分ける） */
+.react-flow__handle.terminal.terminal--air {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #1e6fc8;
+  background: radial-gradient(circle, #1e6fc8 0 2px, rgba(255, 255, 255, 0.85) 2.5px);
+}
+.react-flow__handle.terminal.terminal--air.connectingto.valid {
+  background: #1e6fc8;
 }
 
 /* 選択中の機器の端子の横に出す呼び名。電線が出る向きの外側に置き、上下の端子は縦書きにして隣と重ねない */
@@ -2205,4 +2219,80 @@ textarea {
 }
 .schem-settings .field input[type='text'] {
   width: 100%;
+}
+
+/* --- バルブエディタ（マニホールドの連の構成） --- */
+.valve-editor__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  overflow-y: auto;
+}
+.valve-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: repeating-linear-gradient(0deg, #e5e9ef 0 2px, #eef1f5 2px 14px);
+  border: 1px solid var(--border);
+  flex: none;
+}
+.valve-strip__host,
+.valve-strip__station {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  padding: 2px 0;
+}
+.valve-strip__station {
+  cursor: grab;
+}
+.valve-strip__station.is-selected {
+  border-color: var(--accent);
+  background: rgba(219, 234, 254, 0.6);
+}
+.valve-strip__station.is-over {
+  background: #dbeafe;
+}
+.valve-strip__station.is-dragging {
+  opacity: 0.4;
+}
+.valve-strip__svg {
+  height: 120px;
+  pointer-events: none;
+}
+.valve-strip__no {
+  font-size: 10px;
+  color: var(--muted);
+}
+.valve-table select {
+  max-width: 220px;
+}
+.valve-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.valve-actions {
+  display: flex;
+  gap: 3px;
+}
+.valve-actions button {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.valve-model {
+  margin: 0 0 4px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 15px;
+  font-weight: 700;
 }

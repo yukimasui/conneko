@@ -33,8 +33,9 @@ export type TerminalSide = 'top' | 'bottom' | 'left' | 'right';
  * - ground: 接地端子
  * - signal: 信号端子（接点・センサー出力など。電源チェックの対象外）
  * - connector: コネクタ（MIL コネクタ、LAN ポートなど）。同じ種類のコネクタどうしをケーブルでつなぐ
+ * - air: エアのポート（air を必ず指定）。エアのポートどうしをチューブでつなぐ。電気のチェックの対象外
  */
-export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal' | 'connector';
+export type TerminalRole = 'line' | 'load' | 'pass' | 'supply' | 'input' | 'ground' | 'signal' | 'connector' | 'air';
 
 /** 電源出力の仕様（role: 'supply' の端子に指定） */
 export interface SupplySpec {
@@ -101,6 +102,60 @@ export interface ConnectorSpec {
   facing?: 'front';
   /** facing: 'front' のときのプラグの長さ[px]（side 方向）。省略時は 12 */
   length?: number;
+}
+
+/**
+ * エアのポートの用途。
+ * - supply: エア源の出口（工場エアの供給口など。pressure を指定）
+ * - in: 一次側（電磁弁の P、レギュレータの IN など。上流からエアを受ける）
+ * - out: 二次側（レギュレータの OUT など。下流へエアを送る）
+ * - work: 作業ポート（電磁弁の A・B、シリンダのポートなど。給気と排気の両方がある）
+ * - exhaust: 排気ポート（電磁弁の R・EA・EB など。大気へ逃がす。未接続でも警告しない）
+ * - pilot: パイロットポート（外部パイロット・パイロット操作の信号）
+ * - vacuum: 真空ポート（真空発生器・吸着パッドなど）
+ */
+export type AirPortKind = 'supply' | 'in' | 'out' | 'work' | 'exhaust' | 'pilot' | 'vacuum';
+
+/** エアのポートの仕様（role: 'air' の端子に指定） */
+export interface AirPortSpec {
+  kind: AirPortKind;
+  /**
+   * 適合チューブの外径[mm]（ワンタッチ管継手）。ねじポートで継手を別に付ける機器でも、付ける継手のチューブ外径を書く
+   * （パラメータで選べる場合は { param }）。つないだチューブの外径と違えば警告する
+   */
+  tubeOD?: NumOrParam;
+  /** ポートのねじの呼び（'M5'、'Rc1/8'、'Rc1/4' など。表示・部品表用） */
+  thread?: string;
+  /**
+   * おねじのポート（サイレンサ、エルボ形スピードコントローラのシリンダ側など）。相手のめねじのポートへ直接ねじ込むので、
+   * つないだ線はチューブではなく直結として扱う（部品表・線番表のチューブに数えず、ねじの呼びの一致を確かめる）
+   */
+  male?: boolean;
+  /** 供給圧力[MPa]（kind: 'supply'） */
+  pressure?: NumOrParam;
+  /** 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する */
+  minPressure?: NumOrParam;
+  maxPressure?: NumOrParam;
+}
+
+/**
+ * 機器の中のエアの通り道（電磁弁の切り換え、レギュレータの減圧、継手の分岐など）。
+ * エアの届く範囲と圧力の計算に使う（src/check/pneumatic.ts）。
+ */
+export interface AirLink {
+  from: string;
+  to: string;
+  /** true の場合 from → to の一方向のみ（レギュレータの IN → OUT、逆止弁など） */
+  directed?: boolean;
+  /** 減圧する通り道の二次側の設定圧力[MPa]（レギュレータ）。from → to の向きに、この圧力を上限にして通す */
+  regulate?: NumOrParam;
+  /**
+   * 切り換わる通り道（電磁弁の P→A など）。届く範囲は、すべての位置の通り道を合わせて求める。
+   * - on: ソレノイドに通電した位置（またはパイロットで切り換えた位置）で通る
+   * - off: 通電していない位置（スプリングで戻った位置）で通る
+   * - always: どの位置でも通る（3 位置のプレッシャセンタの中立など、位置を問わず通る経路）
+   */
+  valve?: 'on' | 'off' | 'always';
 }
 
 /**
@@ -171,6 +226,8 @@ interface TerminalBase {
   accepts?: AcceptSpec | AcceptSpec[];
   /** 信号の種類（role: 'signal' の端子） */
   signal?: SignalSpec;
+  /** エアのポートの仕様（role: 'air'） */
+  air?: AirPortSpec;
   /** 安全回路での機能 */
   function?: TerminalFunction | TerminalFunction[];
   /** 2 チャンネル構成の安全回路でのチャンネル番号 */
@@ -319,6 +376,18 @@ export interface BusSpec {
       /** 空きスロットが占有する点数（iQ-R の初期設定は 16）。省略時は空きスロットを詰めて数える */
       emptySlot?: number;
     };
+    /**
+     * 装着したユニットのエアのポートを、親のポートにつなぐ通路（マニホールドの SUP・EXH の通路）。
+     * 「ユニットのポートID → 親のポートID」で書く（例: { P: 'P', EA: 'R', EB: 'R' }）。
+     * ユニットのポートは、画面に出さないエアのポート（pins に role: 'air' で書いたもの）でも、ふつうの端子でもよい。
+     * エアのチェック（src/check/pneumatic.ts）は、この通路を内部のチューブとみなしてエアの届く範囲を求める
+     */
+    airGallery?: Record<string, string>;
+    /**
+     * 装着したユニット（位置の順）から、親のパラメータを求める（マニホールドの連数・A/B ポートの継手の表記など）。
+     * 返した値は親の params に加わり（図面で明示した params が優先）、modelOf・svg で使える。引数の params は既定値を補完済み
+     */
+    fromUnits?: (units: { type: string; def: DeviceDefinition; params: ParamValues }[]) => ParamValues;
   };
   /** 専用の位置に装着するユニットの種類（host.slotRoles と対応。例: 'power'、'cpu'） */
   role?: string;
@@ -358,11 +427,17 @@ export type DeviceCategory =
   | 'sensor'
   | 'safety'
   | 'network'
+  | 'air-supply'
+  | 'valve'
+  | 'actuator'
+  | 'air-fitting'
   | 'link';
 
 /**
  * コネクタのピン（画面上の端子としては表示しない）。
  * id は '<コネクタ端子ID>#<ピン番号>'（例: 'CN1#1'）。links から参照できる。
+ * role: 'air' のピンは、画面に出さないエアのポート（マニホールドに装着する電磁弁の P・EA・EB など）。id は自由で、
+ * airLinks から参照し、親の bus.host.airGallery で親のポートにつなぐ
  */
 export interface PinDef extends TerminalBase {
   id: string;
@@ -374,15 +449,26 @@ export interface DeviceDefinition {
   type: string;
   /** 一般名称（例: '漏電遮断器'） */
   name: string;
-  /** 型式（例: 'NV32-SV 3P'） */
+  /** 型式（例: 'NV32-SV 3P'）。パラメータで型式が変わる機器は、シリーズの代表の型式を書き、modelOf で組み立てる */
   model: string;
+  /**
+   * パラメータから組み立てた型式（例: シリンダのチューブ内径・ストロークから 'CDM2B25-100Z'）。
+   * 画面の機器名の横・部品表・AI 用の説明に使う。省略時は model。引数は既定値を補完済みのパラメータ
+   */
+  modelOf?: (params: ParamValues) => string;
   maker?: string;
   category: DeviceCategory;
   description?: string;
   /** 自動採番する機器名の接頭辞（例: 'ELB' → ELB1, ELB2…） */
   labelPrefix: string;
+  /** 大きさ[px]。size があるときは、パラメータの既定値での大きさ（パレット・置いた直後の位置に使う） */
   width: number;
   height: number;
+  /**
+   * パラメータで大きさが変わる機器（ストロークで長さが変わるシリンダなど）の大きさ。引数は既定値を補完済みのパラメータ。
+   * 利用側は deviceSize() か resolveDevice() の width / height を通して読む。既定値では width / height と同じ値を返すこと
+   */
+  size?: (params: ParamValues) => { width: number; height: number };
   /**
    * SVG の中身（<svg> タグの内側）。viewBox="0 0 width height" で描画される。
    * id 属性（グラデーション等）は複数配置時に衝突するため、必ず '{{uid}}' を含めること
@@ -401,6 +487,8 @@ export interface DeviceDefinition {
   /** コネクタのピン定義（ピンごとの名称・電気的仕様） */
   pins?: ParamDependent<PinDef[]>;
   links?: ParamDependent<InternalLink[]>;
+  /** 機器の中のエアの通り道 */
+  airLinks?: ParamDependent<AirLink[]>;
   params?: ParamDef[];
   /** 保護機器の定格（遮断）電流[A]。protects: true の経路に適用 */
   protectionCurrent?: NumOrParam;
@@ -435,6 +523,95 @@ export interface DeviceDefinition {
   estimated?: string;
   /** 展開図の記号に切り出すときの補足（自動の切り出しで決めきれない機器だけに書く。src/schematic/elements.ts） */
   schematic?: SchematicHint;
+  /**
+   * 空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号）での表し方。エア機器に書く。
+   * オートスイッチの有無などパラメータで変わる場合は関数にする（利用側は resolveDevice() の pneumatic を読む）
+   */
+  pneumatic?: ParamDependent<PneumaticHint>;
+}
+
+/**
+ * 空圧回路図の記号の種類と、記号のポート名。ports には「記号のポート名 → 端子ID」を書く。
+ * - source: 空気圧源（out）
+ * - filter / mist-separator / lubricator / regulator / filter-regulator: エアフィルタ・ミストセパレータ・ルブリケータ・減圧弁（in, out）
+ * - frl: 3 点セット（units の順に左から並べる簡略でない記号。in, out）
+ * - residual-valve: 残圧排気弁（3 ポート手動弁。in, out, exh）
+ * - shutoff: 止め弁・ボール弁（in, out）
+ * - check-valve: 逆止弁（in → out の向きに流れる。in, out）
+ * - speed-controller: 速度制御弁（絞り＋逆止弁。in → out が自由流れ、out → in が絞られる流れ。in, out）
+ * - valve: 方向制御弁（ISO のポート番号 '1'(P) '2'(B / 3 ポートは A) '4'(A) '3'(EB / 3 ポートは R) '5'(EA)、パイロット '12' '14'）
+ * - cylinder: シリンダ（head: ヘッド側＝押す側、rod: ロッド側＝引く側。単動は使う側だけ）
+ * - gripper: エアチャック（open, close） / rotary: ロータリアクチュエータ（a, b）
+ * - silencer: サイレンサ（in） / pressure-switch: 圧力スイッチ（in） / gauge: 圧力計（in）
+ * - tee: 分岐継手（a, b, c） / manifold: マニホールド（sup, exh。装着した電磁弁をまとめる）
+ * - vacuum-ejector: 真空エジェクタ（in, vac, exh） / vacuum-pad: 吸着パッド（vac）
+ */
+export type PneumaticSymbolKind =
+  | 'source'
+  | 'filter'
+  | 'mist-separator'
+  | 'lubricator'
+  | 'regulator'
+  | 'filter-regulator'
+  | 'frl'
+  | 'residual-valve'
+  | 'shutoff'
+  | 'check-valve'
+  | 'speed-controller'
+  | 'valve'
+  | 'cylinder'
+  | 'gripper'
+  | 'rotary'
+  | 'silencer'
+  | 'pressure-switch'
+  | 'gauge'
+  | 'tee'
+  | 'manifold'
+  | 'vacuum-ejector'
+  | 'vacuum-pad';
+
+/** 方向制御弁の操作方式 */
+export type ValveOperator = 'solenoid' | 'pilot' | 'manual' | 'mechanical' | 'spring';
+
+export interface PneumaticHint {
+  symbol: PneumaticSymbolKind;
+  /** 記号のポート名 → 端子ID（上の一覧のポート名） */
+  ports: Record<string, string>;
+  /** 方向制御弁（symbol: 'valve'） */
+  valve?: {
+    /** ポート数（3 ポート弁・5 ポート弁） */
+    ways: 2 | 3 | 5;
+    positions: 2 | 3;
+    /** 左側（14 側、A 側）と右側（12 側、B 側）の操作方式。シングルソレノイドは { a: 'solenoid', b: 'spring' } */
+    operators: { a: ValveOperator; b: ValveOperator };
+    /** 3 位置の中立: クローズドセンタ・エキゾーストセンタ・プレッシャセンタ */
+    center?: 'closed' | 'exhaust' | 'pressure';
+    /** 常時開（3 ポート弁で通電していないとき 1→2 が通じる） */
+    normallyOpen?: boolean;
+    /** ソレノイドの電気端子（記号の横にソレノイドの名前を書くため。a・b 側の + 端子の ID） */
+    solenoids?: { a?: string; b?: string };
+  };
+  /** シリンダ（symbol: 'cylinder'） */
+  cylinder?: {
+    acting: 'double' | 'single-push' | 'single-pull';
+    /** 両ロッド */
+    doubleRod?: boolean;
+    /** クッション付き */
+    cushion?: boolean;
+    /** マグネット内蔵（オートスイッチ付き） */
+    magnet?: boolean;
+    /** オートスイッチの電気端子（記号の横にスイッチの名前を書くため。ヘッド側・ロッド側の出力端子の ID） */
+    switches?: { head?: string; rod?: string };
+  };
+  /**
+   * アクチュエータのオートスイッチ（記号の横にスイッチの位置と PLC の入出力番号を書く）。label は検出する位置（'開'・'閉'・'A 端' など）、
+   * terminal は出力端子の ID。シリンダは cylinder.switches でもよい
+   */
+  switches?: { label: string; terminal: string }[];
+  /** 3 点セット（symbol: 'frl'）の構成（左＝一次側から） */
+  units?: ('filter' | 'mist-separator' | 'regulator' | 'lubricator' | 'filter-regulator')[];
+  /** 圧力計付き（減圧弁・3 点セット） */
+  gauge?: boolean;
 }
 
 /**
@@ -472,6 +649,16 @@ export function resolveNum(
   const raw = params?.[v.param] ?? def.params?.find((p) => p.key === v.param)?.default;
   const n = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** パラメータに応じた型式（modelOf があれば組み立てたもの） */
+export function deviceModel(def: DeviceDefinition, params: ParamValues | undefined): string {
+  return def.modelOf ? def.modelOf(paramsWithDefaults(def, params)) : def.model;
+}
+
+/** パラメータに応じた機器の大きさ（size があれば求めたもの） */
+export function deviceSize(def: DeviceDefinition, params: ParamValues | undefined): { width: number; height: number } {
+  return def.size ? def.size(paramsWithDefaults(def, params)) : { width: def.width, height: def.height };
 }
 
 /** 既定値を補完したパラメータを返す */

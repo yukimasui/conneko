@@ -8,6 +8,8 @@ import {
   paramsWithDefaults,
   resolveNum,
   type AcceptSpec,
+  type AirLink,
+  type AirPortKind,
   type CommonLimit,
   type ConnectorSpec,
   type DeviceDefinition,
@@ -16,12 +18,29 @@ import {
   type ParamDependent,
   type ParamValues,
   type PinDef,
+  type PneumaticHint,
   type PowerSystem,
   type SafetyChannelGroup,
   type TerminalFunction,
   type Conductor,
   type TerminalDef,
 } from './types';
+
+/** 数値に解決したエアのポートの仕様 */
+export interface ResolvedAirPort {
+  kind: AirPortKind;
+  tubeOD?: number;
+  thread?: string;
+  male?: boolean;
+  pressure?: number;
+  minPressure?: number;
+  maxPressure?: number;
+}
+
+/** 数値に解決したエアの通り道 */
+export interface ResolvedAirLink extends Omit<AirLink, 'regulate'> {
+  regulate?: number;
+}
 
 /** 電圧を数値に解決した受電条件 */
 export interface ResolvedAccept {
@@ -38,8 +57,16 @@ export interface ResolvedDevice {
   terminals: TerminalDef[];
   pins: PinDef[];
   links: InternalLink[];
+  airLinks: ResolvedAirLink[];
+  /** 端子ID（またはピンID） → 数値に解決したエアのポートの仕様（role: 'air' の端子・ピン） */
+  air: Map<string, ResolvedAirPort>;
   safetyChannels: SafetyChannelGroup[];
   commonLimits: CommonLimit[];
+  /** 空圧回路図での表し方（定義の pneumatic をパラメータで確定させたもの） */
+  pneumatic?: PneumaticHint;
+  /** パラメータに応じた大きさ[px]（定義の size。なければ width / height） */
+  width: number;
+  height: number;
   /** 端子IDまたはピンID → 受電条件（配列に正規化、電圧は数値） */
   accepts: Map<string, ResolvedAccept[]>;
   terminal(id: string): TerminalDef | undefined;
@@ -94,11 +121,29 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
   const terminals = evaluate(def.terminals, p, []);
   const pins = evaluate(def.pins, p, []);
   const links = evaluate(def.links, p, []);
+  const airLinks = evaluate(def.airLinks, p, []).map((l) => ({ ...l, regulate: resolveNum(l.regulate, def, p) }));
   const safetyChannels = evaluate(def.safetyChannels, p, []);
   const commonLimits = evaluate(def.commonLimits, p, []);
+  const pneumatic = evaluate<PneumaticHint | undefined>(def.pneumatic, p, undefined);
+  const size = def.size ? def.size(p) : { width: def.width, height: def.height };
   const accepts = new Map<string, ResolvedAccept[]>();
   for (const t of [...terminals, ...pins]) {
     if (t.accepts) accepts.set(t.id, resolveAccepts(t.accepts, def, p));
+  }
+  const air = new Map<string, ResolvedAirPort>();
+  // 画面に出さないエアのポート（role: 'air' のピン）も含める
+  for (const t of [...terminals, ...pins]) {
+    if (!t.air) continue;
+    const a = t.air;
+    air.set(t.id, {
+      kind: a.kind,
+      ...(a.thread ? { thread: a.thread } : {}),
+      ...(a.male ? { male: true } : {}),
+      tubeOD: resolveNum(a.tubeOD, def, p),
+      pressure: resolveNum(a.pressure, def, p),
+      minPressure: resolveNum(a.minPressure, def, p),
+      maxPressure: resolveNum(a.maxPressure, def, p),
+    });
   }
   const tById = new Map(terminals.map((t) => [t.id, t]));
   const pById = new Map(pins.map((x) => [x.id, x]));
@@ -108,8 +153,13 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     terminals,
     pins,
     links,
+    airLinks,
+    air,
     safetyChannels,
     commonLimits,
+    ...(pneumatic ? { pneumatic } : {}),
+    width: size.width,
+    height: size.height,
     accepts,
     terminal: (id) => tById.get(id),
     pin: (id) => pById.get(id),

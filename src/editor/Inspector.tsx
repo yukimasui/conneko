@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../data/tubes';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, ParamValues, SafetyRating } from '../devices/types';
+import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
@@ -35,6 +36,8 @@ interface Props {
   /** ユニットを装着できる PLC（親・ユニット）の機器ID */
   plcDevices: Set<string>;
   onOpenPlc: (id: string, tab: 'rack' | 'io') => void;
+  /** マニホールド（親・装着した連）の機器ID。onOpenPlc はこれらの機器ではバルブエディタを開く */
+  valveDevices?: Set<string>;
   /** コネクタにつなげる機器の候補を出す（anchor はボタンの位置） */
   onPickMate: (device: string, terminal: string, anchor: DOMRect) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
@@ -160,7 +163,7 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
             {mount.device} の位置 {mount.slot}
           </span>
           <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
-            PLC エディタで変更…
+            {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
           </button>
         </div>
       ) : hosts.length ? (
@@ -168,7 +171,7 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
           <span className="muted small">未装着</span>
           {hosts.map((h) => (
             <button key={h.id} type="button" onClick={() => props.onOpenPlc(h.id, 'rack')}>
-              {h.id} の PLC エディタ…
+              {h.id} の{props.valveDevices?.has(h.id) ? 'バルブエディタ' : ' PLC エディタ'}…
             </button>
           ))}
         </div>
@@ -270,7 +273,7 @@ export function Inspector(props: Props) {
               <div className="device-info__name">{def.name}</div>
               <div className="muted">
                 {def.maker ? `${def.maker} ` : ''}
-                {def.model}
+                {deviceModel(def, params)}
               </div>
               {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
               {hasEstimates(def) && (
@@ -281,7 +284,14 @@ export function Inspector(props: Props) {
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
             {def.bus && !def.bus.host && <MountInfo node={node} def={def} props={props} />}
-            {def.bus?.host && <BusHostInfo id={node.id} bus={props.bus} />}
+            {def.bus?.host && !props.valveDevices?.has(node.id) && <BusHostInfo id={node.id} bus={props.bus} />}
+            {props.valveDevices?.has(node.id) && !node.data.mount && (
+              <div className="plc-buttons">
+                <button type="button" className="primary" onClick={() => props.onOpenPlc(node.id, 'rack')}>
+                  バルブエディタ（連の構成・つなぎ先）…
+                </button>
+              </div>
+            )}
             {def.bus?.io && resolved && <IoHeadField node={node} def={def} params={resolved.params} props={props} />}
             {(props.plcDevices.has(node.id) || props.ioDevices.has(node.id)) && (
               <div className="plc-buttons">
@@ -379,6 +389,37 @@ export function Inspector(props: Props) {
     );
   }
 
+  if (edge && edge.data && isTubeType(edge.data.wireType)) {
+    const data = edge.data;
+    const issues = props.issues.filter((i) => i.wires.includes(edge.id));
+    return (
+      <aside className="inspector">
+        <div className="panel-title">チューブ {edge.id}</div>
+        <p className="muted">
+          {edge.source}.{edge.sourceHandle} ↔ {edge.target}.{edge.targetHandle}
+        </p>
+        <label className="field">
+          <span>配管番号</span>
+          <input value={data.wireNo ?? ''} placeholder="例: A1" onChange={(e) => props.onWireChange(edge.id, { wireNo: e.target.value || undefined })} />
+        </label>
+        <TubeFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
+        <p className="muted small">つまみをドラッグすると線分を動かせます。</p>
+        {(data.bend || data.route) && (
+          <button type="button" onClick={() => props.onWireChange(edge.id, { bend: undefined, route: undefined })}>
+            曲がりを自動に戻す
+          </button>
+        )}
+        <div className="field">
+          <span>チェック</span>
+          <IssueList issues={issues} />
+        </div>
+        <button type="button" className="danger" onClick={props.onDelete}>
+          チューブを削除
+        </button>
+      </aside>
+    );
+  }
+
   if (edge && edge.data) {
     const data = edge.data;
     const issues = props.issues.filter((i) => i.wires.includes(edge.id));
@@ -451,8 +492,54 @@ export function Inspector(props: Props) {
       <WireFields value={props.wireDefaults} onChange={(patch) => props.onWireDefaultsChange({ ...props.wireDefaults, ...patch })} />
       <div className="help">
         <p>端子（機器上の小さな丸）から別の端子へドラッグすると配線できます。</p>
+        <p>エアのポート（青い二重丸）どうしをつなぐとチューブになります。外径はポートの継手に合わせ、種類と色は前に引いたチューブに合わせます。</p>
         <p>機器や電線をクリックすると、ここで詳細を編集できます。Delete キーで削除します。</p>
       </div>
     </aside>
+  );
+}
+
+/** チューブの種類・外径・色 */
+function TubeFields({ value, onChange }: { value: Pick<WireEdgeData, 'wireType' | 'tubeOD' | 'color'>; onChange: (patch: Partial<WireEdgeData>) => void }) {
+  const od = value.tubeOD ?? 6;
+  return (
+    <>
+      <label className="field">
+        <span>種類</span>
+        <select value={value.wireType} onChange={(e) => onChange({ wireType: e.target.value })}>
+          {TUBE_TYPES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.series}（{t.name}・最高 {t.maxPressure}MPa）
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>外径</span>
+        <select value={od} onChange={(e) => onChange({ tubeOD: Number(e.target.value) })}>
+          {TUBE_ODS.map((v) => (
+            <option key={v} value={v}>
+              φ{v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="field">
+        <span>色</span>
+        <div className="swatches">
+          {TUBE_COLORS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              title={c.name}
+              className={`swatch${value.color === c.id ? ' is-active' : ''}`}
+              style={{ background: c.hex }}
+              onClick={() => onChange({ color: c.id })}
+            />
+          ))}
+        </div>
+      </div>
+      <p className="muted small">型式: {tubeModel(value.wireType, od, value.color)}</p>
+    </>
   );
 }

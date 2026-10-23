@@ -41,7 +41,7 @@ export interface SchematicSheet {
   name: string;
   /**
    * シートの種類。省略時は展開接続図（記号を置く。母線がなければ主回路）。ほかは内容を概念図から自動で作り、items は使わない:
-   * 'terminal' 端子台接続図 / 'io' PLC の I/O 図 / 'rack' PLC のユニット構成図 / 'bom' 部品表 / 'cover' 表紙・図面目次
+   * 'terminal' 端子台接続図 / 'io' PLC の I/O 図 / 'rack' PLC のユニット構成図 / 'bom' 部品表 / 'cover' 表紙・図面目次 / 'pneumatic' 空圧回路図
    */
   kind?: SheetKind;
   /** このシートの用紙（省略時は settings.paper） */
@@ -63,8 +63,8 @@ export interface SchematicSettings {
 }
 
 /** 内容を自動で作るシートの種類 */
-export type SheetKind = 'terminal' | 'io' | 'rack' | 'bom' | 'cover';
-export const SHEET_KINDS: SheetKind[] = ['terminal', 'io', 'rack', 'bom', 'cover'];
+export type SheetKind = 'terminal' | 'io' | 'rack' | 'bom' | 'cover' | 'pneumatic';
+export const SHEET_KINDS: SheetKind[] = ['terminal', 'io', 'rack', 'bom', 'cover', 'pneumatic'];
 
 export interface Schematic {
   settings?: SchematicSettings;

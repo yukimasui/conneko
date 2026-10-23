@@ -52,6 +52,10 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 
 確認は `npm run render-device -- <file> <out.png> --param ratedCurrent=30` のようにパラメータを指定して描画する。
 
+パラメータで機器の大きさが変わる場合（ストロークで長さが変わるシリンダなど）は `size: (p) => ({ width, height })` を書く。
+`width` / `height` には既定値のパラメータでの大きさを書く（パレット・置いた直後に使う。`size` の既定値での結果と同じにする）。
+大きさを読む側は `deviceSize(def, params)`（`src/devices/types.ts`）か `resolveDevice()` の `width` / `height` を使う。
+
 ## 接点と出力（`InternalLink.switch`）
 
 | 種類 | 書き方 | 例 |
@@ -131,6 +135,39 @@ bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } }
 - ベースユニットのようにスロットの位置が決まっている親は `host.slotX`（位置ごとの x 座標）、専用の位置は `host.slotRoles: { 1: 'power', 2: 'cpu' }`
   とユニット側の `bus.role` で表す。空きスロットが番号を占有する場合は `numbering.emptySlot` に点数を書く。
 
+### マニホールド（電磁弁を連ごとに装着するベース）
+
+電磁弁のマニホールドも `bus` で表す（お手本は `src/devices/smc/sy-manifold.ts`）。親がマニホールドベース、装着する機器 1 台が 1 連（ベース配管形の電磁弁・ブランクプレート）。
+
+```ts
+// 親（マニホールドベース）
+bus: {
+  kind: 'smc-ss5y3-41',
+  host: {
+    slots: 20,
+    origin: { x: 30, y: 0 },                      // 連を並べ始める位置
+    airGallery: { P: 'P', EA: 'EA', EB: 'EB' },   // 連のポート → 親のポート（SUP・EXH の通路）
+    fromUnits: (units) => ({ stations: units.length }), // 装着した連から親のパラメータを求める
+  },
+},
+modelOf: (p) => `SS5Y3-41-${String(p.stations).padStart(2, '0')}`,
+// 連（ベース配管形の電磁弁）
+bus: { kind: 'smc-ss5y3-41' },
+pins: [
+  { id: 'P', label: '1(P)', role: 'air', air: { kind: 'in', minPressure: 0.15, maxPressure: 0.7 } },
+  { id: 'EA', label: '5(EA)', role: 'air', air: { kind: 'exhaust' } },
+],
+```
+
+- `host.airGallery`: 装着した連のエアのポートを、親のポートにつなぐ通路（「連のポートID → 親のポートID」）。エアのチェック（`src/check/pneumatic.ts` の `airGalleryPairs`）は、
+  これを機器の中のチューブとみなしてエアの届く範囲・圧力を求める（排気ポートへ向かう向きは使わない）。通路でつながったポートは未接続として指摘しない。
+- 連の P・EA・EB のように画面に出さないエアのポートは、`pins` に `role: 'air'` で書く（ID は自由。`airLinks` から参照できる）。
+  使用圧力範囲もここに書くと、連ごとに確かめる。どの親にもつながっていなければ「マニホールドに装着されていません」と指摘する。
+- `host.fromUnits`: 装着した連（位置の順、params は既定値を補完済み）から親のパラメータを求める。返した値は親の params に加わり、
+  `modelOf`（マニホールドの型式の連数・継手の表記）と `svg`（連の右端のエンドプレート）に使える。親の `svg` は枠の外（連の右）にも描ける。
+- 連の A・B ポートは、その連の機器の端子にする（マニホールドベースの継手も連の絵に含める）。ソレノイドのリード線も連の機器の端子。
+- 分類が `valve` で `bus.host` を持つ機器はマニホールドとみなし、右クリック・インスペクタからバルブエディタ（`src/editor/ValveEditor.tsx`）で連の構成・つなぎ先を編集できる。
+
 ## パラメータで変わる端子・ピン・内部経路
 
 `terminals` / `pins` / `links` はパラメータを受け取って配列を返す関数にもできる（引数は既定値と `ioIn` / `ioOut` を補完済み）。
@@ -163,6 +200,84 @@ pins: (p) => Array.from({ length: 16 }, (_, i) => ({ id: `CN1#${i + 1}`, label: 
   （アクチュエーターどうし・PLC ユニットどうしを出さないため）。相手と同じ分類になるケーブル（センサーとセンサー用コネクタケーブルはどちらも `sensor`）には
   機器定義に `cable: true` を書くと、同じ分類でも候補に出る。パラメータでコネクタの種類が変わる機器（IAI の適応コントローラーなど）は、
   パラメータを 1 つ変えればつながる相手も「変更点つき」で候補に出る。
+
+## エア機器（ポート・エアの通り道）
+
+エア機器（電磁弁・3 点セット・シリンダ・継手など）は、エアのポートを `role: 'air'` の端子として書き、`air` に仕様を書く。
+
+```ts
+{ id: 'P', label: '1(P)', x: 40, y: 75, side: 'bottom', role: 'air',
+  air: { kind: 'in', tubeOD: 6, thread: 'M5', minPressure: 0.15, maxPressure: 0.7 } }
+```
+
+- `kind`（`AirPortKind`）: `supply`（エア源の出口。`pressure` を書く）、`in`（一次側）、`out`（二次側）、`work`（電磁弁の A・B、シリンダのポートなど）、`exhaust`（排気。未接続でも警告しない）、`pilot`、`vacuum`
+- `tubeOD`: 適合チューブの外径[mm]。ねじポートの機器は、付ける継手のチューブ外径を書く（パラメータで選べるなら `{ param: 'portSize' }`）
+- `minPressure` / `maxPressure`: 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する
+- `thread`: ポートのねじの呼び（`M5`・`Rc1/8` など）。ねじのポートに付ける継手は、ねじの大きさで付けられる外径が決まる（M5 なら φ6 まで。`src/data/threads.ts`）。部品表には、チューブをつないだねじのポートごとにワンタッチ管継手（KQ2H）が入る
+- `male: true`: おねじのポート（サイレンサ、エルボ形スピードコントローラのシリンダ側など）。相手のめねじのポートへ直接ねじ込むので、つないだ線は直結として扱う（チューブの本数・継手に数えず、ねじの大きさの一致を確かめる）
+- 使わないことがあるポート（パイロットポート、片側だけ使うポートなど）は `optional: true`
+- 電磁弁のソレノイド、オートスイッチ・圧力スイッチのリード線は、ふつうの電気の端子（`input`・`signal` など）として同じ機器に書く。エアのポートと電気の端子は 1 つの機器に混ぜてよい
+
+機器の中のエアの通り道は `airLinks`（`AirLink`）に書く。圧力の計算（`src/check/pneumatic.ts`）に使う。
+
+```ts
+airLinks: [
+  { from: 'IN', to: 'OUT', directed: true, regulate: { param: 'setPressure' } }, // レギュレータ
+  { from: 'P', to: 'A', directed: true, valve: 'on' },   // 電磁弁: 通電した位置
+  { from: 'P', to: 'B', directed: true, valve: 'off' },  // 通電していない位置
+  { from: 'A', to: 'EA', directed: true, valve: 'off' }, // 排気（排気ポートへの通り道は圧力の計算に使わない）
+]
+```
+
+- `directed`: 一方向だけ通す（レギュレータ・逆止弁など）。向きのある機器を逆につなぐと「逆につないでいないか」と指摘する
+- `regulate`: 二次側の設定圧力[MPa]。この圧力を上限にして通す
+- `valve`: 切り換わる通り道（`on` / `off` / `always`）。届く範囲はすべての位置を合わせて求める
+- シリンダのように中で通り抜けない機器は `airLinks` を書かない
+- 継手・スピードコントローラ・ボール弁など向きのない機器は `directed` を付けずに書く（スピードコントローラが絞るのは流量で、届く圧力は変わらない）。分岐継手（ティ・Y）は 3 つのポートを互いにつなぐ
+- レギュレータの一次側は「設定圧力 + 0.05MPa 以上」が要るため、`terminals` を関数にして `minPressure` を設定圧力から求めてよい（`src/devices/smc/frl.ts`）
+- おねじで相手のポートに直接ねじ込む機器（エルボ形スピードコントローラのシリンダ側、サイレンサ）は `tubeOD` を書かず `thread` だけを書く（図では短いチューブでつなぐが、外径のチェックはしない）
+- 真空のポート（`vacuum`）は圧力の計算の対象外。真空のポートから向きのない通り道でつながる範囲（エジェクタとパッドの間のティなど）は、エアが届かなくても指摘しない
+- SMC の 3 点セット・継手・速度制御・圧力スイッチ・真空機器の作りは `src/devices/smc/`（`frl.ts`・`fitting.ts`・`line-valve.ts`・`speed-controller.ts`・`pressure-switch.ts`・`vacuum.ts`）。描画部品（ワンタッチ管継手・圧力計など）は `src/devices/smc/parts.ts`
+
+型式がパラメータで変わる機器（シリンダのチューブ内径・ストローク、電磁弁の継手など）は `modelOf` で型式を組み立てる（部品表・画面の機器名の横に出る）。
+
+```ts
+modelOf: (p) => `CDM2B${p.bore}-${p.stroke}Z`,
+```
+
+空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号で描く図）に出すため、エア機器には `pneumatic`（`PneumaticHint`）を書く。
+記号の種類（`symbol`）と、記号のポート名から端子IDへの対応（`ports`）を書く。ポート名は types.ts の `PneumaticSymbolKind` の説明のとおり。
+
+```ts
+// 5 ポート 2 位置シングルソレノイド（ISO のポート番号: 1=P, 4=A, 2=B, 5=EA, 3=EB）
+pneumatic: {
+  symbol: 'valve',
+  ports: { '1': 'P', '2': 'B', '4': 'A', '3': 'EB', '5': 'EA' },
+  valve: { ways: 5, positions: 2, operators: { a: 'solenoid', b: 'spring' }, solenoids: { a: '+' } },
+},
+// 複動シリンダ（オートスイッチ付き）
+pneumatic: { symbol: 'cylinder', ports: { head: 'HEAD', rod: 'ROD' }, cylinder: { acting: 'double', magnet: true, switches: { head: 'SW1.BK', rod: 'SW2.BK' } } },
+// フィルタレギュレータ（圧力計付き）
+pneumatic: { symbol: 'filter-regulator', ports: { in: 'IN', out: 'OUT' }, gauge: true },
+// スピードコントローラ（in → out が自由流れ）
+pneumatic: { symbol: 'speed-controller', ports: { in: 'IN', out: 'OUT' } },
+```
+
+- 方向制御弁は、通電していない位置（スプリング側・`operators.b` の側）が記号の右の箱になる。3 位置は `center` で中立の形を選ぶ
+- パラメータで記号が変わる機器（シングル・ダブルを選べる電磁弁、単動・複動やオートスイッチを選べるシリンダなど）は、パラメータごとに定義を分けるか、`pneumatic` をパラメータを受け取る関数にする（読む側は `resolveDevice()` の `pneumatic`）
+
+### シリンダとオートスイッチ（SMC）
+
+SMC のエアシリンダ・エアチャック・ロータリテーブルは `src/devices/smc/` の部品で作る（`cylinder.ts`・`gripper.ts`・`rotary.ts`）。
+シリーズの表（チューブ内径ごとのロッド径・ポートのねじ・最低使用圧力・描画用の寸法、ストローク、支持形式、型式の組み立て）を書いて `buildCylinder()` などに渡す。
+
+オートスイッチ（D-M9N・D-M9P・D-M9B と 2 色表示の W）は、別の機器にせず、アクチュエータのパラメータ `switch`・`switchPos`・`lead` で付ける（`autoswitch.ts`）。
+- SMC はオートスイッチ付きのシリンダを 1 つの型式で注文する（例: `CDM2B25-100Z-M9BW`。末尾が種類・リード線の長さ・個数）。部品表も 1 行になる
+- スイッチの位置（ヘッド側＝後退端、ロッド側＝前進端）が絵と端子の名前で決まり、ストロークで長さが変わってもシリンダの両端に付いたまま動く
+- 端子は `SW1.BN` / `SW1.BK` / `SW1.BU`（SW1 はヘッド側、SW2 はロッド側）。出力は `signal`（`npn` / `pnp` / `2wire`）と内部経路 `switch: 'output'` で表し、PLC の入力との信号のチェックが効く
+- 2 線式の出力が 1 台に複数ある機器は、出力の内部経路（`switch: 'output'`）で結ばれた 2 本ずつを 1 つのスイッチとして 2 線式のチェックを行う（`src/check/signals.ts`）
+
+カテゴリは `air-supply`（エア源・3 点セット）、`valve`（電磁弁・バルブ）、`actuator`（シリンダ・アクチュエータ）、`air-fitting`（継手・速度制御・エア周辺）を使う。
 
 ## 展開図の記号（`schematic`）
 

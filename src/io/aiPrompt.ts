@@ -2,11 +2,12 @@
  * 生成AIに貼り付けるためのプロンプト（指示＋機器の端子情報＋現在の図面データ）を作る。
  */
 import type { CheckIssue } from '../check/checkDiagram';
+import { TUBE_COLORS, TUBE_ODS, TUBE_TYPES } from '../data/tubes';
 import { CIRCUIT_COLOR_RULES, WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { computeBus, effectiveParams } from '../model/bus';
 import { getDeviceDefinition } from '../devices/registry';
-import { functionsOf, ioName, resolveDevice, type ResolvedAccept } from '../devices/resolve';
-import { resolveNum, type DeviceDefinition, type InternalLink, type ParamValues, type PinDef, type TerminalDef } from '../devices/types';
+import { functionsOf, ioName, resolveDevice, type ResolvedAccept, type ResolvedAirPort } from '../devices/resolve';
+import { deviceModel, resolveNum, type AirPortKind, type DeviceDefinition, type InternalLink, type ParamValues, type PinDef, type TerminalDef } from '../devices/types';
 import { sheetOf, sheetsOf, toDiagramFile, type Diagram, type DiagramDevice } from '../model/diagram';
 
 const ROLE_TEXT: Record<TerminalDef['role'], string> = {
@@ -18,6 +19,7 @@ const ROLE_TEXT: Record<TerminalDef['role'], string> = {
   ground: '接地',
   signal: '信号',
   connector: 'コネクタ',
+  air: 'エアのポート',
 };
 
 const SIGNAL_TEXT: Record<string, string> = {
@@ -72,10 +74,29 @@ function traits(t: TerminalDef | PinDef, accepts: ResolvedAccept[]): string[] {
   return parts;
 }
 
-function terminalLine(t: TerminalDef, accepts: ResolvedAccept[]): string {
+const AIR_KIND_TEXT: Record<AirPortKind, string> = {
+  supply: 'エア源の出口',
+  in: '一次側（エアを受ける）',
+  out: '二次側（エアを送る）',
+  work: '作業ポート',
+  exhaust: '排気',
+  pilot: 'パイロット',
+  vacuum: '真空',
+};
+
+function airText(a: ResolvedAirPort): string {
+  const parts = [`エアのポート（${AIR_KIND_TEXT[a.kind]}）`];
+  if (a.tubeOD) parts.push(`適合チューブ φ${a.tubeOD}`);
+  if (a.thread) parts.push(`ねじ ${a.thread}`);
+  if (a.pressure !== undefined) parts.push(`供給圧力 ${a.pressure}MPa`);
+  if (a.minPressure !== undefined || a.maxPressure !== undefined) parts.push(`使用圧力 ${a.minPressure ?? '?'}〜${a.maxPressure ?? '?'}MPa`);
+  return parts.join(' ');
+}
+
+function terminalLine(t: TerminalDef, accepts: ResolvedAccept[], air?: ResolvedAirPort): string {
   const parts = [`${t.id}${t.label && t.label !== t.id ? `（印字 ${t.label}）` : ''}`];
   if (t.note) parts.push(t.note);
-  parts.push(...(t.role === 'connector' ? [ROLE_TEXT.connector] : traits(t, accepts)));
+  parts.push(...(t.role === 'connector' ? [ROLE_TEXT.connector] : air ? [airText(air)] : traits(t, accepts)));
   if (t.connector) {
     const c = t.connector;
     parts.push(`${c.kind}${c.pins ? ` ${c.pins}ピン` : ''}${c.mates?.length ? `（${c.mates.join('/')} にも変換ケーブルでつなげる）` : ''}${c.protocols?.length ? ` 通信=${c.protocols.join('/')}` : ''}`);
@@ -94,7 +115,7 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
   if (def.netLabel) {
     return `- ${d.id}: ${def.name}「${String(params?.[def.netLabel.param] ?? '')}」（type: ${def.type}、シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
   }
-  const lines = [`- ${d.id}: ${def.name} ${def.model}（type: ${def.type}、シート: ${sheetName}）`];
+  const lines = [`- ${d.id}: ${def.name} ${deviceModel(def, params)}（type: ${def.type}、シート: ${sheetName}）`];
   if (d.note) lines.push(`  用途: ${d.note}`);
   if (def.description) lines.push(`  説明: ${def.description}`);
   const prot = resolveNum(def.protectionCurrent, def, params);
@@ -117,7 +138,19 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
     lines.push(`  入出力番号: ${[head('in', Number(r.params.ioIn ?? 0), io.inputs), head('out', Number(r.params.ioOut ?? 0), io.outputs)].filter(Boolean).join('、')}`);
   }
   lines.push('  端子:');
-  lines.push(...r.terminals.map((t) => terminalLine(t, r.accepts.get(t.id) ?? [])));
+  lines.push(...r.terminals.map((t) => terminalLine(t, r.accepts.get(t.id) ?? [], r.air.get(t.id))));
+  if (r.airLinks.length) {
+    const tag = (l: (typeof r.airLinks)[number]) =>
+      [l.valve === 'on' ? '通電した位置' : l.valve === 'off' ? '通電していない位置' : l.valve === 'always' ? 'どの位置でも' : '', l.regulate !== undefined ? `${l.regulate}MPa に減圧` : '']
+        .filter(Boolean)
+        .join('・');
+    lines.push(`  エアの通り道: ${r.airLinks.map((l) => `${l.from}${l.directed ? '→' : '↔'}${l.to}${tag(l) ? `(${tag(l)})` : ''}`).join(', ')}`);
+  }
+  // 画面に出さないエアのポート（マニホールドの中でつながるもの）と、マニホールドの通路
+  const hiddenAir = r.pins.filter((p) => p.role === 'air');
+  if (hiddenAir.length) lines.push(`  マニホールドの中でつながるポート（チューブはつながない）: ${hiddenAir.map((p) => `${p.id}(${p.label ?? p.id})`).join(', ')}`);
+  const gallery = Object.entries(def.bus?.host?.airGallery ?? {});
+  if (gallery.length) lines.push(`  装着した電磁弁のポートを中でつなぐ: ${gallery.map(([u, h]) => `${u}→${h}`).join(', ')}`);
   for (const t of r.terminals.filter((x) => x.connector)) {
     const pins = r.pins.filter((p) => p.id.startsWith(`${t.id}#`));
     if (!pins.length) continue;
@@ -167,8 +200,8 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
     .join('\n');
   const issueText = issues.length ? issues.map((i) => `- [${i.severity}] ${i.message}`).join('\n') : '- なし';
 
-  return `あなたは電気配線図作成アプリ「Conneko」の図面データ(JSON)を編集するアシスタントです。
-下の図面データには、配置済みだが配線されていない機器があります。電気的に正しくなるように配線（wires）を追加し、図面データ全体をJSONで返してください。
+  return `あなたは電気配線図・エア回路図の作成アプリ「Conneko」の図面データ(JSON)を編集するアシスタントです。
+下の図面データには、配置済みだが配線（エア配管）されていない機器があります。電気的・空圧的に正しくなるように配線とチューブ（wires）を追加し、図面データ全体をJSONで返してください。
 
 ## ルール
 - 既存の devices は変更しないでください（id・type・位置・params・mount・sheet・comments・note をそのまま残す）。リンクは追加して構いません。
@@ -179,6 +212,12 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
 - コネクタ（MIL40, RJ45 など）どうしは、同じ種類（または変換ケーブルでつなげると書かれた種類）のコネクタ間をケーブルでつなぎます。ケーブルは wireType を "CABLE" にした電線として書きます（color/sizeSq は任意）。ケーブルでつなぐと両端の同じ番号のピンが導通します。通信ポートは通信方式が同じものどうしをつなぎます。
 - 図面はシート（sheets）に分かれています。電線は同じシートの機器どうしだけをつなぎます。別のシートの機器へは、両方のシートにリンク（type: "generic.link"、params: {"name": "名前"}）を置き、名前を同じにしてそれぞれ電線でつなぎます（同じ名前のリンクどうしが導通します）。新しく置く機器には sheet にシートの id を書いてください。シートをまたいだ電線を書いた場合は、アプリが自動でリンクに置き換えます。
 - LAN ケーブルも同様に、別のシートの機器へはネットワークリンク（type: "generic.network-link"、端子 "LAN"）を置き、同じ名前のネットワークリンクに LAN ケーブル（wireType "CABLE"）でつなぎます。同じ名前のネットワークリンクにつないだ機器どうしは同じネットワークになります（電線用のリンクとは名前が別の空間です）。
+- エア回路: エアのポート（「エアのポート」と書かれた端子）どうしはチューブでつなぎます。チューブは {"from": …, "to": …, "wireType": "チューブ種類ID", "tubeOD": 外径(mm), "color": "チューブ色ID"} の形で wires に書きます（sizeSq は 0）。外径はポートの適合チューブに合わせてください。エアのポートと電気の端子はつなぎません。
+  - エア源（供給圧力）→ フィルタ・レギュレータ（一次側 → 二次側）→ 電磁弁の P → 電磁弁の A・B → シリンダのポート の順に配管します。排気ポートには配管しません（サイレンサで大気へ逃がします）。
+  - 別のシートへのチューブは、エアのリンク（type: "generic.air-link"、端子 "T"）を両方のシートに置き、同じ名前にしてチューブでつなぎます（電線のリンクとは名前が別の空間です）。
+  - 電磁弁のソレノイド（コイル）とオートスイッチ・圧力スイッチの電線は、電気の端子なので電線でつなぎます。
+  - マニホールド（電磁弁をまとめるベース）に装着した電磁弁（mount で指定）の P・EA・EB はマニホールドの中で SUP・EXH につながるので配管しません。エア源からはマニホールドの P へ配管し、各電磁弁の A・B からシリンダへ配管します。
+  - チューブ種類ID: ${TUBE_TYPES.map((t) => `${t.id}(${t.name}、最高 ${t.maxPressure}MPa)`).join(', ')}、外径: ${TUBE_ODS.join('/')}mm、チューブ色ID: ${TUBE_COLORS.map((c) => `${c.id}(${c.name})`).join(', ')}
 - PLC の入出力の電線は、線番を入出力番号（例: R000）にすると分かりやすくなります。コメント（comments）は入出力の用途です。
 - 電源出力から保護機器（ブレーカー・サーキットプロテクタ）を通して負荷へ給電してください。
 - 三相の負荷には R/S/T の3相を、それぞれ別の端子に接続してください。直流は +/- の極性に注意してください。

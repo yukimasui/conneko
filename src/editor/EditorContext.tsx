@@ -12,6 +12,8 @@ export interface WireGeometry {
   /** 端子の中心（キャンバス上の座標） */
   sCenter: { x: number; y: number };
   tCenter: { x: number; y: number };
+  /** おねじのポートを直接ねじ込んだエアの接続（チューブではなく直結として描く） */
+  direct?: boolean;
   /** 両端がコネクタならケーブルとして描く */
   sConnector?: ConnectorSpec;
   tConnector?: ConnectorSpec;

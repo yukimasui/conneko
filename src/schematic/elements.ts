@@ -264,7 +264,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
   }
 
   // 8. 残りの端子を箱にまとめる（ネジ端子で 1 つ、コネクタごとに 1 つ）
-  const rest = r.terminals.filter((t) => t.role !== 'connector' && free(t.id));
+  const rest = r.terminals.filter((t) => t.role !== 'connector' && t.role !== 'air' && free(t.id));
   if (rest.length > 0) add(makeBox(def, 'main', def.model, rest));
   const restPins = new Map<string, PinDef[]>();
   for (const p of r.pins) {

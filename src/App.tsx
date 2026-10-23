@@ -21,6 +21,7 @@ import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagr
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
+import { deviceSize } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
@@ -34,6 +35,7 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { ValveEditor } from './editor/ValveEditor';
 import { SchematicEditor } from './editor/SchematicEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
@@ -42,8 +44,11 @@ import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
 import { alignableLinkCount, alignLinks } from './model/alignLinks';
+import { airCandidates, isAirPort, normalizeTubes, tubeAttrs } from './model/air';
+import { isTubeType } from './data/tubes';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
+import { isManifold, manifoldDevices } from './model/manifold';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
 import { applyMateCandidate, hasMateCandidates, mateCandidates, type MateCandidate } from './model/mates';
 import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
@@ -140,6 +145,7 @@ function Editor() {
   const [schematicSheet, setSchematicSheet] = useState<string>(() => sampleDiagram.schematic?.sheets[0]?.id ?? '');
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
+  const [valveEditor, setValveEditor] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
   const [printDialog, setPrintDialog] = useState(false);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
@@ -280,9 +286,17 @@ function Editor() {
   // ユニットを装着できる PLC（親と装着したユニット）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const plcDevices = useMemo(
-    () => new Set(diagram.devices.filter((d) => getDeviceDefinition(d.type)?.bus?.host).flatMap((d) => mountFamily(diagram, d.id))),
+    () =>
+      new Set(
+        diagram.devices
+          .filter((d) => getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type)))
+          .flatMap((d) => mountFamily(diagram, d.id)),
+      ),
     [topo],
   );
+  // マニホールド（親と装着した連）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const valveDevices = useMemo(() => manifoldDevices(diagram, getDeviceDefinition), [topo]);
 
   const context = useMemo(() => {
     const deviceSeverity = new Map<string, Severity>();
@@ -491,20 +505,36 @@ function Editor() {
     (type: string, at?: { x: number; y: number }) => {
       const def = getDeviceDefinition(type);
       if (!def) return;
+      const center = !at;
       let pos = at;
       if (!pos) {
         const r = canvasRef.current?.getBoundingClientRect();
-        const c = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
-        pos = { x: c.x + (Math.random() - 0.5) * 40, y: c.y + (Math.random() - 0.5) * 40 };
+        pos = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
       }
       setNodes((ns) => {
         const id = nextDeviceId(def.labelPrefix, ns.map((n) => n.id));
+        // クリックで置くときは、同じシートのほかの機器に重ならない位置まで右（端まで行ったら下の段）へずらす
+        if (center && pos) {
+          const boxes = ns
+            .filter((n) => n.data.sheet === sheet)
+            .map((n) => {
+              const d = getDeviceDefinition(n.data.deviceType);
+              const size = d ? deviceSize(d, n.data.params) : { width: 100, height: 100 };
+              return { x: n.position.x, y: n.position.y, w: size.width, h: size.height };
+            });
+          const hits = (x: number, y: number) => boxes.some((b) => x < b.x + b.w + 20 && x + def.width + 20 > b.x && y < b.y + b.h + 40 && y + def.height + 40 > b.y);
+          const start = { x: pos.x - def.width / 2, y: pos.y - def.height / 2 };
+          let p = start;
+          for (let i = 0; i < 60 && hits(p.x, p.y); i++) p = { x: start.x + ((i + 1) % 6) * (def.width + 40), y: start.y + Math.floor((i + 1) / 6) * (def.height + 60) };
+          pos = { x: p.x + def.width / 2, y: p.y + def.height / 2 };
+        }
+        const place = pos!;
         return [
           ...ns.map((n) => ({ ...n, selected: false })),
           {
             id,
             type: 'device',
-            position: { x: Math.round(pos.x - def.width / 2), y: Math.round(pos.y - def.height / 2) },
+            position: { x: Math.round(place.x - def.width / 2), y: Math.round(place.y - def.height / 2) },
             data: { deviceType: type, sheet },
             selected: true,
           },
@@ -536,6 +566,10 @@ function Editor() {
   const onConnect = useCallback(
     (c: Connection) => {
       const isCable = !!terminalOf(c.source, c.sourceHandle)?.connector;
+      // エアのポートどうしはチューブ（種類・色は前回引いたチューブに合わせる）
+      const air = isAirPort(terminalOf(c.source, c.sourceHandle)) && isAirPort(terminalOf(c.target, c.targetHandle));
+      const lastTube = air ? [...edges].reverse().find((e) => e.data && isTubeType(e.data.wireType))?.data : undefined;
+      const tube = air ? tubeAttrs(diagram, { device: c.source, terminal: c.sourceHandle ?? '' }, { device: c.target, terminal: c.targetHandle ?? '' }, getDeviceDefinition, lastTube) : undefined;
       setEdges((es) => [
         ...es,
         {
@@ -545,11 +579,11 @@ function Editor() {
           sourceHandle: c.sourceHandle,
           target: c.target,
           targetHandle: c.targetHandle,
-          data: isCable ? { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE } : { ...wireDefaults },
+          data: tube ? { ...tube } : isCable ? { color: 'black', sizeSq: 0, wireType: CABLE_WIRE_TYPE } : { ...wireDefaults },
         },
       ]);
     },
-    [setEdges, wireDefaults, terminalOf],
+    [setEdges, wireDefaults, terminalOf, edges, diagram],
   );
 
   // 端子から引いた電線を何もないところで離したら、接続先の候補（電源・PLC の空き入出力・リンク）を出す
@@ -560,6 +594,21 @@ function Editor() {
       const target = event.target as Element | null;
       if (!target?.closest('.react-flow__pane')) return;
       const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
+      // エアのポートは、流れの向きが合うエア機器の候補を出す（電気の接続先は出さない）
+      if (isAirPort(terminalOf(from.device, from.terminal))) {
+        const cands = airCandidates(diagram, from, deviceDefinitions, getDeviceDefinition);
+        if (!cands.length) return;
+        const pt = 'changedTouches' in event ? event.changedTouches[0] : event;
+        setPicker({
+          x: pt.clientX,
+          y: pt.clientY,
+          at: screenToFlowPosition({ x: pt.clientX, y: pt.clientY }),
+          from,
+          suggestions: { power: [], io: [], defaultName: '' },
+          mates: cands,
+        });
+        return;
+      }
       // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
       const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];
@@ -607,6 +656,8 @@ function Editor() {
   const isValidConnection = useCallback(
     (c: Connection | WireFlowEdge) => {
       if (c.source === c.target && c.sourceHandle === c.targetHandle) return false;
+      // エアのポートはエアのポートとだけ（チューブで）つなぐ
+      if (isAirPort(terminalOf(c.source, c.sourceHandle)) !== isAirPort(terminalOf(c.target, c.targetHandle))) return false;
       const a = terminalOf(c.source, c.sourceHandle)?.connector;
       const b = terminalOf(c.target, c.targetHandle)?.connector;
       return a || b ? !!a && !!b && connectorsMate(a, b) : true;
@@ -714,6 +765,7 @@ function Editor() {
       const items: MenuItem[] = [
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
+        ...(valveDevices.has(node.id) ? [{ label: 'バルブエディタ（連の構成・つなぎ先）…', onClick: () => setValveEditor(node.id) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
         ...(alignableLinkCount(diagram, node.id, getDeviceDefinition)
           ? [
@@ -734,7 +786,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
+    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -783,7 +835,7 @@ function Editor() {
   const loadDiagram = useCallback(
     (raw: Diagram) => {
       // シートをまたぐ電線（AI が書いたものなど）はリンクに置き換える
-      const d = splitCrossSheetWires(raw, getDeviceDefinition);
+      const d = splitCrossSheetWires(normalizeTubes(raw, getDeviceDefinition), getDeviceDefinition);
       skipPromote.current = true;
       const flow = diagramToFlow(d);
       setNodes(flow.nodes);
@@ -793,6 +845,7 @@ function Editor() {
       setSchematic(d.schematic);
       setSchematicSheet(d.schematic?.sheets[0]?.id ?? '');
       setPlcEditor(null);
+      setValveEditor(null);
       setMode('diagram');
       showSheet(sheetsOf(d)[0].id);
     },
@@ -1063,7 +1116,8 @@ function Editor() {
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
           ioDevices={ioDevices}
           plcDevices={plcDevices}
-          onOpenPlc={(id, tab) => setPlcEditor({ id, tab })}
+          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : setPlcEditor({ id, tab }))}
+          valveDevices={valveDevices}
           onPickMate={pickMate}
           onWireChange={changeWire}
           onDelete={deleteSelected}
@@ -1136,6 +1190,18 @@ function Editor() {
             focusDevice(id);
           }}
           onClose={() => setPlcEditor(null)}
+        />
+      )}
+      {valveEditor && (
+        <ValveEditor
+          diagram={diagram}
+          deviceId={valveEditor}
+          onApply={applyDiagram}
+          onJump={(id) => {
+            setValveEditor(null);
+            focusDevice(id);
+          }}
+          onClose={() => setValveEditor(null)}
         />
       )}
       {modal && (

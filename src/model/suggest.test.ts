@@ -28,14 +28,14 @@ describe('何もないところで離したときの接続先の候補', () => {
   });
 
   it('負荷の 0V 側には空いている NPN 出力を出す。センサーの電源線には出さない', () => {
-    expect(suggestConnections(withNew(), { device: 'PL9', terminal: 'X2' }, lookup).io[0].point).toMatchObject({ dir: 'out', address: 'R201' });
+    expect(suggestConnections(withNew(), { device: 'PL9', terminal: 'X2' }, lookup).io[0].point).toMatchObject({ dir: 'out', address: 'R204' });
     expect(suggestConnections(withNew(), { device: 'PH9', terminal: 'BU' }, lookup).io).toEqual([]);
   });
 
   it('センサーの出力線には空いている PLC 入力を出す（電源の候補は出さない）', () => {
     const s = suggestConnections(withNew(), { device: 'PH9', terminal: 'BK' }, lookup);
     expect(s.power).toEqual([]);
-    expect(s.io[0].point).toMatchObject({ dir: 'in', address: 'R001' });
+    expect(s.io[0].point).toMatchObject({ dir: 'in', address: 'R005' });
   });
 
   it('既存のリンクの名前を選ぶと、離した位置に同じ名前のリンクを置く', () => {
@@ -65,6 +65,6 @@ describe('何もないところで離したときの接続先の候補', () => {
     const d = withNew();
     const s = suggestConnections(d, { device: 'PH9', terminal: 'BK' }, lookup);
     const out = applyIoCandidate(d, { device: 'PH9', terminal: 'BK' }, s.io[0], base, lookup);
-    expect(out.devices.filter((x) => !d.devices.includes(x) && x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['R001', 'R001']);
+    expect(out.devices.filter((x) => !d.devices.includes(x) && x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['R005', 'R005']);
   });
 });

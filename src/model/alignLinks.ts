@@ -8,8 +8,9 @@
  * 右半分の端子のリンクは端子の右に、左半分は左に置き、外側の端子ほど機器の近くに置く（L 字が入れ子になり交差しない）。
  */
 import { resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, TerminalSide } from '../devices/types';
+import { deviceSize, type DeviceDefinition, type TerminalSide } from '../devices/types';
 import { sheetOf, type Diagram, type DiagramDevice } from './diagram';
+import { mountFamily } from './ops';
 import { spread } from './spread';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -22,6 +23,7 @@ const COLUMN_GAP = 90;
 const LANE_GAP = 9;
 /** 上下の端子: 機器の外形から最初のリンクまでの距離と、端子からリンクの電線をつなぐ端までの横の距離 */
 const BELOW_GAP = 40;
+const ABOVE_GAP = 70;
 const SIDE_SHIFT = 26;
 
 /** 機器 deviceId の端子につないだリンク（その端子とだけつながっているもの）と、つないだ端子 */
@@ -46,20 +48,32 @@ function attachedLinks(d: Diagram, deviceId: string, lookup: DefLookup) {
   return out;
 }
 
-/** 機器 deviceId の端子につないだリンクで、並べ直せるものの数 */
+/** 機器 deviceId と、装着した親・子（マニホールドと電磁弁、PLC とユニット）の端子につないだリンク */
+const familyLinks = (d: Diagram, deviceId: string, lookup: DefLookup) => mountFamily(d, deviceId).flatMap((id) => attachedLinks(d, id, lookup));
+
+/** 機器 deviceId（装着した親・子を含む）の端子につないだリンクで、並べ直せるものの数 */
 export function alignableLinkCount(d: Diagram, deviceId: string, lookup: DefLookup): number {
-  return attachedLinks(d, deviceId, lookup).length;
+  return familyLinks(d, deviceId, lookup).length;
 }
 
 /**
- * 機器 deviceId の端子につないだリンクを、端子の横に並べ直す。
+ * 機器 deviceId の端子につないだリンクを、端子の横に並べ直す。装着した親・子（マニホールドと電磁弁など）はまとめて 1 台として並べる。
  * リンクの向きは「自動」（相手の端子の側）に戻し、つないだ電線の手で曲げた経路・向きの指定は自動に戻す
  */
 export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Diagram {
-  const dev = d.devices.find((x) => x.id === deviceId);
-  const def = dev && lookup(dev.type);
-  const items = attachedLinks(d, deviceId, lookup);
-  if (!dev || !def || !items.length) return d;
+  const items = familyLinks(d, deviceId, lookup);
+  if (!items.length) return d;
+  // 親・子をまとめた外形
+  const boxes = mountFamily(d, deviceId).flatMap((id) => {
+    const x = d.devices.find((v) => v.id === id);
+    const def = x && lookup(x.type);
+    if (!x || !def) return [];
+    const s = deviceSize(def, x.params);
+    return [{ x: x.x, y: x.y, r: x.x + s.width, b: x.y + s.height }];
+  });
+  if (!boxes.length) return d;
+  const dev = { x: Math.min(...boxes.map((v) => v.x)), y: Math.min(...boxes.map((v) => v.y)) };
+  const size = { width: Math.max(...boxes.map((v) => v.r)) - dev.x, height: Math.max(...boxes.map((v) => v.b)) - dev.y };
   const moved = new Map<string, { x: number; y: number }>();
   for (const side of ['left', 'right'] as const) {
     const group = items.filter((it) => it.side === side).sort((a, b) => a.y - b.y || a.link.y - b.link.y);
@@ -68,7 +82,7 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
     const gap = COLUMN_GAP + group.length * LANE_GAP;
     group.forEach((it, i) => {
       const ldef = lookup(it.link.type)!;
-      const x = side === 'left' ? dev.x - gap - ldef.width : dev.x + def.width + gap;
+      const x = side === 'left' ? dev.x - gap - ldef.width : dev.x + size.width + gap;
       moved.set(it.link.id, { x: Math.round(x), y: Math.round(centers[i] - ldef.height / 2) });
     });
   }
@@ -81,7 +95,8 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
       h.forEach((it, i) => {
         const ldef = lookup(it.link.type)!;
         const x = k === 0 ? it.x - SIDE_SHIFT - ldef.width : it.x + SIDE_SHIFT;
-        const y = side === 'bottom' ? dev.y + def.height + BELOW_GAP + i * LINK_PITCH : dev.y - BELOW_GAP - ldef.height - i * LINK_PITCH;
+        // 上は機器名のラベル（装着した親はユニットのラベルの上にもう 1 段）を避けて離す
+        const y = side === 'bottom' ? dev.y + size.height + BELOW_GAP + i * LINK_PITCH : dev.y - ABOVE_GAP - ldef.height - i * LINK_PITCH;
         moved.set(it.link.id, { x: Math.round(x), y: Math.round(y) });
       }),
     );
