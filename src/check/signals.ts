@@ -114,25 +114,31 @@ export function checkSignals(m: Model, push: Push) {
   }
 
   // 2線式センサー: 一方が入力点、もう一方がコモンの反対の極へ
+  // 1 台に 2 線式の出力が複数ある機器（オートスイッチ 2 個付きのシリンダなど）は、出力の内部経路（switch: 'output'）で結ばれた 2 本ずつを組にする
   const twoWire = new Map<string, TerminalInfo[]>();
   for (const info of m.terminals.values()) {
     if (info.terminal.signal?.dir === 'out' && info.terminal.signal.kind === '2wire') {
-      twoWire.set(info.device.id, [...(twoWire.get(info.device.id) ?? []), info]);
+      const pair = m.devices
+        .get(info.device.id)
+        ?.r.links.find((l) => l.switch === 'output' && (l.from === info.terminal.id || l.to === info.terminal.id));
+      const group = pair ? `${info.device.id}:${[pair.from, pair.to].sort().join('|')}` : info.device.id;
+      twoWire.set(group, [...(twoWire.get(group) ?? []), info]);
     }
   }
-  for (const [id, ends] of twoWire) {
+  for (const [group, ends] of twoWire) {
     if (ends.length !== 2) continue;
+    const id = ends[0].device.id;
     const onInput = ends.map((e) => dcInputNets.get(m.fixed.find(e.key)));
     const wires = ends.flatMap((e) => wiresOfNet(m, e.key));
     if (onInput[0] && onInput[1]) {
-      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの両方の線が入力点につながっています`, devices: [id], wires, key: `two-wire:${id}` });
+      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの両方の線が入力点につながっています`, devices: [id], wires, key: `two-wire:${group}` });
       continue;
     }
     const i = onInput[0] ? 0 : onInput[1] ? 1 : -1;
     if (i < 0) {
       const ps = ends.map((e) => m.potentialOf(e.key));
       if (ps.every((p) => p.kind === 'ok') && ps[0].kind === 'ok' && ps[1].kind === 'ok' && ps[0].supply.conductor !== ps[1].supply.conductor) {
-        push({ severity: 'error', rule: 'two-wire', message: `${id}: 2線式センサーを入力回路を通さずに電源へ直結しています（負荷がないため壊れます）`, devices: [id], wires, key: `two-wire:${id}` });
+        push({ severity: 'error', rule: 'two-wire', message: `${id}: 2線式センサーを入力回路を通さずに電源へ直結しています（負荷がないため壊れます）`, devices: [id], wires, key: `two-wire:${group}` });
       }
       continue;
     }
@@ -143,9 +149,9 @@ export function checkSignals(m: Model, push: Push) {
     if (!c) continue;
     const want = c === '+' ? '-' : '+';
     if (p.kind !== 'ok') {
-      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} を電源の ${want === '+' ? '+24V' : '0V'} につないでください（入力 ${terminalName(m, inp.key)} と直列にします）`, devices: [id], wires, key: `two-wire:${id}` });
+      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} を電源の ${want === '+' ? '+24V' : '0V'} につないでください（入力 ${terminalName(m, inp.key)} と直列にします）`, devices: [id], wires, key: `two-wire:${group}` });
     } else if (p.supply.conductor !== want) {
-      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} が入力のコモンと同じ極につながっているため、入力が ON になりません`, devices: [id], wires, key: `two-wire:${id}` });
+      push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} が入力のコモンと同じ極につながっているため、入力が ON になりません`, devices: [id], wires, key: `two-wire:${group}` });
     }
   }
 }

@@ -18,6 +18,7 @@ import {
   type ParamDependent,
   type ParamValues,
   type PinDef,
+  type PneumaticHint,
   type PowerSystem,
   type SafetyChannelGroup,
   type TerminalFunction,
@@ -60,6 +61,11 @@ export interface ResolvedDevice {
   air: Map<string, ResolvedAirPort>;
   safetyChannels: SafetyChannelGroup[];
   commonLimits: CommonLimit[];
+  /** 空圧回路図での表し方（定義の pneumatic をパラメータで確定させたもの） */
+  pneumatic?: PneumaticHint;
+  /** パラメータに応じた大きさ[px]（定義の size。なければ width / height） */
+  width: number;
+  height: number;
   /** 端子IDまたはピンID → 受電条件（配列に正規化、電圧は数値） */
   accepts: Map<string, ResolvedAccept[]>;
   terminal(id: string): TerminalDef | undefined;
@@ -117,6 +123,8 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
   const airLinks = evaluate(def.airLinks, p, []).map((l) => ({ ...l, regulate: resolveNum(l.regulate, def, p) }));
   const safetyChannels = evaluate(def.safetyChannels, p, []);
   const commonLimits = evaluate(def.commonLimits, p, []);
+  const pneumatic = evaluate<PneumaticHint | undefined>(def.pneumatic, p, undefined);
+  const size = def.size ? def.size(p) : { width: def.width, height: def.height };
   const accepts = new Map<string, ResolvedAccept[]>();
   for (const t of [...terminals, ...pins]) {
     if (t.accepts) accepts.set(t.id, resolveAccepts(t.accepts, def, p));
@@ -146,6 +154,9 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     air,
     safetyChannels,
     commonLimits,
+    ...(pneumatic ? { pneumatic } : {}),
+    width: size.width,
+    height: size.height,
     accepts,
     terminal: (id) => tById.get(id),
     pin: (id) => pById.get(id),

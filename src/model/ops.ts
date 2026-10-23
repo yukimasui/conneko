@@ -5,7 +5,7 @@
  */
 import { buildModel, key } from '../check/model';
 import { resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, TerminalSide } from '../devices/types';
+import { deviceSize, type DeviceDefinition, type TerminalSide } from '../devices/types';
 import { CABLE_WIRE_TYPE, isTube, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -103,7 +103,8 @@ function linkAt(
   // ほかの機器と重ならない位置まで、縦にずらす（上向きの端子なら上へ）
   const rects = all.map((o) => {
     const def = lookup(o.type);
-    return { x: o.x, y: o.y, w: def?.width ?? 0, h: def?.height ?? 0 };
+    const size = def ? deviceSize(def, o.params) : { width: 0, height: 0 };
+    return { x: o.x, y: o.y, w: size.width, h: size.height };
   });
   const hits = (yy: number) => rects.some((r) => x < r.x + r.w + 8 && x + W + 8 > r.x && yy < r.y + r.h + 6 && yy + H + 6 > r.y);
   const step = (p.side === 'top' ? -1 : 1) * (H + 18);

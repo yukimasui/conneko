@@ -21,10 +21,14 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   const problems: string[] = [];
   const r = resolveDevice(def, params);
   const ids = new Set<string>();
+  if (def.size) {
+    const d = def.size(paramsWithDefaults(def, {}));
+    if (d.width !== def.width || d.height !== def.height) problems.push(`size の既定値での大きさ（${d.width}×${d.height}）が width / height と違う`);
+  }
   for (const t of r.terminals) {
     if (ids.has(t.id)) problems.push(`端子IDが重複: ${t.id}`);
     ids.add(t.id);
-    if (t.x < 0 || t.x > def.width || t.y < 0 || t.y > def.height) problems.push(`端子が範囲外: ${t.id}`);
+    if (t.x < 0 || t.x > r.width || t.y < 0 || t.y > r.height) problems.push(`端子が範囲外: ${t.id}`);
     if (t.role === 'connector' && !t.connector) problems.push(`connector 端子に connector 指定がない: ${t.id}`);
   }
   const pinIds = new Set<string>();

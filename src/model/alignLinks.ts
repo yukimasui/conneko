@@ -8,7 +8,7 @@
  * 右半分の端子のリンクは端子の右に、左半分は左に置き、外側の端子ほど機器の近くに置く（L 字が入れ子になり交差しない）。
  */
 import { resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, TerminalSide } from '../devices/types';
+import { deviceSize, type DeviceDefinition, type TerminalSide } from '../devices/types';
 import { sheetOf, type Diagram, type DiagramDevice } from './diagram';
 import { spread } from './spread';
 
@@ -60,6 +60,7 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
   const def = dev && lookup(dev.type);
   const items = attachedLinks(d, deviceId, lookup);
   if (!dev || !def || !items.length) return d;
+  const size = deviceSize(def, dev.params);
   const moved = new Map<string, { x: number; y: number }>();
   for (const side of ['left', 'right'] as const) {
     const group = items.filter((it) => it.side === side).sort((a, b) => a.y - b.y || a.link.y - b.link.y);
@@ -68,7 +69,7 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
     const gap = COLUMN_GAP + group.length * LANE_GAP;
     group.forEach((it, i) => {
       const ldef = lookup(it.link.type)!;
-      const x = side === 'left' ? dev.x - gap - ldef.width : dev.x + def.width + gap;
+      const x = side === 'left' ? dev.x - gap - ldef.width : dev.x + size.width + gap;
       moved.set(it.link.id, { x: Math.round(x), y: Math.round(centers[i] - ldef.height / 2) });
     });
   }
@@ -81,7 +82,7 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
       h.forEach((it, i) => {
         const ldef = lookup(it.link.type)!;
         const x = k === 0 ? it.x - SIDE_SHIFT - ldef.width : it.x + SIDE_SHIFT;
-        const y = side === 'bottom' ? dev.y + def.height + BELOW_GAP + i * LINK_PITCH : dev.y - BELOW_GAP - ldef.height - i * LINK_PITCH;
+        const y = side === 'bottom' ? dev.y + size.height + BELOW_GAP + i * LINK_PITCH : dev.y - BELOW_GAP - ldef.height - i * LINK_PITCH;
         moved.set(it.link.id, { x: Math.round(x), y: Math.round(y) });
       }),
     );

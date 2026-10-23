@@ -5,7 +5,7 @@
  */
 import { getWireColor } from '../data/wires';
 import { instantiateSvg } from '../devices/registry';
-import { deviceModel, type DeviceDefinition, type ParamValues } from '../devices/types';
+import { deviceModel, deviceSize, type DeviceDefinition, type ParamValues } from '../devices/types';
 import { cableStyle } from '../devices/resolve';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
 import { DIR, toRoundedPath, type Point } from '../editor/routing';
@@ -67,7 +67,8 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
     const def = lookup(x.type);
     if (!def) continue;
     grow(x.x, x.y - (def.netLabel ? 4 : LABEL_SPACE + (notes && x.note ? 18 : 0)));
-    grow(x.x + Math.max(def.width, 120), x.y + def.height + (def.netLabel ? 16 : 4));
+    const size = deviceSize(def, paramsOf(x.id));
+    grow(x.x + Math.max(size.width, 120), x.y + size.height + (def.netLabel ? 16 : 4));
   }
   const paths = wires.flatMap((w) => {
     const geo = geometry.get(w.id);
@@ -105,13 +106,14 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
     const px = x.x + ox;
     const py = x.y + oy;
     const inner = instantiateSvg(def, `p-${sheetId}-${x.id}`, paramsOf(x.id));
-    out.push(`<svg x="${px}" y="${py}" width="${def.width}" height="${def.height}" viewBox="0 0 ${def.width} ${def.height}" overflow="visible">${inner}</svg>`);
+    const { width, height } = deviceSize(def, paramsOf(x.id));
+    out.push(`<svg x="${px}" y="${py}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="visible">${inner}</svg>`);
     if (def.netLabel) {
       // リンク: 相手のあるシート
       const k = linkKey(x.type, String(paramsOf(x.id)?.name ?? '').trim());
       const others = [...new Set((peers.get(k) ?? []).filter((s) => s !== sheetId))].map((s) => sheets.find((v) => v.id === s)?.name ?? s);
       const text = others.length ? `→ ${others.join('、')}` : (peers.get(k)?.length ?? 0) > 1 ? '→ このシート' : '相手なし';
-      out.push(`<text x="${px + 6}" y="${py + def.height + 11}" font-family="sans-serif" font-size="9" fill="#1d4ed8">${esc(text)}</text>`);
+      out.push(`<text x="${px + 6}" y="${py + height + 11}" font-family="sans-serif" font-size="9" fill="#1d4ed8">${esc(text)}</text>`);
       continue;
     }
     out.push(

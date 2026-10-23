@@ -67,8 +67,9 @@ export function wireLayout(
   const raw = (r: TerminalRef) => {
     const n = byId.get(r.device);
     const def = n && lookup(n.type);
-    const t = n && def ? resolveDevice(def, paramsOf(n.id)).terminal(r.terminal) : undefined;
-    return n && def && t ? { n, def, t, x: n.x + t.x, y: n.y + t.y } : null;
+    const rd = n && def ? resolveDevice(def, paramsOf(n.id)) : undefined;
+    const t = rd?.terminal(r.terminal);
+    return n && def && rd && t ? { n, def, rd, t, x: n.x + t.x, y: n.y + t.y } : null;
   };
   for (const w of wires) {
     const a = raw(w.from);
@@ -84,8 +85,8 @@ export function wireLayout(
       return me.t.side;
     };
     const end = (me: NonNullable<typeof a>, side: TerminalSide) => {
-      const { t, def } = me;
-      const toEdge = { top: t.y, bottom: def.height - t.y, left: t.x, right: def.width - t.x }[side];
+      const { t, rd } = me;
+      const toEdge = { top: t.y, bottom: rd.height - t.y, left: t.x, right: rd.width - t.x }[side];
       // ケーブルはコネクタ付近で芯線を広げて描くため、まっすぐ出る区間を長めにとる
       // 正面向きのコネクタは、プラグの端からケーブルが出る
       const exit = t.connector?.facing === 'front' ? (t.connector.length ?? 12) / 2 - HANDLE_DEPTH / 2 : 12;

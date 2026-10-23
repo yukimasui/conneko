@@ -80,7 +80,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   return (
     <div
       className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}${def.netLabel ? ' is-link' : ''}`}
-      style={{ width: def.width, height: def.height }}
+      style={{ width: resolved?.width ?? def.width, height: resolved?.height ?? def.height }}
     >
       <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
         {/* 機器のコメントは、下の端子と重ならないよう機器名の上に出す */}
@@ -94,9 +94,9 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
       </div>
       <svg
         className="device-node__svg"
-        width={def.width}
-        height={def.height}
-        viewBox={`0 0 ${def.width} ${def.height}`}
+        width={resolved?.width ?? def.width}
+        height={resolved?.height ?? def.height}
+        viewBox={`0 0 ${resolved?.width ?? def.width} ${resolved?.height ?? def.height}`}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       {def.netLabel && (
