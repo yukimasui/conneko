@@ -1,12 +1,20 @@
+import { useEffect } from 'react';
 import licenses from 'virtual:third-party-licenses';
+import logoUrl from '../assets/conneko-logo.webp?inline';
 
 /** 「Conneko について」: バージョン、ライセンスの要約、免責、商標、同梱の外部ライブラリのライセンス */
 export function AboutDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal about" onClick={(e) => e.stopPropagation()}>
+        <img className="about__logo" src={logoUrl} alt="Conneko のロゴ" />
         <h2>Conneko v{__APP_VERSION__}</h2>
-        <p className="muted">生産設備の電気配線を、専門知識や専用 CAD なしで手軽に描ける作図ツール。</p>
+        <p className="muted">生産設備の電気配線とエア回路を、専門知識や専用 CAD なしで手軽に描ける作図ツール。</p>
         <section>
           <h3>ライセンス（Conneko License 1.0）</h3>
           <ul>

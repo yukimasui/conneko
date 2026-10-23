@@ -1,7 +1,8 @@
 /**
  * SMC 5 ポート電磁弁 SY シリーズに共通の仕様（切換えの種類ごとのエアの通り道・使用圧力範囲・空圧回路図の記号）と、
  * パイロット弁・L 形プラグ・ワンタッチ管継手の絵。
- * ボディ配管形（sy-body.ts）とベース配管形（マニホールドに装着する sy-base.ts）から使う。
+ * ボディ配管形（sy-body.ts）、ベース配管形（個別配線のマニホールドに装着する sy-manifold.ts）、
+ * プラグイン形（通信タイプのマニホールドに装着する sy-serial.ts）から使う。
  *
  * 出典: SMC SY3000/5000 シリーズ カタログ
  *   型式の 4 桁目（SY3□20 の □）: 1 = 2 位置シングル、2 = 2 位置ダブル、3 = 3 位置クローズドセンタ、4 = 3 位置エキゾーストセンタ、5 = 3 位置プレッシャセンタ
@@ -102,8 +103,11 @@ export function syAirLinks(): AirLink[] {
   ];
 }
 
-/** 空圧回路図の記号。sol はソレノイドの + 端子の ID（シングルは a 側だけ） */
-export function syPneumatic(fn: SyFunction, sol: { a: string; b?: string }): PneumaticHint {
+/**
+ * 空圧回路図の記号。sol はソレノイドの + 端子の ID（シングルは a 側だけ）。
+ * プラグイン形の弁（ソレノイドの電気端子を画面に出さないもの）は sol を省略する
+ */
+export function syPneumatic(fn: SyFunction, sol?: { a: string; b?: string }): PneumaticHint {
   const f = SY_FUNCTIONS[fn];
   return {
     symbol: 'valve',
@@ -113,7 +117,7 @@ export function syPneumatic(fn: SyFunction, sol: { a: string; b?: string }): Pne
       positions: f.center ? 3 : 2,
       operators: { a: 'solenoid', b: f.solenoids === 2 ? 'solenoid' : 'spring' },
       ...(f.center ? { center: f.center } : {}),
-      solenoids: f.solenoids === 2 ? { a: sol.a, b: sol.b } : { a: sol.a },
+      ...(sol ? { solenoids: f.solenoids === 2 ? { a: sol.a, b: sol.b } : { a: sol.a } } : {}),
     },
   };
 }

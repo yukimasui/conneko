@@ -5,17 +5,25 @@
  * - 上の段にアクチュエータ（シリンダ・エアチャックなど）、その下に速度制御弁などの途中の機器、その下に方向制御弁を、弁ごとに縦の列にする
  * - 弁の P（1）は下の主管へつなぐ。主管の左にエア源と 3 点セットを流れの順に並べる
  * - 排気ポート（3・5）は、サイレンサをつないだものはサイレンサの記号、何もつないでいなければ大気への排気（三角）を描く
- * - 記号の横に機器名・型式、ソレノイド・オートスイッチの横に PLC の入出力番号（つないでいれば）を書く
+ * - 記号の横に機器名・型式、ソレノイド・オートスイッチの横に PLC の入出力番号（つないでいれば）を書く。
+ *   通信タイプのマニホールドに装着した弁のソレノイドは、SI ユニットの出力（例: MF2 出力3）を書く
  * 線は、弁の作業ポートからアクチュエータのポートまでを、途中の機器を通る道筋で描く（チューブの引き回しそのものではない）。
+ *
+ * 編集画面では記号のまとまり（機器ごと。マニホールドは装着した弁ごと）をドラッグで動かせる。動かした位置はシートの items
+ * （要素 ID は pneumaticElement、x, y は外形の左上）に入り、配管は動かした位置に合わせて直角に引き直す。
  */
 import type { Model } from '../../check/model';
 import { key } from '../../check/model';
 import { airPressures } from '../../check/pneumatic';
 import { deviceModel, type DeviceDefinition, type PneumaticHint, type ValveOperator } from '../../devices/types';
+import { serialOutputName } from '../../model/bus';
 import type { Diagram } from '../../model/diagram';
 import { ioRows } from '../../export/reports';
 import type { SchematicSheetOut } from '../format';
+import { pneumaticElement, type SchematicItem } from '../model';
+import type { Bounds } from '../place';
 import { textWidth } from '../symbols';
+import { conflicts, crosses, hits, r3, simplify, STUBS, type PinAt, type Segment } from '../wiring';
 import { pageMaker, upOf } from './table';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -397,14 +405,89 @@ interface Entry {
   model: string;
 }
 
+/** 編集画面でドラッグして動かせる記号のまとまり（機器ごと。マニホールドは装着した弁ごと） */
+export interface PneumaticGroup {
+  /** シートの items の要素 ID（pneumaticElement） */
+  element: string;
+  device: string;
+  /** 表示用の名前（機器名と型式） */
+  label: string;
+  /** まとまりの記号の外形の左上（items の x, y はこの点）。y は下向き */
+  origin: XY;
+  /** 文字を含めたまとまりの範囲（つかむところ）。y は下向き */
+  bounds: Box;
+}
+
+type Box = Drawn['box'];
+
+/** 記号のまとまりの下書き（自動の位置で別のページに描いたもの） */
+interface Sketch<T extends Drawn> {
+  page: SchematicSheetOut;
+  drawn: T;
+}
+
+const shiftXY = (p: XY, d: XY): XY => [p[0] + d[0], p[1] + d[1]];
+const shiftBox = (b: Box, d: XY): Box => ({ ...b, x: b.x + d[0], y: b.y + d[1] });
+function shiftDrawn<T extends Drawn>(t: T, d: XY): T {
+  if (!d[0] && !d[1]) return t;
+  return { ...t, pins: Object.fromEntries(Object.entries(t.pins).map(([k, p]) => [k, shiftXY(p, d)])), box: shiftBox(t.box, d) };
+}
+function unionBox(a: Box, b: Box): Box {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+}
+
+/** 下書きの図形と文字の範囲（y は下向き） */
+function sketchBounds(s: Sketch<Drawn>): Box {
+  const H = s.page.paper.height;
+  let b: Box = s.drawn.box;
+  const add = (x1: number, y1: number, x2: number, y2: number) => (b = unionBox(b, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }));
+  for (const pl of s.page.polylines) for (const [x, y] of pl.points) add(x, H - y, x, H - y);
+  for (const t of s.page.texts) {
+    const w = textWidth(t.text, t.height);
+    const x1 = t.align === 'right' ? t.at[0] - w : t.align === 'center' ? t.at[0] - w / 2 : t.at[0];
+    add(x1, H - t.at[1] - t.height / 2, x1 + w, H - t.at[1] + t.height / 2);
+  }
+  return b;
+}
+
+/** 下書きを d（y は下向き）だけずらして本のページへ移す */
+function commitSketch(page: SchematicSheetOut, s: Sketch<Drawn>, d: XY) {
+  // ページの座標は y が上向き
+  const mv = (p: [number, number]): [number, number] => [p[0] + d[0], p[1] - d[1]];
+  for (const pl of s.page.polylines) page.polylines.push({ ...pl, points: pl.points.map(mv) });
+  for (const dot of s.page.dots) page.dots.push({ ...dot, at: mv(dot.at) });
+  for (const t of s.page.texts) page.texts.push({ ...t, at: mv(t.at) });
+}
+
 export function pneumaticPages(
-  sheet: { id: string; name: string },
+  sheet: { id: string; name: string; items?: SchematicItem[] },
   diagram: Diagram,
   model: Model,
   lookup: DefLookup,
   paper: { width: number; height: number },
 ): SchematicSheetOut[] {
+  return pneumaticLayout(sheet, diagram, model, lookup, paper).pages;
+}
+
+/**
+ * 空圧回路図のページと、動かせる記号のまとまり。
+ * 記号のまとまりは自動の位置（下の「並べ方」）に置き、シートの items にあるものはその位置へ動かす。配管は記号の位置が決まってから引く。
+ */
+export function pneumaticLayout(
+  sheet: { id: string; name: string; items?: SchematicItem[] },
+  diagram: Diagram,
+  model: Model,
+  lookup: DefLookup,
+  paper: { width: number; height: number },
+): { pages: SchematicSheetOut[]; groups: PneumaticGroup[] } {
   const make = pageMaker(sheet, paper);
+  const blank = (): SchematicSheetOut => ({ id: '', name: '', paper, inserts: [], polylines: [], dots: [], texts: [] });
+  const sketch = <T extends Drawn>(draw: (pen: Pen) => T): Sketch<T> => {
+    const p = blank();
+    return { page: p, drawn: draw(new Pen(p)) };
+  };
   const entries = new Map<string, Entry>();
   for (const { device, def, r } of model.devices.values()) {
     const hint = r.pneumatic;
@@ -422,7 +505,7 @@ export function pneumaticPages(
   const pen = new Pen(page);
   if (!entries.size) {
     pen.text(25, 40, '空圧回路図にする機器がありません（概念図にエア機器を置き、チューブでつなぐと描けます）', { height: 3.5 });
-    return make.pages;
+    return { pages: make.pages, groups: [] };
   }
 
   // ポートのつながり（チューブ・エアのリンク）
@@ -512,88 +595,140 @@ export function pneumaticPages(
       .filter(([, a]) => a.kind === 'exhaust')
       .flatMap(([t]) => neighbors(key(host, t)))
       .filter((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
-  const valveBoxes: { id: string; host?: string; box: Drawn['box'] }[] = [];
 
-  // 列を描く
-  const mainTaps: number[] = [];
+  // 記号のまとまりは、いったん自動の位置で下書きに描き、シートの items で動かした量だけずらして本のページへ移す
+  const moved = new Map((sheet.items ?? []).map((it) => [it.element, it]));
+  const groups: PneumaticGroup[] = [];
+  const offsetOf = (device: string, box: Box): XY => {
+    const it = moved.get(pneumaticElement(device));
+    return it ? [it.x - box.x, it.y - box.y] : [0, 0];
+  };
+  /** 下書きを本のページへ移し、動かせるまとまりとして記録する。返り値は移したあとの位置 */
+  const place = <T extends Drawn>(device: string, s: Sketch<T>, d: XY = offsetOf(device, s.drawn.box), more: Sketch<Drawn>[] = []): T => {
+    commitSketch(page, s, d);
+    const e = entries.get(device);
+    const at = shiftDrawn(s.drawn, d);
+    const bounds = more.reduce((b, m) => unionBox(b, sketchBounds(m)), sketchBounds(s));
+    groups.push({ element: pneumaticElement(device), device, label: e ? `${device}（${e.model}）` : device, origin: [at.box.x, at.box.y], bounds: shiftBox(bounds, d) });
+    return at;
+  };
+  /** 配管が避ける記号の外形（本のページの位置） */
+  const obstacles: Box[] = [];
+
+  // 列ごとのまとまり: アクチュエータ・速度制御弁・弁（マニホールドに装着した弁は、あとでマニホールドごと移す）
+  const valveSketches = new Map<string, { sketch: Sketch<Drawn>; host?: string }>();
+  const valveAt = new Map<string, Drawn>();
+  /** 弁の作業ポートからアクチュエータまでの配管（弁の位置が決まってから引く） */
+  const workLines: { valve: string; valvePort: string; net: string; ends: PinAt[]; labels: { text: string; at: XY }[]; unconnected: boolean }[] = [];
   columns.forEach((col, i) => {
     const cx = left + colW * i + colW / 2;
     let act: Drawn | undefined;
+    let actAuto: Drawn | undefined;
     if (col.actuator) {
       const a = col.actuator;
-      // 弁の 4 につながるポートを左に置く（線が交差しないように）
-      const toFour = col.lines.find((l) => l.valvePort === '4')?.end;
-      const ports = Object.keys(a.hint.ports).sort((p, q) => Number(a.hint.ports[q] === (toFour && portOf(toFour))) - Number(a.hint.ports[p] === (toFour && portOf(toFour))));
-      act =
-        a.hint.symbol === 'cylinder'
-          ? drawCylinder(pen, a.hint, cx - 4, yAct)
-          : a.hint.symbol === 'gripper' || a.hint.symbol === 'rotary'
-            ? drawGripperOrRotary(pen, a.hint.symbol, ports, cx, yAct)
-            : drawBoxSymbol(pen, 'パッド', Object.keys(a.hint.ports), cx, yAct);
-      // 機器名・型式は記号の右
-      pen.text(act.box.x + act.box.w + 3, yAct + 2.5, a.id, { layer: 'TAG', height: 2.8 });
-      pen.text(act.box.x + act.box.w + 3, yAct + 6.5, a.model, { height: 2 });
-      // オートスイッチ: 記号の上の、検出する端の側にひし形と入出力番号
-      const cs = a.hint.cylinder?.switches;
-      const switches = a.hint.switches ?? [
-        ...(cs?.head ? [{ label: '後退端', terminal: cs.head }] : []),
-        ...(cs?.rod ? [{ label: '前進端', terminal: cs.rod }] : []),
-      ];
-      switches.forEach((sw, k) => {
-        const leftSide = k === 0;
-        const sx = leftSide ? act!.box.x + 3 : act!.box.x + Math.min(act!.box.w, 40) - 3;
-        // 文字は端から外側へ（左のスイッチは左へ、右のスイッチは右へ）
-        drawSwitch(pen, sx, act!.box.y - 4, sw.label, tagOf(a.id, sw.terminal), leftSide ? 'right' : 'left');
+      const s = sketch((pen) => {
+        // 弁の 4 につながるポートを左に置く（線が交差しないように）
+        const toFour = col.lines.find((l) => l.valvePort === '4')?.end;
+        const ports = Object.keys(a.hint.ports).sort((p, q) => Number(a.hint.ports[q] === (toFour && portOf(toFour))) - Number(a.hint.ports[p] === (toFour && portOf(toFour))));
+        const drawn =
+          a.hint.symbol === 'cylinder'
+            ? drawCylinder(pen, a.hint, cx - 4, yAct)
+            : a.hint.symbol === 'gripper' || a.hint.symbol === 'rotary'
+              ? drawGripperOrRotary(pen, a.hint.symbol, ports, cx, yAct)
+              : drawBoxSymbol(pen, 'パッド', Object.keys(a.hint.ports), cx, yAct);
+        // 機器名・型式は記号の右
+        pen.text(drawn.box.x + drawn.box.w + 3, yAct + 2.5, a.id, { layer: 'TAG', height: 2.8 });
+        pen.text(drawn.box.x + drawn.box.w + 3, yAct + 6.5, a.model, { height: 2 });
+        // オートスイッチ: 記号の上の、検出する端の側にひし形と入出力番号
+        const cs = a.hint.cylinder?.switches;
+        const switches = a.hint.switches ?? [
+          ...(cs?.head ? [{ label: '後退端', terminal: cs.head }] : []),
+          ...(cs?.rod ? [{ label: '前進端', terminal: cs.rod }] : []),
+        ];
+        switches.forEach((sw, k) => {
+          const leftSide = k === 0;
+          const sx = leftSide ? drawn.box.x + 3 : drawn.box.x + Math.min(drawn.box.w, 40) - 3;
+          // 文字は端から外側へ（左のスイッチは左へ、右のスイッチは右へ）
+          drawSwitch(pen, sx, drawn.box.y - 4, sw.label, tagOf(a.id, sw.terminal), leftSide ? 'right' : 'left');
+        });
+        // ポートに直付けしたスピードコントローラ（アクチュエータのすぐ下。アクチュエータと一緒に動かす）。
+        // 配管はスピードコントローラの下の端から引くので、そのポートの位置を付け替える
+        let box = drawn.box;
+        const pins = { ...drawn.pins };
+        for (const [sym, attached] of Object.entries(a.hint.speedControllers ?? {})) {
+          const pin = drawn.pins[sym];
+          if (!pin || !attached) continue;
+          const sy = yAct + 15;
+          // メータアウトは弁 → アクチュエータが自由流れ（上向き）
+          const d = drawSpeedController(pen, pin[0] + 2.5, sy, attached.control === 'meter-out');
+          pen.line([pin, d.pins.top], { layer: 'WIRE' });
+          // 型式は記号の右に 2 行で書く。右に同じアクチュエータの別のポートがあって入らなければ左に書く
+          const [series, rest] = [attached.model.slice(0, attached.model.indexOf('-')), attached.model.slice(attached.model.indexOf('-'))];
+          const tw = Math.max(textWidth(series, 1.8), textWidth(rest, 1.8));
+          const others = Object.values(drawn.pins).map((q) => q[0]).filter((x) => x > pin[0] + 0.1);
+          const leftSide = others.length > 0 && Math.min(...others) - 3.5 < d.box.x + d.box.w + 1 + tw + 1;
+          const tx = leftSide ? d.box.x - 1 : d.box.x + d.box.w + 1;
+          const align = leftSide ? 'right' : 'left';
+          pen.text(tx, sy + 5, series, { height: 1.8, align });
+          pen.text(tx, sy + 8, rest, { height: 1.8, align });
+          pins[sym] = d.pins.bottom;
+          box = unionBox(box, d.box);
+        }
+        return { ...drawn, box, pins };
       });
+      actAuto = s.drawn;
+      act = place(a.id, s);
+      obstacles.push(act.box);
     }
-    let vd: Drawn | undefined;
     if (col.valve) {
       const v = col.valve;
-      const sol = v.hint.valve?.solenoids;
-      const label = (side: 'a' | 'b') => {
-        const t = sol?.[side];
-        if (!t && !(v.hint.valve?.operators[side] === 'solenoid')) return undefined;
-        // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる
-        const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-'));
-        const name = v.hint.valve?.operators.b === 'solenoid' ? `${v.id}${side.toUpperCase()}` : v.id;
-        return addr ? `${name}（${addr}）` : name;
-      };
-      vd = drawValve(pen, v.hint, cx, yValve, { a: label('a'), b: label('b') });
-      pen.text(vd.box.x + vd.box.w + 1, yValve + BOX_H + 6, v.model, { height: 2 });
-      // 排気
       const host = hostOf(v.id);
-      for (const p of ['5', '3']) {
-        const t = v.hint.ports[p];
-        if (!t || !vd.pins[p]) continue;
-        // マニホールドに装着した弁の排気は、マニホールドの排気ポートに付けたサイレンサで出す
-        const nb = host ? hostSilencer(host) : neighbors(key(v.id, t));
-        const sil = host ? nb.length > 0 : nb.some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
-        if (host || !nb.length || sil) drawExhaust(pen, vd.pins[p], sil);
-      }
-      valveBoxes.push({ id: v.id, host, box: vd.box });
-      // 供給（主管へ）
-      const pt = v.hint.ports['1'];
-      if (pt && vd.pins['1']) {
-        const [px, py] = vd.pins['1'];
-        if (pressure.has(key(v.id, pt))) {
-          pen.line([[px, py], [px, yMain]], { layer: 'WIRE' });
-          mainTaps.push(px);
-        } else pen.text(px, py + 8, '供給なし', { align: 'center', height: 2 });
-      }
+      const s = sketch((pen) => {
+        const sol = v.hint.valve?.solenoids;
+        const label = (side: 'a' | 'b') => {
+          const t = sol?.[side];
+          if (!t && !(v.hint.valve?.operators[side] === 'solenoid')) return undefined;
+          // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる。通信タイプのマニホールドの弁は SI ユニットの出力
+          const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-')) ?? serialOutputName(model.bus, v.id, side === 'a' ? 'A' : 'B');
+          const name = v.hint.valve?.operators.b === 'solenoid' ? `${v.id}${side.toUpperCase()}` : v.id;
+          return addr ? `${name}（${addr}）` : name;
+        };
+        const vd = drawValve(pen, v.hint, cx, yValve, { a: label('a'), b: label('b') });
+        pen.text(vd.box.x + vd.box.w + 1, yValve + BOX_H + 6, v.model, { height: 2 });
+        // 排気
+        for (const p of ['5', '3']) {
+          const t = v.hint.ports[p];
+          if (!t || !vd.pins[p]) continue;
+          // マニホールドに装着した弁の排気は、マニホールドの排気ポートに付けたサイレンサで出す
+          const nb = host ? hostSilencer(host) : neighbors(key(v.id, t));
+          const sil = host ? nb.length > 0 : nb.some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
+          if (host || !nb.length || sil) drawExhaust(pen, vd.pins[p], sil);
+        }
+        // 供給のない弁は主管へつながない
+        const pt = v.hint.ports['1'];
+        if (pt && vd.pins['1'] && !pressure.has(key(v.id, pt))) pen.text(vd.pins['1'][0], vd.pins['1'][1] + 8, '供給なし', { align: 'center', height: 2 });
+        return vd;
+      });
+      valveSketches.set(v.id, { sketch: s, host });
+      if (!host) valveAt.set(v.id, place(v.id, s));
     }
     // 作業ポート → 途中の機器 → アクチュエータ
-    col.lines.forEach((ln, k) => {
-      if (!vd) return;
-      const from = vd.pins[ln.valvePort];
-      if (!from) return;
+    col.lines.forEach((ln) => {
+      if (!col.valve) return;
+      const net = `${col.valve.id}:${ln.valvePort}`;
       const endSym = ln.end ? col.actuator?.symPort.get(portOf(ln.end)) : undefined;
       const to = endSym && act ? act.pins[endSym] : undefined;
-      if (!to) {
-        pen.text(from[0], from[1] - 4, '未接続', { align: 'center', height: 2 });
+      const toAuto = endSym && actAuto ? actAuto.pins[endSym] : undefined;
+      if (!to || !toAuto) {
+        workLines.push({ valve: col.valve.id, valvePort: ln.valvePort, net, ends: [], labels: [], unconnected: true });
         return;
       }
+      // 配管の端（アクチュエータの側から順に、[下へ出す端, 上へ出す端] の組になるよう並べる）
+      const ends: PinAt[] = [{ pos: to, dir: DOWN }];
+      const labels: { text: string; at: XY }[] = [];
       let cur: XY = to;
-      // アクチュエータの側から途中の機器を上から順に置く
+      let curAuto: XY = toAuto;
+      // アクチュエータの側から途中の機器を上から順に置く（動かしていなければ、アクチュエータの自動の位置の真下）
       [...ln.chain].reverse().forEach((c, j) => {
         const e = entries.get(c.id)!;
         if (e.hint.symbol === 'tee') return;
@@ -601,34 +736,49 @@ export function pneumaticPages(
         if (e.hint.symbol === 'speed-controller') {
           // 弁の側から入る向き（enter）が in なら、上向き（弁 → アクチュエータ）が自由流れ
           const freeUp = e.symPort.get(c.enter) === 'in';
-          const d = drawSpeedController(pen, cur[0] + 2.5, sy, freeUp);
-          pen.line([cur, [cur[0], d.pins.top[1]]], { layer: 'WIRE' });
-          pen.text(d.box.x + d.box.w + 1, sy + 4, e.id, { layer: 'TAG', height: 2.2 });
-          pen.text(d.box.x + d.box.w + 1, sy + 7.5, e.model, { height: 1.8 });
+          const s = sketch((pen) => {
+            const d = drawSpeedController(pen, curAuto[0] + 2.5, sy, freeUp);
+            pen.text(d.box.x + d.box.w + 1, sy + 4, e.id, { layer: 'TAG', height: 2.2 });
+            pen.text(d.box.x + d.box.w + 1, sy + 7.5, e.model, { height: 1.8 });
+            return d;
+          });
+          const d = place(e.id, s);
+          obstacles.push(d.box);
+          ends.push({ pos: d.pins.top, dir: UP }, { pos: d.pins.bottom, dir: DOWN });
           cur = d.pins.bottom;
+          curAuto = s.drawn.pins.bottom;
         } else {
-          pen.text(cur[0] + 2, sy + 6, `${e.id}`, { layer: 'TAG', height: 2.2 });
+          labels.push({ text: e.id, at: [cur[0] + 2, sy + 6 + cur[1] - curAuto[1]] });
         }
       });
-      // 弁のポートまで（直交の折れ線。2 本が重ならないよう段をずらす）
-      const midY = yValve - 6 - k * 4;
-      pen.line([cur, [cur[0], midY], [from[0], midY], from], { layer: 'WIRE' });
+      workLines.push({ valve: col.valve.id, valvePort: ln.valvePort, net, ends, labels, unconnected: false });
     });
   });
 
-  // マニホールド: 装着した弁を破線で囲み、型式を書く
-  for (const host of new Set(valveBoxes.map((v) => v.host).filter((h): h is string => !!h))) {
-    const boxes = valveBoxes.filter((v) => v.host === host).map((v) => v.box);
-    const x0 = Math.min(...boxes.map((b) => b.x)) - 3;
-    const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + 3;
-    pen.rect(x0, yValve - 4, x1 - x0, BOX_H + 18, { dashed: true });
-    const e = entries.get(host)!;
-    // 連数はブランクプレートも数える（型式の連数と合わせる）。主管へ下ろす線に重ならないよう、枠の右下の外に書く
-    const stations = [...model.devices.values()].filter((x) => x.device.mount?.device === host).length;
-    const blanks = stations - boxes.length;
-    pen.text(x1 + 2, yValve + BOX_H + 10, e.id, { height: 2.4, layer: 'TAG' });
-    pen.text(x1 + 2, yValve + BOX_H + 13.5, `${e.model}（${stations} 連${blanks > 0 ? `、ブランク ${blanks}` : ''}）`, { height: 1.9 });
+  // マニホールド: 装着した弁を破線で囲み、型式を書く。弁ごとマニホールドのまとまりとして動かす
+  for (const host of new Set([...valveSketches.values()].map((v) => v.host).filter((h): h is string => !!h))) {
+    const mounted = [...valveSketches].filter(([, v]) => v.host === host);
+    const boxes = mounted.map(([, v]) => v.sketch.drawn.box);
+    const frame = sketch((pen): Drawn => {
+      const x0 = Math.min(...boxes.map((b) => b.x)) - 3;
+      const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + 3;
+      pen.rect(x0, yValve - 4, x1 - x0, BOX_H + 18, { dashed: true });
+      const e = entries.get(host)!;
+      // 連数はブランクプレートも数える（型式の連数と合わせる）。主管へ下ろす線に重ならないよう、枠の右下の外に書く
+      const stations = [...model.devices.values()].filter((x) => x.device.mount?.device === host).length;
+      const blanks = stations - boxes.length;
+      pen.text(x1 + 2, yValve + BOX_H + 10, e.id, { height: 2.4, layer: 'TAG' });
+      pen.text(x1 + 2, yValve + BOX_H + 13.5, `${e.model}（${stations} 連${blanks > 0 ? `、ブランク ${blanks}` : ''}）`, { height: 1.9 });
+      return { pins: {}, box: { x: x0, y: yValve - 4, w: x1 - x0, h: BOX_H + 18 } };
+    });
+    const d = offsetOf(host, frame.drawn.box);
+    for (const [id, v] of mounted) {
+      commitSketch(page, v.sketch, d);
+      valveAt.set(id, shiftDrawn(v.sketch.drawn, d));
+    }
+    place(host, frame, d, mounted.map(([, v]) => v.sketch));
   }
+  for (const vd of valveAt.values()) obstacles.push(vd.box);
 
   // エア源・3 点セット（主管の左、流れの順）
   const sources = [...entries.values()].filter((e) => e.hint.symbol === 'source');
@@ -650,33 +800,233 @@ export function pneumaticPages(
   };
   sources.forEach(walk);
   let x = left;
+  /** 前の機器の出口（本のページの位置。配管をつなぐ） */
   let last: XY | undefined;
+  const supplyPipes: [PinAt, PinAt][] = [];
   for (const e of chain) {
-    if (last) pen.line([last, [x, ySupply]], { layer: 'WIRE' });
     const exh = e.hint.ports.exh;
     const exhSilencer = !!exh && neighbors(key(e.id, exh)).some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
-    const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer });
     // エア源は型式の代わりに「エア源」と書く（工場エアなどの説明は長いため）
     const sub = e.hint.symbol === 'source' ? 'エア源' : e.model;
-    pen.text(d.box.x, ySupply + 12, e.id, { layer: 'TAG', height: 2.4 });
-    pen.text(d.box.x, ySupply + 15.5, sub, { height: 1.8 });
-    const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([s]) => s === 'out')?.[1] ?? ''));
-    if (p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator')) {
-      // 3 点セットを囲む破線に重ならないよう、出口の少し右に書く
-      pen.text((d.pins.out?.[0] ?? x + d.width) + 3, ySupply - 3, `${p}MPa`, { height: 2, layer: 'TAG' });
+    const s = sketch((pen) => {
+      const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer });
+      pen.text(d.box.x, ySupply + 12, e.id, { layer: 'TAG', height: 2.4 });
+      pen.text(d.box.x, ySupply + 15.5, sub, { height: 1.8 });
+      const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([sy]) => sy === 'out')?.[1] ?? ''));
+      if (p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator')) {
+        // 3 点セットを囲む破線に重ならないよう、出口の少し右に書く
+        pen.text((d.pins.out?.[0] ?? x + d.width) + 3, ySupply - 3, `${p}MPa`, { height: 2, layer: 'TAG' });
+      }
+      return d;
+    });
+    const off = offsetOf(e.id, s.drawn.box);
+    const d = place(e.id, s, off);
+    obstacles.push(d.box);
+    const outAuto: XY = s.drawn.pins.out ?? [x + s.drawn.width, ySupply];
+    if (last) supplyPipes.push([{ pos: last, dir: RIGHT }, { pos: d.pins.in ?? [d.box.x, d.box.y + d.box.h / 2], dir: LEFT }]);
+    last = shiftXY(outAuto, off);
+    // 次の記号の自動の位置は、この機器の（自動の位置の）名前・型式の文字に重ならない位置から
+    x = Math.max(outAuto[0] + 8, s.drawn.box.x + Math.max(textWidth(sub, 1.8), textWidth(e.id, 2.4)) + 5);
+  }
+
+  // --- 配管（記号の位置が決まってから、直角の折れ線で引く） ---
+  const segments: Segment[] = [];
+  const bounds: Bounds[] = obstacles.map((b) => ({ x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h }));
+  const pipe = (points: XY[], net: string) => {
+    pen.line(points, { layer: 'WIRE' });
+    for (let k = 0; k + 1 < points.length; k++) segments.push({ a: points[k], b: points[k + 1], net });
+  };
+  // 主管: 3 点セットの出口から上がって、各弁の P の下を通す。主管の高さはいちばん下の弁に合わせる
+  const taps: XY[] = [];
+  for (const [id, vd] of valveAt) {
+    const pt = entries.get(id)!.hint.ports['1'];
+    if (pt && vd.pins['1'] && pressure.has(key(id, pt))) taps.push(vd.pins['1']);
+  }
+  if (taps.length) {
+    const startX = last ? last[0] + 4 : undefined;
+    const xs = [...taps.map((t) => t[0]), ...(startX !== undefined ? [startX] : [])];
+    const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+    // 主管の高さ: いちばん下の弁の P から自動の配置と同じだけ下。記号を横切るなら上下にずらす
+    const lowest = Math.max(...taps.map((t) => t[1]));
+    const base = lowest + (yMain - (yValve + BOX_H));
+    const busLines = (y: number): XY[][] => [
+      [[x0, y], [x1, y]],
+      ...taps.map((t): XY[] => [t, [t[0], y]]),
+      ...(last && startX !== undefined ? [[last, [startX, last[1]], [startX, y]] as XY[]] : []),
+    ];
+    const tries = [0, ...Array.from({ length: 24 }, (_, k) => (k % 2 ? 1 : -1) * 2.5 * Math.ceil((k + 1) / 2))].map((dy) => base + dy).filter((y) => y >= lowest + 5);
+    const busY = tries.find((y) => busLines(y).every((pl) => hits(pl, bounds) === 0)) ?? base;
+    for (const t of taps) pipe([t, [t[0], busY]], 'main');
+    if (last && startX !== undefined) pipe(simplify([last, [startX, last[1]], [startX, busY]]), 'main');
+    if (x1 > x0) pipe([[x0, busY], [x1, busY]], 'main');
+    for (const t of new Set(xs)) if (t > x0 && t < x1) pen.dot(t, busY);
+    if (!last) pen.text(taps[0][0], busY + 5, 'エア源につながっていません', { height: 2.2 });
+  }
+  // エア源から 3 点セットへ（流れの順）
+  supplyPipes.forEach(([a, b], k) => pipe(pipeRoute(a, b, `supply${k}`, bounds, segments), `supply${k}`));
+  // 弁の作業ポートから途中の機器を通ってアクチュエータまで（弁の側から引く）
+  for (const ln of workLines) {
+    const from = valveAt.get(ln.valve)?.pins[ln.valvePort];
+    if (!from) continue;
+    if (ln.unconnected) {
+      pen.text(from[0], from[1] - 4, '未接続', { align: 'center', height: 2 });
+      continue;
     }
-    last = d.pins.out ?? [x + d.width, ySupply];
-    // 次の記号は、この機器の名前・型式の文字に重ならない位置から
-    x = Math.max(last[0] + 8, d.box.x + Math.max(textWidth(sub, 1.8), textWidth(e.id, 2.4)) + 5);
+    const ends = [...ln.ends, { pos: from, dir: UP }];
+    // 弁のポートからは少し長めに出して曲げる（マニホールドの破線の枠やポート番号から離す）
+    for (let k = ends.length - 2; k >= 0; k -= 2) pipe(pipeRoute(ends[k + 1], ends[k], ln.net, bounds, segments, k === ends.length - 2 ? VALVE_STUBS : STUBS), ln.net);
+    for (const l of ln.labels) pen.text(l.at[0], l.at[1], l.text, { layer: 'TAG', height: 2.2 });
   }
-  // 主管: 3 点セットの出口から上がって、各弁の P の下を通す
-  if (mainTaps.length) {
-    const xs = [...mainTaps].sort((a, b) => a - b);
-    const startX = last ? last[0] + 4 : xs[0];
-    if (last) pen.line([last, [startX, ySupply], [startX, yMain]], { layer: 'WIRE' });
-    pen.line([[Math.min(startX, xs[0]), yMain], [xs[xs.length - 1], yMain]], { layer: 'WIRE' });
-    for (const t of xs) if (t !== xs[xs.length - 1] && t !== Math.min(startX, xs[0])) pen.dot(t, yMain);
-    if (!last) pen.text(xs[0], yMain + 5, 'エア源につながっていません', { height: 2.2 });
+  return { pages: make.pages, groups };
+}
+
+const UP: XY = [0, -1];
+const DOWN: XY = [0, 1];
+const LEFT: XY = [-1, 0];
+const RIGHT: XY = [1, 0];
+/** 弁の作業ポートから出す長さの候補 */
+const VALVE_STUBS = [7.5, 10, 12.5, 5, 15];
+
+/**
+ * 配管を直角の折れ線で引く（座標は y が下向き）。端から少しまっすぐ出し、L 字・Z 字か、記号の脇を回るコの字でつなぐ。
+ * 記号を横切らないこと > ほかの配管と重ならないこと > 短く曲がりの少ないこと > 候補の順（a の側で曲げる）で選ぶ。
+ */
+export function pipeRoute(a: PinAt, b: PinAt, net: string, obstacles: Bounds[], segments: Segment[], stubs: number[] = STUBS): XY[] {
+  const [ax, ay] = a.pos;
+  const [bx, by] = b.pos;
+  const facing =
+    (r3(ay) === r3(by) && (bx - ax) * a.dir[0] > 0 && (ax - bx) * b.dir[0] > 0) ||
+    (r3(ax) === r3(bx) && (by - ay) * a.dir[1] > 0 && (ay - by) * b.dir[1] > 0);
+  const candidates: XY[][] = facing ? [[a.pos, b.pos]] : [];
+  const vertical = a.dir[0] === 0;
+  for (const len of stubs) {
+    const sa: XY = [ax + a.dir[0] * len, ay + a.dir[1] * len];
+    const sb: XY = [bx + b.dir[0] * len, by + b.dir[1] * len];
+    const first: XY = vertical ? [sb[0], sa[1]] : [sa[0], sb[1]];
+    const second: XY = vertical ? [sa[0], sb[1]] : [sb[0], sa[1]];
+    candidates.push(simplify([a.pos, sa, first, sb, b.pos]), simplify([a.pos, sa, second, sb, b.pos]));
   }
-  return make.pages;
+  // コの字: 記号の外形の 5mm 外を回る
+  const lanes = vertical ? obstacles.flatMap((o) => [o.x1 - 5, o.x2 + 5]) : obstacles.flatMap((o) => [o.y1 - 5, o.y2 + 5]);
+  for (const len of [stubs[0], stubs[0] + 5]) {
+    const sa: XY = [ax + a.dir[0] * len, ay + a.dir[1] * len];
+    const sb: XY = [bx + b.dir[0] * len, by + b.dir[1] * len];
+    for (const l of lanes) candidates.push(simplify(vertical ? [a.pos, sa, [l, sa[1]], [l, sb[1]], sb, b.pos] : [a.pos, sa, [sa[0], l], [sb[0], l], sb, b.pos]));
+  }
+  const length = (c: XY[]) => c.slice(1).reduce((s, p, i) => s + Math.abs(p[0] - c[i][0]) + Math.abs(p[1] - c[i][1]), 0);
+  let best = candidates[0];
+  let bestScore = Infinity;
+  const scoreOf = (c: XY[]) => hits(c, obstacles) * 1000 + conflicts(c, net, segments) + length(c) * 0.01 + (c.length - 2) * 0.3;
+  candidates.forEach((c, i) => {
+    const score = scoreOf(c) + i * 1e-4;
+    if (score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  });
+  // 決まった形では記号を横切るか別の配管に重なるときは、記号の脇の格子の上で最短の経路を探す
+  if (bestScore >= 10) {
+    const g = gridRoute(a, b, net, obstacles, segments, stubs[0]);
+    if (g && scoreOf(g) < bestScore) return g;
+  }
+  return best;
+}
+
+/**
+ * 格子の上の最短経路（ダイクストラ法）。格子の線は端から出した点と、記号の外形の 5mm 外の位置。
+ * 記号を横切る区間は通らず、長さ・曲がりの数・別の配管との重なりで費用を数える。見つからなければ undefined
+ */
+function gridRoute(a: PinAt, b: PinAt, net: string, obstacles: Bounds[], segments: Segment[], stub: number): XY[] | undefined {
+  const sa: XY = [a.pos[0] + a.dir[0] * stub, a.pos[1] + a.dir[1] * stub];
+  const sb: XY = [b.pos[0] + b.dir[0] * stub, b.pos[1] + b.dir[1] * stub];
+  const uniq = (v: number[]) => [...new Set(v.map(r3))].sort((p, q) => p - q);
+  const xs = uniq([sa[0], sb[0], (sa[0] + sb[0]) / 2, ...obstacles.flatMap((o) => [o.x1 - 5, o.x2 + 5])]);
+  const ys = uniq([sa[1], sb[1], (sa[1] + sb[1]) / 2, ...obstacles.flatMap((o) => [o.y1 - 5, o.y2 + 5])]);
+  const nx = xs.length;
+  const idx = (i: number, j: number) => j * nx + i;
+  const start = idx(xs.indexOf(r3(sa[0])), ys.indexOf(r3(sa[1])));
+  const goal = idx(xs.indexOf(r3(sb[0])), ys.indexOf(r3(sb[1])));
+  // 向き: 0 右・1 左・2 下・3 上
+  const DIRS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const dirOf = (d: XY) => DIRS.findIndex(([x, y]) => x === Math.sign(d[0]) && y === Math.sign(d[1]));
+  const startDir = dirOf(a.dir);
+  const endDir = dirOf([-b.dir[0], -b.dir[1]]);
+  const n = nx * ys.length * 4;
+  const cost = new Float64Array(n).fill(Infinity);
+  const prev = new Int32Array(n).fill(-1);
+  const heap: [number, number][] = [];
+  const push = (c: number, s: number) => {
+    heap.push([c, s]);
+    for (let k = heap.length - 1; k > 0; ) {
+      const p = (k - 1) >> 1;
+      if (heap[p][0] <= heap[k][0]) break;
+      [heap[p], heap[k]] = [heap[k], heap[p]];
+      k = p;
+    }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const lastItem = heap.pop()!;
+    if (heap.length) {
+      heap[0] = lastItem;
+      for (let k = 0; ; ) {
+        const l = 2 * k + 1;
+        const r = l + 1;
+        let m = k;
+        if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if (m === k) break;
+        [heap[m], heap[k]] = [heap[k], heap[m]];
+        k = m;
+      }
+    }
+    return top;
+  };
+  const s0 = start * 4 + startDir;
+  cost[s0] = 0;
+  push(0, s0);
+  let found = -1;
+  let foundCost = Infinity;
+  while (heap.length) {
+    const [c, s] = pop();
+    if (c > cost[s]) continue;
+    if (c >= foundCost) break;
+    const node = s >> 2;
+    const dir = s & 3;
+    if (node === goal) {
+      // 最後に b へ入る向きと違えば、もう 1 回曲がる
+      const total = c + (dir === endDir ? 0 : 0.3);
+      if (total < foundCost) {
+        found = s;
+        foundCost = total;
+      }
+      continue;
+    }
+    const i = node % nx;
+    const j = (node - i) / nx;
+    DIRS.forEach(([dx, dy], d) => {
+      if ((d ^ 1) === dir && (d >> 1) === (dir >> 1)) return; // 来た道は戻らない
+      const ni = i + dx;
+      const nj = j + dy;
+      if (ni < 0 || nj < 0 || ni >= nx || nj >= ys.length) return;
+      const p: XY = [xs[i], ys[j]];
+      const q: XY = [xs[ni], ys[nj]];
+      if (obstacles.some((o) => crosses(p, q, o))) return;
+      const step = (Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1])) * 0.01 + (d === dir ? 0 : 0.3) + conflicts([p, q], net, segments);
+      const ns = idx(ni, nj) * 4 + d;
+      if (c + step < cost[ns]) {
+        cost[ns] = c + step;
+        prev[ns] = s;
+        push(c + step, ns);
+      }
+    });
+  }
+  if (found < 0) return undefined;
+  const path: XY[] = [];
+  for (let s = found; s >= 0; s = prev[s]) {
+    const node = s >> 2;
+    path.unshift([xs[node % nx], ys[Math.floor(node / nx)]]);
+    if (s === s0) break;
+  }
+  return simplify([a.pos, ...path, b.pos]);
 }

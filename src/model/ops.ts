@@ -6,6 +6,7 @@
 import { buildModel, key } from '../check/model';
 import { resolveDevice } from '../devices/resolve';
 import { deviceSize, type DeviceDefinition, type TerminalSide } from '../devices/types';
+import { busAccepts } from './bus';
 import { CABLE_WIRE_TYPE, isTube, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -364,4 +365,89 @@ export function promoteLinkNames(d: Diagram, removed: Iterable<string>): Diagram
     };
   }
   return out;
+}
+
+/** 機種の差し替えの結果。外した電線・装着は、画面で知らせるために返す */
+export interface ReplaceTypeResult {
+  diagram: Diagram;
+  /** 新しい機種に同じ端子がなく外した電線の ID */
+  droppedWires: string[];
+  /** 装着できなくなって外した機器の ID（差し替えた機器自身か、装着していた子） */
+  unmounted: string[];
+}
+
+/**
+ * 機器 deviceId の機種（type）を差し替える（漏電遮断器の 2P → 3P、電磁弁のシングル → ダブルなど）。
+ * 機器名・位置・シート・コメントはそのままにし、パラメータは新しい機種にある項目で、選べる値のものだけ引き継ぐ。
+ * 新しい機種に同じ ID の端子がある電線はつないだまま（経路は自動に戻す）にし、ない電線は外す。
+ * 装着の親に装着できない機種なら装着を外し、親だった機器に装着できなくなった子も外す
+ */
+export function replaceDeviceType(d: Diagram, deviceId: string, type: string, lookup: DefLookup): ReplaceTypeResult {
+  const dev = d.devices.find((x) => x.id === deviceId);
+  const def = lookup(type);
+  if (!dev || !def || dev.type === type) return { diagram: d, droppedWires: [], unmounted: [] };
+  const params: Record<string, number | string> = {};
+  for (const [k, v] of Object.entries(dev.params ?? {})) {
+    const p = def.params?.find((x) => x.key === k);
+    if (p && (p.input === 'text' || p.options.some((o) => o.value === v))) params[k] = v;
+  }
+  const resolved = resolveDevice(def, params);
+  const has = (id: string) => !!resolved.terminal(id);
+  const mine = (r: TerminalRef) => r.device === deviceId;
+  const droppedWires = d.wires.filter((w) => (mine(w.from) && !has(w.from.terminal)) || (mine(w.to) && !has(w.to.terminal))).map((w) => w.id);
+  const unmounted: string[] = [];
+  let mount = dev.mount;
+  if (mount) {
+    const host = d.devices.find((x) => x.id === mount!.device);
+    const hostDef = host && lookup(host.type);
+    if (!hostDef || !busAccepts(hostDef, def)) {
+      mount = undefined;
+      unmounted.push(deviceId);
+    }
+  }
+  const children = new Set(
+    d.devices
+      .filter((x) => x.mount?.device === deviceId)
+      .filter((x) => {
+        const cd = lookup(x.type);
+        return !cd || !busAccepts(def, cd);
+      })
+      .map((x) => x.id),
+  );
+  unmounted.push(...children);
+  const comments = dev.comments && Object.fromEntries(Object.entries(dev.comments).filter(([k]) => has(k) || resolved.pins.some((p) => p.id === k)));
+  const replaced: DiagramDevice = {
+    id: dev.id,
+    type,
+    x: dev.x,
+    y: dev.y,
+    ...(Object.keys(params).length ? { params } : {}),
+    ...(mount ? { mount } : {}),
+    ...(dev.sheet ? { sheet: dev.sheet } : {}),
+    ...(comments && Object.keys(comments).length ? { comments } : {}),
+    ...(dev.note ? { note: dev.note } : {}),
+  };
+  const dropped = new Set(droppedWires);
+  return {
+    diagram: {
+      ...d,
+      devices: d.devices.map((x) => {
+        if (x.id === deviceId) return replaced;
+        if (children.has(x.id)) {
+          const { mount: _m, ...rest } = x;
+          return rest;
+        }
+        return x;
+      }),
+      wires: d.wires
+        .filter((w) => !dropped.has(w.id))
+        .map((w) => {
+          if (!mine(w.from) && !mine(w.to)) return w;
+          const { bend: _b, route: _r, ...rest } = w;
+          return rest;
+        }),
+    },
+    droppedWires,
+    unmounted,
+  };
 }

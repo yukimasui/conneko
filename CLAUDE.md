@@ -45,7 +45,8 @@ Connekoは、生産現場の設備で使われる電気配線図を、専門知�
 - そのため、データ形式は生成AIが解釈・生成しやすい明確で自己記述的な構造にし、スキーマの説明をドキュメントとして用意する。
 
 ## アイコン
-- `src/assets/conneko-icon.svg` をベースにする（可愛くするなどの改変は可）。
+- ロゴの元画像は `src/assets/conneko_logo.png`。画面のヘッダーには顔を切り出した `conneko-face.png`、「Conneko について」には縮小した `conneko-logo.webp` を使う（単一 HTML が重くならないよう、元画像は埋め込まない）。
+- ファビコンは丸形圧着端子の絵（`src/assets/favicon-terminal.svg`）。
 
 ## 開発ルール
 - リポジトリはGitHubで管理する。

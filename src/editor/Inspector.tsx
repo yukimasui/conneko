@@ -3,9 +3,10 @@ import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../dat
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
+import { familyOf } from '../devices/families';
 import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
-import { busAccepts, type BusLayout } from '../model/bus';
+import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
 import { terminalFacts } from './terminalInfo';
@@ -40,6 +41,8 @@ interface Props {
   valveDevices?: Set<string>;
   /** コネクタにつなげる機器の候補を出す（anchor はボタンの位置） */
   onPickMate: (device: string, terminal: string, anchor: DOMRect) => void;
+  /** 機種を変える（「機種を選ぶ」ダイアログを開く） */
+  onChangeType: (id: string) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -154,18 +157,30 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
     const d = getDeviceDefinition(n.data.deviceType);
     return n.id !== node.id && !n.data.mount && d && busAccepts(d, def);
   });
+  // 通信タイプのマニホールドに装着した電磁弁: ソレノイドの SI ユニットの出力（連の順に自動で決まる）
+  const serial = (['A', 'B'] as const).flatMap((side) => {
+    const o = serialOutputOf(props.bus, node.id, side);
+    return o ? [{ side, ...o }] : [];
+  });
   return (
     <div className="field">
       <span>装着先</span>
       {mount ? (
-        <div className="mount-row">
-          <span>
-            {mount.device} の位置 {mount.slot}
-          </span>
-          <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
-            {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
-          </button>
-        </div>
+        <>
+          <div className="mount-row">
+            <span>
+              {mount.device} の位置 {mount.slot}
+            </span>
+            <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
+              {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
+            </button>
+          </div>
+          {serial.length > 0 && (
+            <div className="small">
+              SI ユニットの出力: {serial.map((o) => `${o.host} 出力${o.output}${serial.length > 1 ? `（SOL ${o.side}）` : ''}`).join('、')}
+            </div>
+          )}
+        </>
       ) : hosts.length ? (
         <div className="mount-row">
           <span className="muted small">未装着</span>
@@ -280,6 +295,11 @@ export function Inspector(props: Props) {
                 <div className="estimate-badge" title={def.estimated ?? '説明・端子の情報で「推定」と書いた値は、メーカーの資料で確認できていません'}>
                   推定の値を含む機器データ
                 </div>
+              )}
+              {(familyOf(def.type)?.members.length ?? 0) > 1 && (
+                <button type="button" className="small device-info__change" onClick={() => props.onChangeType(node.id)}>
+                  機種を変える…
+                </button>
               )}
               {def.description && <p className="muted small">{def.description}</p>}
             </div>

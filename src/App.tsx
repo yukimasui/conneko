@@ -16,12 +16,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './styles.css';
-import iconUrl from './assets/conneko-icon.svg?inline';
+import iconUrl from './assets/conneko-face.png?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
-import { connectorsMate, resolveDevice } from './devices/resolve';
-import { deviceSize } from './devices/types';
+import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
+import { deviceModel, deviceSize } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
@@ -35,7 +35,10 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { attachBase, baseTypesFor, needsBase } from './model/plc';
 import { ValveEditor } from './editor/ValveEditor';
+import { DevicePicker } from './editor/DevicePicker';
+import { deviceFamilies, familyOf } from './devices/families';
 import { SchematicEditor } from './editor/SchematicEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
@@ -51,7 +54,7 @@ import { ioHosts } from './model/io';
 import { isManifold, manifoldDevices } from './model/manifold';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
 import { applyMateCandidate, hasMateCandidates, mateCandidates, type MateCandidate } from './model/mates';
-import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
+import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, replaceDeviceType, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -65,6 +68,7 @@ import {
 } from './model/diagram';
 import { sampleDiagram } from './model/sample';
 import { buildSchematic, defaultRails } from './schematic/layout';
+import { sheetSvg as schematicSheetSvg } from './schematic/svg';
 import { newSchematicSheet, pruneSchematic, renameSchematicDevice, type Schematic } from './schematic/model';
 
 const nodeTypes = { device: DeviceNode };
@@ -147,6 +151,10 @@ function Editor() {
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
   const [valveEditor, setValveEditor] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
+  /** 「機種を選ぶ」ダイアログ（置くとき、または置いた機器の機種を変えるとき） */
+  const [devicePicker, setDevicePicker] = useState<
+    { mode: 'add'; familyId: string; initial: string; onChosen: (type: string) => void } | { mode: 'replace'; deviceId: string } | null
+  >(null);
   const [printDialog, setPrintDialog] = useState(false);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -176,7 +184,7 @@ function Editor() {
   const [toast, setToast] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, deleteElements } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
+  const { screenToFlowPosition, fitView, deleteElements, getViewport, setCenter } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -289,11 +297,17 @@ function Editor() {
     () =>
       new Set(
         diagram.devices
-          .filter((d) => getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type)))
+          .filter(
+            (d) =>
+              (getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type))) ||
+              needsBase(diagram, d.id, getDeviceDefinition, deviceDefinitions),
+          )
           .flatMap((d) => mountFamily(diagram, d.id)),
       ),
     [topo],
   );
+
+
   // マニホールド（親と装着した連）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const valveDevices = useMemo(() => manifoldDevices(diagram, getDeviceDefinition), [topo]);
@@ -356,6 +370,24 @@ function Editor() {
       if (message) notify(message);
     },
     [setNodes, setEdges, notify],
+  );
+
+  /**
+   * PLC エディタを開く。ベースユニットに装着して使う CPU（三菱 iQ-R）がまだ単独なら、ベースユニットと電源ユニットを付けてから開く
+   */
+  const openPlc = useCallback(
+    (id: string, tab: PlcTab) => {
+      if (tab === 'rack' && needsBase(diagram, id, getDeviceDefinition, deviceDefinitions)) {
+        const r = attachBase(diagram, id, getDeviceDefinition, deviceDefinitions);
+        if (r.baseId) {
+          applyDiagram(r.diagram, `${id} を装着する ${r.added.join('・')}（ベースユニット・電源ユニット）を付けました`);
+          setPlcEditor({ id: r.baseId, tab });
+          return;
+        }
+      }
+      setPlcEditor({ id, tab });
+    },
+    [diagram, applyDiagram],
   );
 
   // リンクの名前がなくなったら（リンクの削除・名前の変更・I/O の切断など）、「名前-2」などを元の名前に戻す
@@ -453,6 +485,16 @@ function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schematic, schematicBuild, diagram, notify]);
 
+  /** 表示中の展開図のシートを SVG で保存する（複数ページのシートはページごとに 1 ファイル） */
+  const exportSchematicSvg = useCallback(() => {
+    if (!schematic?.sheets.length) return;
+    const id = schematic.sheets.some((x) => x.id === schematicSheet) ? schematicSheet : schematic.sheets[0].id;
+    const doc = (schematicBuild ?? buildSchematic(diagram, getDeviceDefinition)).doc;
+    const pages = doc.sheets.filter((p) => (p.source ?? p.id) === id);
+    pages.forEach((p) => download(schematicSheetSvg(doc, p), `schematic-${p.id}`, 'svg', 'image/svg+xml'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schematic, schematicSheet, schematicBuild, diagram]);
+
   // --- シートの編集 ---
   const addSheet = useCallback(() => {
     const id = nextSheetId({ devices: [], wires: [], sheets });
@@ -501,6 +543,17 @@ function Editor() {
   );
 
   // --- 機器の追加 ---
+  /** 置いたばかりで、ベースユニットを付ける CPU の機器 ID */
+  const pendingBase = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pendingBase.current;
+    if (!id || !diagram.devices.some((x) => x.id === id)) return;
+    pendingBase.current = null;
+    if (!needsBase(diagram, id, getDeviceDefinition, deviceDefinitions)) return;
+    const r = attachBase(diagram, id, getDeviceDefinition, deviceDefinitions);
+    if (r.baseId) applyDiagram(r.diagram, `${id} を装着する ${r.added.join('・')}（ベースユニット・電源ユニット）を付けました。増設ユニットは「ユニット構成…」で足します`);
+  }, [diagram, applyDiagram]);
+
   const addDevice = useCallback(
     (type: string, at?: { x: number; y: number }) => {
       const def = getDeviceDefinition(type);
@@ -510,6 +563,10 @@ function Editor() {
       if (!pos) {
         const r = canvasRef.current?.getBoundingClientRect();
         pos = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
+      }
+      // ベースユニットに装着して使う CPU（三菱 iQ-R）は、置いたあとにベースユニットと電源ユニットを付ける（下の effect）
+      if (def.bus?.role === 'cpu' && !def.bus.host && baseTypesFor(def, deviceDefinitions).length) {
+        pendingBase.current = nextDeviceId(def.labelPrefix, nodesRef.current.map((n) => n.id));
       }
       setNodes((ns) => {
         const id = nextDeviceId(def.labelPrefix, ns.map((n) => n.id));
@@ -529,6 +586,17 @@ function Editor() {
           pos = { x: p.x + def.width / 2, y: p.y + def.height / 2 };
         }
         const place = pos!;
+        // 置いた機器が画面の外（重ならない位置へずらした結果など）なら、拡大率はそのままで画面をその機器へ移す
+        window.setTimeout(() => {
+          const r = canvasRef.current?.getBoundingClientRect();
+          if (!r) return;
+          const vp = getViewport();
+          const sx = place.x * vp.zoom + vp.x;
+          const sy = place.y * vp.zoom + vp.y;
+          const mx = (def.width * vp.zoom) / 2;
+          const my = (def.height * vp.zoom) / 2;
+          if (sx - mx < 0 || sy - my < 0 || sx + mx > r.width || sy + my > r.height) setCenter(place.x, place.y, { zoom: vp.zoom, duration: 300 });
+        }, 0);
         return [
           ...ns.map((n) => ({ ...n, selected: false })),
           {
@@ -541,7 +609,7 @@ function Editor() {
         ];
       });
     },
-    [screenToFlowPosition, setNodes, sheet],
+    [screenToFlowPosition, setNodes, sheet, getViewport, setCenter],
   );
 
   const onDrop = useCallback(
@@ -612,7 +680,7 @@ function Editor() {
       // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
       const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];
-      if (conn && !(conn.pins === 0 && conn.kind === 'RJ45') && !mates.length) return;
+      if (conn && !isLanPort(conn) && !mates.length) return;
       const point = 'changedTouches' in event ? event.changedTouches[0] : event;
       setPicker({
         x: point.clientX,
@@ -763,8 +831,8 @@ function Editor() {
       const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
       const peers = (linkPeers.get(linkKey(node.data.deviceType, name)) ?? []).filter((p) => p.id !== node.id);
       const items: MenuItem[] = [
-        ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
-        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
+        ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => openPlc(node.id, 'rack') }] : []),
+        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => openPlc(node.id, 'io') }] : []),
         ...(valveDevices.has(node.id) ? [{ label: 'バルブエディタ（連の構成・つなぎ先）…', onClick: () => setValveEditor(node.id) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
         ...(alignableLinkCount(diagram, node.id, getDeviceDefinition)
@@ -786,7 +854,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
+    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, openPlc, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -914,9 +982,15 @@ function Editor() {
           onClick: () => download(renderSheetSvg(diagram, sheet, getDeviceDefinition, { markers: showMarkers, notes: showNotes }).svg, `sheet${sheets.findIndex((s) => s.id === sheet) + 1}`, 'svg', 'image/svg+xml'),
         },
         {
+          label: '展開図の表示中のシートの画像（SVG）',
+          hint: schematic?.sheets.length ? (schematic.sheets.find((x) => x.id === schematicSheet) ?? schematic.sheets[0]).name : '展開図なし',
+          separator: true,
+          disabled: !schematic?.sheets.length,
+          onClick: exportSchematicSvg,
+        },
+        {
           label: '展開図 JSON（DXF 用）',
           hint: schematic?.sheets.length ? `${schematic.sheets.length} 枚` : '展開図なし',
-          separator: true,
           disabled: !schematic?.sheets.length,
           onClick: exportSchematic,
         },
@@ -1050,7 +1124,7 @@ function Editor() {
           />
         ) : (
         <>
-        <Palette onAdd={(type) => addDevice(type)} />
+        <Palette onAdd={(type) => addDevice(type)} onPick={(familyId, initial, onChosen) => setDevicePicker({ mode: 'add', familyId, initial, onChosen })} />
         <main className={`canvas${connecting ? ' is-connecting' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <SheetTabs
             sheets={sheets}
@@ -1089,7 +1163,7 @@ function Editor() {
             minZoom={0.2}
             maxZoom={3}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#c5ccd6" />
@@ -1116,9 +1190,10 @@ function Editor() {
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
           ioDevices={ioDevices}
           plcDevices={plcDevices}
-          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : setPlcEditor({ id, tab }))}
+          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : openPlc(id, tab))}
           valveDevices={valveDevices}
           onPickMate={pickMate}
+          onChangeType={(id) => setDevicePicker({ mode: 'replace', deviceId: id })}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
@@ -1127,9 +1202,51 @@ function Editor() {
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
       {about && <AboutDialog onClose={() => setAbout(false)} />}
+      {devicePicker?.mode === 'add' && deviceFamilies.some((f) => f.id === devicePicker.familyId) && (
+        <DevicePicker
+          family={deviceFamilies.find((f) => f.id === devicePicker.familyId)!}
+          initial={devicePicker.initial}
+          mode="add"
+          onPick={(type) => {
+            setDevicePicker(null);
+            devicePicker.onChosen(type);
+          }}
+          onClose={() => setDevicePicker(null)}
+        />
+      )}
+      {devicePicker?.mode === 'replace' &&
+        (() => {
+          const dev = diagram.devices.find((x) => x.id === devicePicker.deviceId);
+          const family = dev && familyOf(dev.type);
+          if (!dev || !family) return null;
+          return (
+            <DevicePicker
+              family={family}
+              initial={dev.type}
+              mode="replace"
+              impact={(type) => {
+                const r = replaceDeviceType(diagram, dev.id, type, getDeviceDefinition);
+                return { wires: r.droppedWires.length, mounts: r.unmounted.length };
+              }}
+              onPick={(type) => {
+                setDevicePicker(null);
+                const r = replaceDeviceType(diagram, dev.id, type, getDeviceDefinition);
+                const def = getDeviceDefinition(type);
+                const notes = [
+                  r.droppedWires.length ? `同じ端子がない電線 ${r.droppedWires.length} 本を外しました` : '',
+                  r.unmounted.length ? `${r.unmounted.join('、')} の装着を外しました` : '',
+                ].filter(Boolean);
+                applyDiagram(r.diagram, `${dev.id} を ${def ? deviceModel(def, r.diagram.devices.find((x) => x.id === dev.id)?.params) : type} に変えました${notes.length ? `（${notes.join('。')}）` : ''}`);
+              }}
+              onClose={() => setDevicePicker(null)}
+            />
+          );
+        })()}
       {printDialog && (
         <PrintDialog
           sheets={sheets}
+          schematicSheets={(schematic?.sheets ?? []).map((s) => ({ id: s.id, name: s.name, paper: s.paper ?? schematic?.settings?.paper ?? 'A3' }))}
+          schematicFirst={mode === 'schematic'}
           settings={settings}
           onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           onClose={() => setPrintDialog(false)}

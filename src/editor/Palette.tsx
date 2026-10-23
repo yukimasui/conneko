@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { deviceDefinitions, instantiateSvg } from '../devices/registry';
+import { deviceFamilies, type DeviceFamily } from '../devices/families';
+import { deviceDefinitions, getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import type { DeviceCategory, DeviceDefinition } from '../devices/types';
 
 export const DEVICE_DRAG_TYPE = 'application/x-conneko-device';
@@ -31,15 +32,17 @@ const STORAGE_KEY = 'conneko.palette';
 interface Stored {
   collapsed: DeviceCategory[];
   recent: string[];
+  /** ファミリーごとに最後に選んだ機種（次に置くときの既定にする） */
+  last: Record<string, string>;
 }
 
 // 折りたたみ状態と最近使った機器は、閲覧者ごとの便利機能としてブラウザに保存する（保存できなくても動く）
 function load(): Stored {
   try {
     const v = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<Stored>;
-    return { collapsed: v.collapsed ?? [], recent: v.recent ?? [] };
+    return { collapsed: v.collapsed ?? [], recent: v.recent ?? [], last: v.last ?? {} };
   } catch {
-    return { collapsed: [], recent: [] };
+    return { collapsed: [], recent: [], last: {} };
   }
 }
 
@@ -74,11 +77,11 @@ const SYNONYMS: Record<string, string[]> = {
   ワンタッチ継手: ['ワンタッチ管継手'],
 };
 
-/** 検索語にどれだけ合うか（0 は不一致）。名称・型式・メーカー・説明・type を対象にする */
-function score(d: DeviceDefinition, words: string[]): number {
+/** 検索語にどれだけ合うか（0 は不一致）。ファミリーの名前・別名と、機器の名称・型式・メーカー・説明・type を対象にする */
+function score(d: DeviceDefinition, f: DeviceFamily, words: string[]): number {
   // 定格電流などのパラメータの選択肢（例: '30A'）でも探せるようにする
   const options = (d.params ?? []).flatMap((p) => p.options.map((o) => `${o.label ?? ''} ${o.value}${p.unit ?? ''}`)).join(' ');
-  const fields = [d.name, d.model, makerOf(d), d.type, d.description ?? '', CATEGORY_NAMES[d.category], options].map(norm);
+  const fields = [`${f.name} ${f.keywords.join(' ')}`, d.name, d.model, makerOf(d), d.type, d.description ?? '', CATEGORY_NAMES[d.category], options].map(norm);
   const category = norm(CATEGORY_NAMES[d.category]);
   let total = 0;
   for (const raw of words) {
@@ -98,7 +101,20 @@ function Thumb({ def }: { def: DeviceDefinition }) {
   return <svg className="palette__thumb" viewBox={`0 0 ${def.width} ${def.height}`} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-function Item({ def, onUse }: { def: DeviceDefinition; onUse: (type: string, add: boolean) => void }) {
+/** パレットの 1 行（ファミリー）。機種が 1 つならそのまま置き、複数なら「機種を選ぶ」ダイアログを開く */
+interface Entry {
+  family: DeviceFamily;
+  /** 絞り込み（メーカー）に合う機種 */
+  members: DeviceDefinition[];
+  /** 置くときの機種（最後に選んだもの・検索で合ったもの・既定） */
+  def: DeviceDefinition;
+  /** 型式で検索に合った機種（行に型式を出す） */
+  hit?: DeviceDefinition;
+}
+
+function Item({ entry, onUse }: { entry: Entry; onUse: (e: Entry, how: 'click' | 'drag') => void }) {
+  const { family, members, def, hit } = entry;
+  const makers = [...new Set(members.map(makerOf))];
   return (
     <button
       type="button"
@@ -107,24 +123,49 @@ function Item({ def, onUse }: { def: DeviceDefinition; onUse: (type: string, add
       onDragStart={(e) => {
         e.dataTransfer.setData(DEVICE_DRAG_TYPE, def.type);
         e.dataTransfer.effectAllowed = 'move';
-        onUse(def.type, false);
+        onUse(entry, 'drag');
       }}
-      onClick={() => onUse(def.type, true)}
-      title={[def.name, `${def.maker ? def.maker + ' ' : ''}${def.model}`, def.description].filter(Boolean).join('\n')}
+      onClick={() => onUse(entry, 'click')}
+      title={
+        members.length > 1
+          ? `${family.name}（${members.length} 機種: ${makers.join('・')}）\nクリックで機種を選んで置く。ドラッグで ${def.model} を置く`
+          : [def.name, `${def.maker ? def.maker + ' ' : ''}${def.model}`, def.description].filter(Boolean).join('\n')
+      }
     >
       <Thumb def={def} />
       <span className="palette__text">
-        <span className="palette__name">{def.name}</span>
+        <span className="palette__name">{family.name}</span>
         <span className="palette__model">
-          {def.maker && <span className="palette__maker">{def.maker}</span>}
-          {def.model}
+          {hit ? (
+            <>
+              {hit.maker && <span className="palette__maker">{hit.maker}</span>}
+              {hit.model}
+            </>
+          ) : members.length > 1 ? (
+            <>
+              <span className="palette__variants">{members.length} 機種</span>
+              {makers.join('・')}
+            </>
+          ) : (
+            <>
+              {def.maker && <span className="palette__maker">{def.maker}</span>}
+              {def.model}
+            </>
+          )}
         </span>
       </span>
     </button>
   );
 }
 
-export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
+interface PaletteProps {
+  /** 機器をそのまま置く */
+  onAdd: (type: string) => void;
+  /** 「機種を選ぶ」ダイアログを開く（initial は最初に選んでおく機種） */
+  onPick: (familyId: string, initial: string, onChosen: (type: string) => void) => void;
+}
+
+export function Palette({ onAdd, onPick }: PaletteProps) {
   const [query, setQuery] = useState('');
   const [maker, setMaker] = useState<string | null>(null);
   const [stored, setStored] = useState<Stored>(load);
@@ -134,9 +175,28 @@ export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
     save(v);
   };
 
-  const use = (type: string, add: boolean) => {
-    update({ ...stored, recent: [type, ...stored.recent.filter((t) => t !== type)].slice(0, RECENT_LIMIT) });
-    if (add) onAdd(type);
+  /** 置いた機種を「最近使った機器」とファミリーの既定に覚える */
+  const remember = (type: string, cur: Stored = stored) => {
+    const family = deviceFamilies.find((f) => f.members.some((m) => m.type === type));
+    const next = {
+      ...cur,
+      recent: [type, ...cur.recent.filter((t) => t !== type)].slice(0, RECENT_LIMIT),
+      last: family ? { ...cur.last, [family.id]: type } : cur.last,
+    };
+    update(next);
+  };
+
+  const use = (e: Entry, how: 'click' | 'drag') => {
+    if (how === 'drag') return remember(e.def.type);
+    if (e.members.length < 2) {
+      remember(e.def.type);
+      onAdd(e.def.type);
+      return;
+    }
+    onPick(e.family.id, e.def.type, (type) => {
+      remember(type, load());
+      onAdd(type);
+    });
   };
 
   const toggle = (cat: DeviceCategory) => {
@@ -152,39 +212,51 @@ export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
   }, []);
 
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const pool = deviceDefinitions.filter((d) => !maker || makerOf(d) === maker);
+
+  /** メーカーの絞り込みに合うファミリーと、置く機種 */
+  const entries: Entry[] = deviceFamilies.flatMap((family) => {
+    const members = family.members.filter((d) => !maker || makerOf(d) === maker);
+    if (!members.length) return [];
+    const last = stored.last[family.id];
+    const def = members.find((d) => d.type === last) ?? members.find((d) => d.type === family.defaultType) ?? members[0];
+    return [{ family, members, def }];
+  });
 
   const results = words.length
-    ? pool
-        .map((d) => ({ d, s: score(d, words) }))
+    ? entries
+        .map((e) => {
+          const scored = e.members.map((d) => ({ d, s: score(d, e.family, words) })).sort((a, b) => b.s - a.s);
+          const best = scored[0];
+          // ファミリーの名前・別名だけでは合わず、型式などで合った機種は、その機種を置く
+          const byFamily = words.every((w) => norm(`${e.family.name} ${e.family.keywords.join(' ')}`).includes(norm(w)));
+          const hit = !byFamily && best.s > 0 && e.members.length > 1 ? best.d : undefined;
+          return { e: { ...e, def: hit ?? e.def, hit }, s: best.s + (byFamily ? 20 : 0) };
+        })
         .filter((x) => x.s > 0)
         .sort((a, b) => b.s - a.s)
-        .map((x) => x.d)
+        .map((x) => x.e)
     : [];
 
   const groups = CATEGORY_ORDER.map((cat) => ({
     cat,
-    defs: pool
-      .filter((d) => d.category === cat)
-      .sort((a, b) => makerOf(a).localeCompare(makerOf(b), 'ja') || a.name.localeCompare(b.name, 'ja') || a.model.localeCompare(b.model, 'ja')),
-  })).filter((g) => g.defs.length);
+    entries: entries.filter((e) => e.family.category === cat && !e.family.hidden).sort((a, b) => a.family.order - b.family.order || a.family.name.localeCompare(b.family.name, 'ja')),
+  })).filter((g) => g.entries.length);
 
-  const recent = stored.recent
-    .map((t) => deviceDefinitions.find((d) => d.type === t))
-    .filter((d): d is DeviceDefinition => !!d);
+  const recent = stored.recent.map((t) => getDeviceDefinition(t)).filter((d): d is DeviceDefinition => !!d);
 
   return (
     <aside className="palette">
       <div className="palette__head">
         <div className="panel-title">
-          機器 <span className="palette__count">{deviceDefinitions.length}</span>
+          機器 <span className="palette__count">{deviceFamilies.length}</span>
+          <span className="palette__count" title="型式ごとの機種の数">（{deviceDefinitions.length} 機種）</span>
         </div>
         <input
           className="palette__search"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="検索（例: 漏電 30A）"
+          placeholder="検索（例: 漏電、電磁弁、NV32）"
           title="名前・型式・メーカー・定格などで検索。スペース区切りで絞り込み"
           onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
         />
@@ -205,7 +277,7 @@ export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
         {words.length > 0 ? (
           <section>
             <h3 className="palette__heading is-static">検索結果 {results.length}件</h3>
-            {results.length ? results.map((d) => <Item key={d.type} def={d} onUse={use} />) : <p className="palette__empty">見つかりませんでした</p>}
+            {results.length ? results.map((e) => <Item key={e.family.id} entry={e} onUse={use} />) : <p className="palette__empty">見つかりませんでした</p>}
           </section>
         ) : (
           <>
@@ -223,7 +295,10 @@ export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
                         e.dataTransfer.setData(DEVICE_DRAG_TYPE, d.type);
                         e.dataTransfer.effectAllowed = 'move';
                       }}
-                      onClick={() => use(d.type, true)}
+                      onClick={() => {
+                        remember(d.type);
+                        onAdd(d.type);
+                      }}
                       title={`${d.name} ${d.model}`}
                     >
                       <Thumb def={d} />
@@ -241,16 +316,16 @@ export function Palette({ onAdd }: { onAdd: (type: string) => void }) {
                       <path d="M3 1.5 L7 5 L3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     {CATEGORY_NAMES[g.cat]}
-                    <span className="palette__count">{g.defs.length}</span>
+                    <span className="palette__count">{g.entries.length}</span>
                   </button>
-                  {open && g.defs.map((d) => <Item key={d.type} def={d} onUse={use} />)}
+                  {open && g.entries.map((e) => <Item key={e.family.id} entry={e} onUse={use} />)}
                 </section>
               );
             })}
           </>
         )}
       </div>
-      <p className="palette__hint">クリックで中央に配置、ドラッグで好きな位置に配置</p>
+      <p className="palette__hint">クリックで機種を選んで配置、ドラッグで前に選んだ機種を配置（機種はあとからプロパティで変えられます）</p>
     </aside>
   );
 }

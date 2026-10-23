@@ -4,10 +4,21 @@
  * 正面から見た姿で、横長の本体（中にラックとピストン）の上に回転テーブルがあり、本体の両端に回転角度の調整ボルト（A）
  * またはショックアブソーバ（R）が付く。ポートは本体の左右の上面に A・B として描く（実物は本体の側面にある）。
  * オートスイッチ（D-M9 シリーズ）は本体の溝に付き、SW1 が A ポート側の回転端、SW2 が B ポート側の回転端を検出する。
+ * スピードコントローラ（エルボ形）はパラメータで選ぶと A・B に直付けする（M5・Rc1/8 のポート。M3 に付くエルボ形は AS-F にない）。
  */
 import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { text } from '../generic/parts';
 import { pneumaticSwitchList, leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
+import {
+  elbowMissing,
+  elbowOnPort,
+  portAirThread,
+  portSpeedController,
+  speedControllerAccessories,
+  speedControllerHint,
+  speedControllerNote,
+  speedControllerParam,
+} from './speed-controller';
 
 export interface RotarySize {
   size: number;
@@ -80,6 +91,7 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
       default: 'A',
     },
     { key: 'fitting', label: 'ポートの継手（チューブ外径）', unit: 'mm', options: [4, 6, 8].map((v) => ({ value: v, label: `φ${v}` })), default: 4 },
+    speedControllerParam,
     ...switchParams({ names: { 1: 'A 側の回転端', 2: 'B 側の回転端' }, magnet: false }),
   ];
   const defaults: ParamValues = Object.fromEntries(params.map((p) => [p.key, p.default]));
@@ -126,9 +138,13 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
     for (const id of ['A', 'B'] as const) {
       const x = L.ports[id];
       const w = Math.max(7, od * 1.25);
-      out += `<rect x="${f(x - w / 2 - 1)}" y="${f(top - 5)}" width="${f(w + 2)}" height="5" rx="0.6" fill="#c9ced3" stroke="#5c6166" stroke-width="0.5"/>
+      const sc = portSpeedController(p, L.z.thread, od);
+      // スピードコントローラのつまみは、回転テーブルに重ならないよう外側へ向ける
+      if (sc?.model) out += elbowOnPort(x, top, od, id === 'A' ? 'left' : 'right', sc);
+      else
+        out += `<rect x="${f(x - w / 2 - 1)}" y="${f(top - 5)}" width="${f(w + 2)}" height="5" rx="0.6" fill="#c9ced3" stroke="#5c6166" stroke-width="0.5"/>
   <rect x="${f(x - w / 2)}" y="${f(top - 15)}" width="${f(w)}" height="10" rx="1.2" fill="#eef0f2" stroke="#6b7177" stroke-width="0.5"/>
-  <rect x="${f(x - w / 2 - 0.6)}" y="${f(top - 18.5)}" width="${f(w + 1.2)}" height="4" rx="1" fill="#e9ebed" stroke="#7d8287" stroke-width="0.5"/>`;
+  <rect x="${f(x - w / 2 - 0.6)}" y="${f(top - 18.5)}" width="${f(w + 1.2)}" height="4" rx="1" fill="#e9ebed" stroke="#7d8287" stroke-width="0.5"/>${sc ? elbowMissing(x, top) : ''}`;
       out += text(x, f(top + 6.5), id, 4.2, '#333');
     }
     if (sw) {
@@ -144,17 +160,18 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
 
   const terminals = (p: ParamValues): TerminalDef[] => {
     const L = layout(s, p);
+    const sc = portSpeedController(p, L.z.thread, Number(p.fitting));
     const port = (id: 'A' | 'B'): TerminalDef => ({
       id,
       label: `${id} ポート`,
       hint: `${id} ポート`,
-      note: `${id} ポート（${L.z.thread}。給気で${id === 'A' ? '一方' : 'もう一方'}の向きへ回る）`,
+      note: `${id} ポート（${L.z.thread}。給気で${id === 'A' ? '一方' : 'もう一方'}の向きへ回る${speedControllerNote(sc)}）`,
       x: L.ports[id],
       y: L.top - 20,
       side: 'top',
       role: 'air',
       // ショックアブソーバ内蔵（R）の最高使用圧力は 0.6MPa
-      air: { kind: 'work', tubeOD: { param: 'fitting' }, thread: L.z.thread, minPressure: L.z.minPressure, maxPressure: p.adjust === 'R' && L.z.absorber ? Math.min(0.6, L.z.maxPressure) : L.z.maxPressure },
+      air: { kind: 'work', tubeOD: { param: 'fitting' }, ...portAirThread(sc, L.z.thread), minPressure: L.z.minPressure, maxPressure: p.adjust === 'R' && L.z.absorber ? Math.min(0.6, L.z.maxPressure) : L.z.maxPressure },
     });
     return [port('A'), port('B'), ...switchTerminals(p, L.leads, L.yEnd, NAMES)];
   };
@@ -169,6 +186,7 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
     description:
       `${s.description}サイズ・角度調整（調整ボルト A / ショックアブソーバ R）・ポートに付けるワンタッチ管継手のチューブ外径をパラメータで選ぶ。` +
       'ポート A・B を 5 ポート電磁弁の A・B に 1 本ずつつなぐ（給気した側の向きへ回る）。マグネットは標準で内蔵。' +
+      'パラメータ speedController でエルボ形スピードコントローラを A・B に直付けできる（M5・Rc1/8 のポートのサイズ 7 以上。型式はチューブ外径で決まる）。' +
       switchDescription({ 1: 'A 側の回転端', 2: 'B 側の回転端' }),
     labelPrefix: 'RA',
     width: L0.W,
@@ -182,9 +200,14 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
     links: switchLinks,
     params,
     ...(s.estimated ? { estimated: s.estimated } : {}),
+    accessories: (p) => {
+      const thread = sizeOf(s, p).thread;
+      return speedControllerAccessories(p, [['A', thread], ['B', thread]], Number(p.fitting));
+    },
     pneumatic: (p) => {
       const switches = pneumaticSwitchList(p, { 1: 'A 端', 2: 'B 端' });
-      return { symbol: 'rotary', ports: { a: 'A', b: 'B' }, ...(switches ? { switches } : {}) };
+      const thread = sizeOf(s, p).thread;
+      return { symbol: 'rotary', ports: { a: 'A', b: 'B' }, ...(switches ? { switches } : {}), ...speedControllerHint(p, [['a', thread], ['b', thread]], Number(p.fitting)) };
     },
   };
 }

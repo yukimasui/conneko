@@ -4,6 +4,7 @@
  * 図面の機器の mount（装着先と位置）から、
  * - 装着したユニットの入出力の先頭番号（params の ioIn / ioOut）
  * - 装着したユニットから決まる親のパラメータ（bus.host.fromUnits。マニホールドの連数など）
+ * - 通信タイプのマニホールドの、SI ユニットの出力とソレノイドの割付け（bus.host.serial。連の params の solA / solB）
  * - キャンバス上の位置（親の横・中に順に並べる）
  * - 内部電源の収支やスロット数などの指摘
  * を求める。
@@ -33,10 +34,33 @@ export interface BusGroup {
   rails: BusRailTotal[];
 }
 
+/** 通信タイプのマニホールドの SI ユニットの出力 1 点 */
+export interface SerialPoint {
+  /** SI ユニットの出力番号（0 から） */
+  output: number;
+  /** 連の機器ID */
+  device: string;
+  /** つながるソレノイド（ダブル配線のシングルの弁の B 側・ブランクプレートの連の空きの点は undefined） */
+  side?: 'A' | 'B';
+}
+
+/** 通信タイプのマニホールドの出力の割付け */
+export interface SerialLayout {
+  /** SI ユニットの型式 */
+  unitModel: string;
+  /** SI ユニットの出力点数 */
+  outputs: number;
+  wiring: 'double' | 'specified';
+  /** 連が占める出力（番号の順）。SI ユニットの点数を超えた分も含む */
+  points: SerialPoint[];
+}
+
 export interface BusLayout {
-  /** 機器ID → 装着で決まるパラメータ（ioIn / ioOut） */
+  /** 機器ID → 装着で決まるパラメータ（ioIn / ioOut、通信タイプのマニホールドの連の solA / solB） */
   params: Map<string, ParamValues>;
   groups: Map<string, BusGroup>;
+  /** 通信タイプのマニホールドの機器ID → 出力の割付け（連を装着したものだけ） */
+  serial: Map<string, SerialLayout>;
   problems: BusProblem[];
 }
 
@@ -52,11 +76,36 @@ const roundUp = (n: number, unit: number) => (unit > 0 ? Math.ceil(n / unit) * u
 
 const fmt = (n: number) => `${Math.round(n * 1000) / 1000}A`;
 
+/** 機器のソレノイドの数（空圧回路図の記号の操作方式のうち 'solenoid' の数。電磁弁でなければ 0） */
+export function solenoidCount(def: DeviceDefinition | undefined, params?: ParamValues): number {
+  const pn = def?.pneumatic;
+  const hint = typeof pn === 'function' ? pn(paramsWithDefaults(def!, params)) : pn;
+  const ops = hint?.valve?.operators;
+  return ops ? [ops.a, ops.b].filter((o) => o === 'solenoid').length : 0;
+}
+
+/** 通信タイプのマニホールドの、連の順に SI ユニットの出力を割り付ける */
+function serialLayout(hostDef: DeviceDefinition, host: DiagramDevice, members: DiagramDevice[], lookup: DefLookup): SerialLayout | undefined {
+  const spec = hostDef.bus?.host?.serial;
+  if (!spec) return undefined;
+  const hp = paramsWithDefaults(hostDef, host.params);
+  const wiring = (typeof spec.wiring === 'string' ? spec.wiring : String(hp[spec.wiring.param])) === 'specified' ? 'specified' : 'double';
+  const points: SerialPoint[] = [];
+  for (const m of members) {
+    const n = solenoidCount(lookup(m.type), m.params);
+    // ダブル配線はどの連も 2 点、配線指定はソレノイドの数（ブランクプレートは 1 点）
+    const size = wiring === 'double' ? 2 : Math.max(1, n);
+    for (let i = 0; i < size; i++) points.push({ output: points.length, device: m.id, ...(i < n ? { side: i === 0 ? ('A' as const) : ('B' as const) } : {}) });
+  }
+  return { unitModel: spec.unitModel(hp), outputs: typeof spec.outputs === 'function' ? spec.outputs(hp) : spec.outputs, wiring, points };
+}
+
 /** 装着関係を解析する */
 export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayout {
   const byId = new Map(devices.map((d) => [d.id, d]));
   const params = new Map<string, ParamValues>();
   const groups = new Map<string, BusGroup>();
+  const serial = new Map<string, SerialLayout>();
   const problems: BusProblem[] = [];
 
   for (const d of devices) {
@@ -165,6 +214,25 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
       }
     }
 
+    // 通信タイプのマニホールド: SI ユニットの出力をソレノイドに割り付ける
+    const sl = serialLayout(hostDef, g.host, g.members, lookup);
+    if (sl) {
+      serial.set(g.host.id, sl);
+      for (const p of sl.points) {
+        if (p.side) params.set(p.device, { ...params.get(p.device), [`sol${p.side}`]: p.output });
+      }
+      if (sl.points.length > sl.outputs) {
+        problems.push({
+          severity: 'error',
+          rule: 'manifold-outputs-over',
+          message: `${g.host.id}: SI ユニット ${sl.unitModel} の出力は ${sl.outputs} 点までです（連の割付けで ${sl.points.length} 点。${
+            sl.wiring === 'double' ? 'ダブル配線はどの連も 2 点を使います。シングルの弁が多ければ配線指定にします' : '連を減らすか、32 点の SI ユニットにします'
+          }）`,
+          devices: [g.host.id, ...g.members.map((m) => m.id)],
+        });
+      }
+    }
+
     // 内部電源の収支
     const totals = new Map<string, BusRailTotal>();
     const rail = (name: string) => totals.get(name) ?? (totals.set(name, { rail: name, supply: 0, load: 0 }), totals.get(name)!);
@@ -206,7 +274,22 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
     });
     params.set(d.id, { ...params.get(d.id), ...from(units) });
   }
-  return { params, groups, problems };
+  return { params, groups, serial, problems };
+}
+
+/** 通信タイプのマニホールドに装着した連の、ソレノイドの SI ユニットの出力（親の機器ID と出力番号）。割り付けていなければ undefined */
+export function serialOutputOf(layout: BusLayout, device: string, side: 'A' | 'B'): { host: string; output: number } | undefined {
+  for (const [host, s] of layout.serial) {
+    const p = s.points.find((x) => x.device === device && x.side === side);
+    if (p) return { host, output: p.output };
+  }
+  return undefined;
+}
+
+/** ソレノイドの SI ユニットの出力の表記（例: 'MF2 出力3'） */
+export function serialOutputName(layout: BusLayout, device: string, side: 'A' | 'B'): string | undefined {
+  const o = serialOutputOf(layout, device, side);
+  return o ? `${o.host} 出力${o.output}` : undefined;
 }
 
 /** 図面の機器の、装着で決まるパラメータを加えた params（明示した params が優先） */

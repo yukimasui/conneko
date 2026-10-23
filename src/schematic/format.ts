@@ -121,8 +121,11 @@ export const SCHEMATIC_LAYERS: Record<string, LayerDef> = {
   TEXT: { color: 7, description: 'その他の文字' },
 };
 
-/** 用紙の大きさ[mm]（横置き） */
+/** 用紙の大きさ[mm]（横置き。JIS P 0138 の A 列）。並びは画面で選ぶ順（小さい順） */
 export const PAPER_SIZES = {
-  A3: { width: 420, height: 297 },
   A4: { width: 297, height: 210 },
+  A3: { width: 420, height: 297 },
+  A2: { width: 594, height: 420 },
+  A1: { width: 841, height: 594 },
+  A0: { width: 1189, height: 841 },
 } as const;

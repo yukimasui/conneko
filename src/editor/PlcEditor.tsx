@@ -8,7 +8,9 @@ import { mountFamily } from '../model/ops';
 import {
   addUnit,
   compatibleTypes,
+  baseSizes,
   currentSlots,
+  fitBase,
   freeUnits,
   hasFixedSlots,
   mountUnit,
@@ -44,6 +46,7 @@ function UnitThumb({ device, def, params }: { device: DiagramDevice; def: Device
 /** ユニット構成（装着の順番をドラッグで変える、追加・取り外し、内部電源の収支） */
 function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; hostId: string; onApply: Props['onApply']; onJump: Props['onJump'] }) {
   const [renumber, setRenumber] = useState(true);
+  const [autoBase, setAutoBase] = useState(true);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [addType, setAddType] = useState('');
@@ -57,13 +60,23 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
   const units = new Map(diagram.devices.filter((x) => x.mount?.device === hostId).map((x) => [x.id, x]));
   const count = fixed ? slotCount(diagram, hostId, getDeviceDefinition) : slots.size + 1;
   const roles = hostDef.bus?.host?.slotRoles ?? {};
+  const roleCount = Object.keys(roles).length;
   const emptyPoints = hostDef.bus?.host?.numbering?.emptySlot;
   const system = ioSystem(diagram, hostId, getDeviceDefinition);
-  const candidates = compatibleTypes(hostDef, deviceDefinitions);
+  // 専用の位置（電源・CPU）のユニットは、その位置が空いているときだけ追加の候補に出す（電源の型式は電源ユニットの「機種を変える…」で替える）
+  const roleFree = (role: string) => Object.entries(roles).some(([slot, r]) => r === role && !slots.has(Number(slot)));
+  const candidates = compatibleTypes(hostDef, deviceDefinitions).filter((d) => !d.bus?.role || roleFree(d.bus.role));
   const free = freeUnits(diagram, hostId, getDeviceDefinition);
 
-  /** 構成の変更を反映する（入出力番号が変わった I/O の線番・リンク名も付け替える） */
-  const apply = (next: Diagram, message: string) => onApply(renumber ? renumberIoNames(diagram, next, hostId, getDeviceDefinition) : next, message);
+  /** ベースユニットを大きくできるか（いまより大きい同じ種類のベースがあるか） */
+  const canGrow = fixed && autoBase && baseSizes(hostDef, deviceDefinitions).some((x) => (x.bus!.host!.slots ?? 0) > count);
+
+  /** 構成の変更を反映する（入出力番号が変わった I/O の線番・リンク名も付け替え、ベースユニットの大きさを合わせる） */
+  const apply = (next: Diagram, message: string) => {
+    const fitted = fixed && autoBase ? fitBase(next, hostId, getDeviceDefinition, deviceDefinitions) : { diagram: next };
+    const out = renumber ? renumberIoNames(diagram, fitted.diagram, hostId, getDeviceDefinition) : fitted.diagram;
+    onApply(out, fitted.model ? `${message}。ベースユニットを ${fitted.model} にしました` : message);
+  };
 
   const range = (id: string) => {
     const u = system?.units.find((x) => x.device.id === id);
@@ -86,10 +99,11 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
     if (!id) return;
     const from = [...slots].find(([, x]) => x === id)?.[0];
     if (from === slot) return;
-    apply(moveUnit(diagram, hostId, id, slot, getDeviceDefinition), `${id} を位置 ${slot} へ移しました`);
+    apply(moveUnit(diagram, hostId, id, slot, getDeviceDefinition), `${id} を${fixed && roleCount && !roles[slot] ? `スロット ${slot - roleCount - 1}` : `位置 ${slot}`}へ移しました`);
   };
 
-  const cells = Array.from({ length: count }, (_, i) => i + 1);
+  // ベースユニットの大きさを自動で合わせるときは、最後に 1 つ空きを足して、そこへ落とせば大きいベースに替わるようにする
+  const cells = Array.from({ length: count + (canGrow ? 1 : 0) }, (_, i) => i + 1);
 
   return (
     <div className="plc-rack-wrap">
@@ -119,8 +133,8 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
               onDrop={drop(slot)}
             >
               <div className="plc-slot__no">
-                {slot}
-                {role && <span className="plc-slot__role">{ROLE_NAMES[role] ?? role}</span>}
+                {/* ベースユニットは、本体の印字どおり入出力スロットを 0 から数える（電源・CPU は役割の名前） */}
+                {role ? <span className="plc-slot__role">{ROLE_NAMES[role] ?? role}</span> : fixed && roleCount ? `スロット ${slot - roleCount - 1}` : slot}
               </div>
               {unit && def ? (
                 <div
@@ -160,7 +174,9 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
                   </div>
                 </div>
               ) : (
-                <div className="plc-slot__empty">{fixed ? `空き${emptyPoints && !role ? `（${emptyPoints}点）` : ''}` : 'ここに落とすと末尾へ'}</div>
+                <div className="plc-slot__empty">
+                  {slot > count ? '大きいベースに替えて追加' : fixed ? `空き${emptyPoints && !role ? `（${emptyPoints}点）` : ''}` : 'ここに落とすと末尾へ'}
+                </div>
               )}
             </div>
           );
@@ -230,6 +246,12 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
               {p.message}
             </p>
           ))}
+          {fixed && (
+            <label className="plc-renumber muted small">
+              <input type="checkbox" checked={autoBase} onChange={(e) => setAutoBase(e.target.checked)} />
+              ベースユニットの大きさ（スロット数）を、装着したユニットに合わせて自動で替える
+            </label>
+          )}
           <label className="plc-renumber muted small">
             <input type="checkbox" checked={renumber} onChange={(e) => setRenumber(e.target.checked)} />
             順番を変えて入出力番号が変わったら、つないだ電線の線番とリンクの名前も新しい番号にする

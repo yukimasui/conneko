@@ -8,7 +8,7 @@
  */
 import { buildModel, key, supplyLabel, type Model } from '../check/model';
 import { CIRCUIT_COLOR_RULES, type CircuitKind } from '../data/wires';
-import { resolveDevice } from '../devices/resolve';
+import { isLanPort, resolveDevice } from '../devices/resolve';
 import { resolveNum, type Conductor, type DeviceDefinition, type PowerSystem } from '../devices/types';
 import type { Diagram, TerminalRef } from './diagram';
 import { compareAddress, connectIo, ioHosts, ioSystem, type IoPoint } from './io';
@@ -82,8 +82,8 @@ export function suggestConnections(d: Diagram, from: TerminalRef, lookup: DefLoo
   if (!info) return { power: [], io: [], defaultName: uniqueLinkName(d, '') };
   const t = info.terminal;
   if (t.connector) {
-    // LAN ポート（ピンのない RJ-45）ならネットワークの候補、ほかのコネクタは候補なし
-    const lan = t.connector.pins === 0 && t.connector.kind === 'RJ45';
+    // LAN ポート（ピンのない RJ-45、RJ-45 とつなぐ通信コネクタ）ならネットワークの候補、ほかのコネクタは候補なし
+    const lan = isLanPort(t.connector);
     // 名前の案: EtherCAT のポートなら ECAT1, ECAT2 …、ほかは LAN1, LAN2 …
     const prefix = t.connector.protocols?.length === 1 && t.connector.protocols[0] === 'ethercat' ? 'ECAT' : 'LAN';
     const used = linkNames(d, NET_LINK_TYPE);
