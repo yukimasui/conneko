@@ -31,7 +31,10 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   for (const p of r.pins) {
     const [cn, no] = p.id.split('#');
     const conn = r.terminal(cn)?.connector;
-    if (!conn || !(Number(no) >= 1 && Number(no) <= conn.pins)) problems.push(`ピンIDが不正（'<コネクタ端子ID>#<1〜ピン数>'）: ${p.id}`);
+    // 画面に出さないエアのポート（role: 'air' のピン）は、コネクタに属さない
+    if (p.role === 'air') {
+      if (!p.air) problems.push(`エアのピンに air 指定がない: ${p.id}`);
+    } else if (!conn || !(Number(no) >= 1 && Number(no) <= conn.pins)) problems.push(`ピンIDが不正（'<コネクタ端子ID>#<1〜ピン数>'）: ${p.id}`);
     if (pinIds.has(p.id) || ids.has(p.id)) problems.push(`ピンIDが重複: ${p.id}`);
     pinIds.add(p.id);
   }
@@ -54,6 +57,13 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
     if (!ids.has(l.from) || !ids.has(l.to)) problems.push(`links に存在しない端子: ${l.from} -> ${l.to}`);
     if ((l.directOpening || l.linked) && l.switch !== 'NC' && l.switch !== 'NO') problems.push(`directOpening / linked は接点（switch: 'NC' / 'NO'）に指定する: ${l.from} -> ${l.to}`);
   }
+  for (const l of r.airLinks) {
+    if (!r.air.has(l.from) || !r.air.has(l.to)) problems.push(`airLinks に存在しないエアのポート: ${l.from} -> ${l.to}`);
+  }
+  for (const [unitPort, hostPort] of Object.entries(def.bus?.host?.airGallery ?? {})) {
+    if (!r.air.has(hostPort)) problems.push(`bus.host.airGallery に存在しないエアのポート: ${unitPort} -> ${hostPort}`);
+  }
+  for (const t of r.terminals) if (t.role === 'air' && !t.air) problems.push(`air 端子に air 指定がない: ${t.id}`);
   for (const g of def.distinctGroups ?? []) {
     for (const id of g) if (!ids.has(id)) problems.push(`distinctGroups に存在しない端子: ${id}`);
   }

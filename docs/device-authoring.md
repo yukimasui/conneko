@@ -131,6 +131,39 @@ bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } }
 - ベースユニットのようにスロットの位置が決まっている親は `host.slotX`（位置ごとの x 座標）、専用の位置は `host.slotRoles: { 1: 'power', 2: 'cpu' }`
   とユニット側の `bus.role` で表す。空きスロットが番号を占有する場合は `numbering.emptySlot` に点数を書く。
 
+### マニホールド（電磁弁を連ごとに装着するベース）
+
+電磁弁のマニホールドも `bus` で表す（お手本は `src/devices/smc/sy-manifold.ts`）。親がマニホールドベース、装着する機器 1 台が 1 連（ベース配管形の電磁弁・ブランクプレート）。
+
+```ts
+// 親（マニホールドベース）
+bus: {
+  kind: 'smc-ss5y3-41',
+  host: {
+    slots: 20,
+    origin: { x: 30, y: 0 },                      // 連を並べ始める位置
+    airGallery: { P: 'P', EA: 'EA', EB: 'EB' },   // 連のポート → 親のポート（SUP・EXH の通路）
+    fromUnits: (units) => ({ stations: units.length }), // 装着した連から親のパラメータを求める
+  },
+},
+modelOf: (p) => `SS5Y3-41-${String(p.stations).padStart(2, '0')}`,
+// 連（ベース配管形の電磁弁）
+bus: { kind: 'smc-ss5y3-41' },
+pins: [
+  { id: 'P', label: '1(P)', role: 'air', air: { kind: 'in', minPressure: 0.15, maxPressure: 0.7 } },
+  { id: 'EA', label: '5(EA)', role: 'air', air: { kind: 'exhaust' } },
+],
+```
+
+- `host.airGallery`: 装着した連のエアのポートを、親のポートにつなぐ通路（「連のポートID → 親のポートID」）。エアのチェック（`src/check/pneumatic.ts` の `airGalleryPairs`）は、
+  これを機器の中のチューブとみなしてエアの届く範囲・圧力を求める（排気ポートへ向かう向きは使わない）。通路でつながったポートは未接続として指摘しない。
+- 連の P・EA・EB のように画面に出さないエアのポートは、`pins` に `role: 'air'` で書く（ID は自由。`airLinks` から参照できる）。
+  使用圧力範囲もここに書くと、連ごとに確かめる。どの親にもつながっていなければ「マニホールドに装着されていません」と指摘する。
+- `host.fromUnits`: 装着した連（位置の順、params は既定値を補完済み）から親のパラメータを求める。返した値は親の params に加わり、
+  `modelOf`（マニホールドの型式の連数・継手の表記）と `svg`（連の右端のエンドプレート）に使える。親の `svg` は枠の外（連の右）にも描ける。
+- 連の A・B ポートは、その連の機器の端子にする（マニホールドベースの継手も連の絵に含める）。ソレノイドのリード線も連の機器の端子。
+- 分類が `valve` で `bus.host` を持つ機器はマニホールドとみなし、右クリック・インスペクタからバルブエディタ（`src/editor/ValveEditor.tsx`）で連の構成・つなぎ先を編集できる。
+
 ## パラメータで変わる端子・ピン・内部経路
 
 `terminals` / `pins` / `links` はパラメータを受け取って配列を返す関数にもできる（引数は既定値と `ioIn` / `ioOut` を補完済み）。

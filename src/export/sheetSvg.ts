@@ -114,8 +114,13 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       out.push(`<text x="${px + 6}" y="${py + def.height + 11}" font-family="sans-serif" font-size="9" fill="#1d4ed8">${esc(text)}</text>`);
       continue;
     }
+    // 装着したユニットは横に詰めて並ぶため、画面と同じく機器名だけにする
+    if (x.mount) {
+      out.push(`<text x="${px}" y="${py - 6}" font-family="sans-serif" font-size="9" font-weight="bold" fill="#111827">${esc(x.id)}</text>`);
+      continue;
+    }
     out.push(
-      `<text x="${px}" y="${py - 8}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
+      `<text x="${px}" y="${py - (bus.groups.has(x.id) ? 22 : 8)}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
     );
     if (notes && x.note) {
       const w = Math.min(240, 14 + x.note.length * 10);

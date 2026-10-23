@@ -6,7 +6,7 @@ import type { Diagram, DiagramWire } from '../model/diagram';
 import { splitCrossSheetWires } from '../model/ops';
 import { checkDiagram } from './checkDiagram';
 import { buildModel } from './model';
-import { airPressures } from './pneumatic';
+import { airGalleryPairs, airPressures } from './pneumatic';
 
 const port = (id: string, air: TerminalDef['air'], extra: Partial<TerminalDef> = {}): TerminalDef => ({ id, x: 0, y: 0, side: 'top', role: 'air', air, ...extra });
 const base = { name: '', model: '', labelPrefix: 'X', width: 10, height: 10, svg: '' };
@@ -171,5 +171,66 @@ describe('チューブの補完とエアのリンク', () => {
     const p = airPressures(buildModel(out, getDeviceDefinition, () => {}));
     expect(p.get('SOL1:P')).toBe(0.5);
     expect(checkDiagram(out, getDeviceDefinition).filter((i) => i.rule.startsWith('link-'))).toEqual([]);
+  });
+});
+
+describe('装着した機器のポートを親のポートにつなぐ通路（bus.host.airGallery）', () => {
+  /** 親: 供給 IN と排気 EXH を持つベース。装着した機器の P を IN に、R を EXH につなぐ */
+  const baseDef: DeviceDefinition = {
+    ...base,
+    type: 'test.base',
+    category: 'valve',
+    terminals: [port('IN', { kind: 'in', tubeOD: 8 }), port('EXH', { kind: 'exhaust', tubeOD: 8 })],
+    bus: { kind: 'test-base', host: { airGallery: { P: 'IN', R: 'EXH' } } },
+  };
+  /** 装着する機器: P・R は画面に出さないポート（pins）。P → OUT が通る */
+  const unitDef: DeviceDefinition = {
+    ...base,
+    type: 'test.unit',
+    category: 'valve',
+    terminals: [port('OUT', { kind: 'work', tubeOD: 6 })],
+    pins: [
+      { id: 'P', role: 'air', air: { kind: 'in', minPressure: 0.3 } },
+      { id: 'R', role: 'air', air: { kind: 'exhaust' } },
+    ],
+    airLinks: [
+      { from: 'P', to: 'OUT', directed: true, valve: 'on' },
+      { from: 'OUT', to: 'R', directed: true, valve: 'off' },
+    ],
+    bus: { kind: 'test-base' },
+  };
+  const lk = (type: string) => [baseDef, unitDef].find((d) => d.type === type) ?? lookup(type);
+  const diagram = (mounted: boolean): Diagram => ({
+    devices: [
+      { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0, params: { tubeOD: 8, pressure: 0.4 } },
+      { id: 'B1', type: 'test.base', x: 0, y: 0 },
+      { id: 'U1', type: 'test.unit', x: 0, y: 0, ...(mounted ? { mount: { device: 'B1', slot: 1 } } : {}) },
+      { id: 'CY1', type: 'test.cylinder', x: 0, y: 0 },
+    ],
+    wires: [tube('AIR1.OUT', 'B1.IN', 8), tube('U1.OUT', 'CY1.H', 6)],
+  });
+
+  it('親のポートから装着した機器の中を通ってエアが届く。排気の通路には送らない', () => {
+    const m = buildModel(diagram(true), lk, () => {});
+    expect(airGalleryPairs(m)).toEqual([
+      ['U1:P', 'B1:IN'],
+      ['U1:R', 'B1:EXH'],
+    ]);
+    const p = airPressures(m);
+    expect(p.get('U1:P')).toBe(0.4);
+    expect(p.get('CY1:H')).toBe(0.4);
+    expect(p.has('B1:EXH')).toBe(false);
+  });
+
+  it('通路でつながったポートは未接続にしない。装着していなければ指摘する', () => {
+    const rulesOf = (d: Diagram) => checkDiagram(d, lk).filter((i) => i.rule.startsWith('air')).map((i) => `${i.rule}:${i.devices[0]}`);
+    expect(rulesOf(diagram(true))).toEqual(['air-unconnected:CY1']);
+    expect(rulesOf(diagram(false))).toEqual(expect.arrayContaining(['air-not-mounted:U1', 'air-no-supply:CY1']));
+  });
+
+  it('画面に出さないポートの使用圧力範囲も確かめる', () => {
+    const d = diagram(true);
+    d.devices[0].params = { tubeOD: 8, pressure: 0.2 };
+    expect(checkDiagram(d, lk).filter((i) => i.rule === 'air-under-pressure').map((i) => i.devices[0])).toEqual(['U1']);
   });
 });

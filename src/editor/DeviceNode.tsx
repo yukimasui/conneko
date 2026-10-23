@@ -90,7 +90,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
           </div>
         )}
         <strong>{id}</strong>
-        <span>{deviceModel(def, data.params)}</span>
+        <span>{deviceModel(def, params)}</span>
       </div>
       <svg
         className="device-node__svg"
