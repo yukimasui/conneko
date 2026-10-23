@@ -56,6 +56,7 @@ const REUSE_DISTANCE = 450;
  * 端子の近くにリンクを置いてつなぐ（置いたリンクの機器と、リンクと端子をつなぐ電線を返す）。
  * リンクは端子から電線が出る向きに離して置き、電線をつなぐ側を端子に向ける。ほかの機器と重なる場合はずらす。
  * 同じシートの近くに同じ名前のリンクがあれば、それにつなぐ（device は undefined）。
+ * sameTerminal を渡すと、その電線で同じ端子（ref）とつながっているリンクだけを使う（別の機器の端子どうしでリンクを共用しない）。
  */
 function linkAt(
   d: Diagram,
@@ -69,6 +70,7 @@ function linkAt(
   usedWires: string[],
   linkType = LINK_TYPE,
   avoid: string[] = placed.map((x) => x.id),
+  sameTerminal?: DiagramWire[],
 ) {
   const linkDef = lookup(linkType)!;
   const port = linkDef.netLabel?.terminal ?? 'T';
@@ -86,6 +88,15 @@ function linkAt(
   const near = all
     .filter((x) => !avoid.includes(x.id))
     .filter((x) => x.type === linkType && String(x.params?.name ?? '').trim() === name)
+    .filter(
+      (x) =>
+        !sameTerminal ||
+        sameTerminal.some((w) => {
+          const [a, b] = [w.from, w.to];
+          const touches = (r: TerminalRef) => r.device === ref.device && r.terminal === ref.terminal;
+          return (a.device === x.id && touches(b)) || (b.device === x.id && touches(a));
+        }),
+    )
     .map((x) => ({ x, dist: Math.hypot(x.x + W / 2 - p.x, x.y + H / 2 - p.y) }))
     .filter((c) => c.dist <= REUSE_DISTANCE)
     .sort((a, b) => a.dist - b.dist)[0];
@@ -214,7 +225,8 @@ export function splitCrossSheetWires(d: Diagram, lookup: DefLookup): Diagram {
     if (!dev) continue;
     const avoid = firstLink.has(e.i) ? [firstLink.get(e.i)!] : [];
     const attrs = { color, sizeSq, wireType, ...(wireNo ? { wireNo } : {}), ...(tubeOD ? { tubeOD } : {}) };
-    const r = linkAt(d, placed, e.ref, names[e.i], sheetOf(d, dev), attrs, lookup, usedIds, usedWires, typeOf(e.w), avoid);
+    // 同じ端子から出る電線だけリンクを共用する（別の機器の端子へ長い電線を引かない）
+    const r = linkAt(d, placed, e.ref, names[e.i], sheetOf(d, dev), attrs, lookup, usedIds, usedWires, typeOf(e.w), avoid, [...d.wires, ...newWires]);
     if (r.device) placed.push(r.device);
     firstLink.set(e.i, r.wire.to.device);
     newWires.push(r.wire);

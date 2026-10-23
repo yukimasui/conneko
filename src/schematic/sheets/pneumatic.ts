@@ -260,16 +260,29 @@ function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number): Drawn
     return { pins: { in: [x, cy], out: [x + 12, cy] }, box: { x, y: cy - 3, w: 12, h: 6 }, width: 12 };
   }
   if (s === 'residual-valve') {
-    // 3 ポート 2 位置の手動弁（ロック付き）
-    const bx = x + 6;
-    pen.rect(bx, cy - 6, 10, 12);
-    pen.rect(bx + 10, cy - 6, 10, 12);
-    pen.arrow([bx + 3, cy + 6], [bx + 3, cy - 6]);
-    pen.arrow([bx + 17, cy - 6], [bx + 17, cy + 6]);
+    // 3 ポート 2 位置の手動弁（ロック付き）。外部の配管は右の箱（通常＝二次側を排気する位置）につなぐ
+    const bx = x + 8;
+    const top = cy - 6;
+    const bot = cy + 6;
+    pen.rect(bx, top, 10, 12);
+    pen.rect(bx + 10, top, 10, 12);
+    // 左の箱（ハンドルを開けた位置）: 1(IN) → 2(OUT)、3(EXH) は塞ぐ
+    pen.arrow([bx + 3, bot], [bx + 5, top]);
+    pen.line([[bx + 7, bot], [bx + 7, bot - 3]]);
+    pen.line([[bx + 5.5, bot - 3], [bx + 8.5, bot - 3]]);
+    // 右の箱（閉じた位置）: 2(OUT) → 3(EXH)、1(IN) は塞ぐ
+    pen.arrow([bx + 15, top], [bx + 17, bot]);
+    pen.line([[bx + 13, bot], [bx + 13, bot - 3]]);
+    pen.line([[bx + 11.5, bot - 3], [bx + 14.5, bot - 3]]);
+    // 手動操作（ロック付き）
     pen.line([[bx, cy], [bx - 5, cy]]);
     pen.line([[bx - 5, cy - 2.5], [bx - 5, cy + 2.5]]);
-    pen.line([[x, cy + 6], [bx + 13, cy + 6]], { layer: 'WIRE' });
-    return { pins: { in: [x, cy + 6], out: [bx + 17, cy - 6], exh: [bx + 17, cy + 6] }, box: { x, y: cy - 6, w: 26, h: 12 }, width: 26 };
+    pen.line([[bx - 3, cy - 1.5], [bx - 2, cy + 1.5]]);
+    // 一次側は下から、二次側は上から出して、主の流れ（cy）につなぐ
+    pen.line([[x, cy], [x + 2, cy], [x + 2, bot + 5], [bx + 13, bot + 5], [bx + 13, bot]], { layer: 'WIRE' });
+    pen.line([[bx + 15, top], [bx + 15, top - 5], [bx + 24, top - 5], [bx + 24, cy]], { layer: 'WIRE' });
+    drawExhaust(pen, [bx + 17, bot], false);
+    return { pins: { in: [x, cy], out: [bx + 24, cy], exh: [bx + 17, bot] }, box: { x, y: top - 5, w: bx + 24 - x, h: 22 }, width: bx + 24 - x };
   }
   if (s === 'pressure-switch' || s === 'gauge') {
     pen.line([[x, cy], [x + 4, cy]], { layer: 'WIRE' });

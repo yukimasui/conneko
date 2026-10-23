@@ -15,7 +15,9 @@ describe('部品表・線番表・I/O 表', () => {
     expect(cp.qty).toBe(2);
     expect(cp.ids).toEqual(['CP1', 'CP2']);
     expect(rows.some((r) => r.category === 'link')).toBe(false);
-    expect(rows.reduce((n, r) => n + r.qty, 0)).toBe(sampleDiagram.devices.filter((d) => lookup(d.type)?.category !== 'link').length);
+    // 機器の台数とチューブの本数の合計
+    const tubes = sampleDiagram.wires.filter((w) => w.wireType === 'TU').length;
+    expect(rows.reduce((n, r) => n + r.qty, 0)).toBe(sampleDiagram.devices.filter((d) => lookup(d.type)?.category !== 'link').length + tubes);
   });
 
   it('チューブは部品表に型式（種類・外径・色）ごとの本数で入り、線番表にチューブの型式で入る', () => {

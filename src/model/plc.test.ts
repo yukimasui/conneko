@@ -23,8 +23,9 @@ describe('PLC エディタの操作', () => {
     expect(address(moved, 'OUT1')).toBe('R000');
     expect(address(moved, 'IN1')).toBe('R200');
     const out = renumberIoNames(before, moved, 'PLC1', lookup);
-    // R000（センサー）と R200（表示灯）が入れ替わっても、名前がぶつからずに付け替わる
-    expect(linkNames(out).filter((n) => /^R\d/.test(n))).toEqual(['R000', 'R000', 'R200', 'R200']);
+    // 入力（R000〜R004）と出力（R200〜R203）が入れ替わっても、名前がぶつからずに付け替わる（リンクは 2 つのシートに 1 つずつ）
+    const twice = (names: string[]) => names.flatMap((x) => [x, x]);
+    expect(linkNames(out).filter((n) => /^R\d/.test(n)).sort()).toEqual(twice(['R000', 'R001', 'R002', 'R003', 'R200', 'R201', 'R202', 'R203', 'R204']));
     const sensorWire = out.wires.find((w) => w.to.device === 'PH1' && w.to.terminal === 'BK') ?? out.wires.find((w) => w.from.device === 'PH1' && w.from.terminal === 'BK');
     expect(sensorWire?.wireNo).toBe('R200');
     expect(checkDiagram(out, lookup).filter((i) => !i.devices.includes('FAN1'))).toEqual([]);

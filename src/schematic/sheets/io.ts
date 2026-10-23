@@ -198,9 +198,12 @@ export function ioPages(
         wireNo(pin, at, row.net);
         if (e.element.kind === 'box') {
           // 箱: 信号の端子を左、母線につながる端子を右に並べ替えた小さな箱
+          // 1 台に複数のスイッチがある機器（オートスイッチ付きシリンダの 'SW1.BK' など）は、同じスイッチの端子だけを出す。箱に出せる端子は 2 つまで
+          const group = t.includes('.') ? t.slice(0, t.indexOf('.') + 1) : '';
           const right = Object.keys(e.element.pinOf)
-            .filter((x) => x !== t && railOf(ctx.netOf(e.device, x)))
-            .sort((a, b) => rails.indexOf(railOf(ctx.netOf(e.device, a))!) - rails.indexOf(railOf(ctx.netOf(e.device, b))!));
+            .filter((x) => x !== t && (!group || x.startsWith(group)) && railOf(ctx.netOf(e.device, x)))
+            .sort((a, b) => rails.indexOf(railOf(ctx.netOf(e.device, a))!) - rails.indexOf(railOf(ctx.netOf(e.device, b))!))
+            .slice(0, 2);
           const def = fieldBox(e.device, e.def.model, t, right);
           const id = `iobox_${safe(e.device)}_${safe(t)}_${safe(right.join('_'))}`;
           ctx.addSymbol(id, def);
