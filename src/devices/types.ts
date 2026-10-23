@@ -498,6 +498,87 @@ export interface DeviceDefinition {
   estimated?: string;
   /** 展開図の記号に切り出すときの補足（自動の切り出しで決めきれない機器だけに書く。src/schematic/elements.ts） */
   schematic?: SchematicHint;
+  /** 空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号）での表し方。エア機器に書く */
+  pneumatic?: PneumaticHint;
+}
+
+/**
+ * 空圧回路図の記号の種類と、記号のポート名。ports には「記号のポート名 → 端子ID」を書く。
+ * - source: 空気圧源（out）
+ * - filter / mist-separator / lubricator / regulator / filter-regulator: エアフィルタ・ミストセパレータ・ルブリケータ・減圧弁（in, out）
+ * - frl: 3 点セット（units の順に左から並べる簡略でない記号。in, out）
+ * - residual-valve: 残圧排気弁（3 ポート手動弁。in, out, exh）
+ * - shutoff: 止め弁・ボール弁（in, out）
+ * - check-valve: 逆止弁（in → out の向きに流れる。in, out）
+ * - speed-controller: 速度制御弁（絞り＋逆止弁。in → out が自由流れ、out → in が絞られる流れ。in, out）
+ * - valve: 方向制御弁（ISO のポート番号 '1'(P) '2'(B / 3 ポートは A) '4'(A) '3'(EB / 3 ポートは R) '5'(EA)、パイロット '12' '14'）
+ * - cylinder: シリンダ（head: ヘッド側＝押す側、rod: ロッド側＝引く側。単動は使う側だけ）
+ * - gripper: エアチャック（open, close） / rotary: ロータリアクチュエータ（a, b）
+ * - silencer: サイレンサ（in） / pressure-switch: 圧力スイッチ（in） / gauge: 圧力計（in）
+ * - tee: 分岐継手（a, b, c） / manifold: マニホールド（sup, exh。装着した電磁弁をまとめる）
+ * - vacuum-ejector: 真空エジェクタ（in, vac, exh） / vacuum-pad: 吸着パッド（vac）
+ */
+export type PneumaticSymbolKind =
+  | 'source'
+  | 'filter'
+  | 'mist-separator'
+  | 'lubricator'
+  | 'regulator'
+  | 'filter-regulator'
+  | 'frl'
+  | 'residual-valve'
+  | 'shutoff'
+  | 'check-valve'
+  | 'speed-controller'
+  | 'valve'
+  | 'cylinder'
+  | 'gripper'
+  | 'rotary'
+  | 'silencer'
+  | 'pressure-switch'
+  | 'gauge'
+  | 'tee'
+  | 'manifold'
+  | 'vacuum-ejector'
+  | 'vacuum-pad';
+
+/** 方向制御弁の操作方式 */
+export type ValveOperator = 'solenoid' | 'pilot' | 'manual' | 'mechanical' | 'spring';
+
+export interface PneumaticHint {
+  symbol: PneumaticSymbolKind;
+  /** 記号のポート名 → 端子ID（上の一覧のポート名） */
+  ports: Record<string, string>;
+  /** 方向制御弁（symbol: 'valve'） */
+  valve?: {
+    /** ポート数（3 ポート弁・5 ポート弁） */
+    ways: 2 | 3 | 5;
+    positions: 2 | 3;
+    /** 左側（14 側、A 側）と右側（12 側、B 側）の操作方式。シングルソレノイドは { a: 'solenoid', b: 'spring' } */
+    operators: { a: ValveOperator; b: ValveOperator };
+    /** 3 位置の中立: クローズドセンタ・エキゾーストセンタ・プレッシャセンタ */
+    center?: 'closed' | 'exhaust' | 'pressure';
+    /** 常時開（3 ポート弁で通電していないとき 1→2 が通じる） */
+    normallyOpen?: boolean;
+    /** ソレノイドの電気端子（記号の横にソレノイドの名前を書くため。a・b 側の + 端子の ID） */
+    solenoids?: { a?: string; b?: string };
+  };
+  /** シリンダ（symbol: 'cylinder'） */
+  cylinder?: {
+    acting: 'double' | 'single-push' | 'single-pull';
+    /** 両ロッド */
+    doubleRod?: boolean;
+    /** クッション付き */
+    cushion?: boolean;
+    /** マグネット内蔵（オートスイッチ付き） */
+    magnet?: boolean;
+    /** オートスイッチの電気端子（記号の横にスイッチの名前を書くため。ヘッド側・ロッド側の出力端子の ID） */
+    switches?: { head?: string; rod?: string };
+  };
+  /** 3 点セット（symbol: 'frl'）の構成（左＝一次側から） */
+  units?: ('filter' | 'mist-separator' | 'regulator' | 'lubricator' | 'filter-regulator')[];
+  /** 圧力計付き（減圧弁・3 点セット） */
+  gauge?: boolean;
 }
 
 /**

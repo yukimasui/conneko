@@ -483,6 +483,7 @@ export function Inspector(props: Props) {
       <WireFields value={props.wireDefaults} onChange={(patch) => props.onWireDefaultsChange({ ...props.wireDefaults, ...patch })} />
       <div className="help">
         <p>端子（機器上の小さな丸）から別の端子へドラッグすると配線できます。</p>
+        <p>エアのポート（青い二重丸）どうしをつなぐとチューブになります。外径はポートの継手に合わせ、種類と色は前に引いたチューブに合わせます。</p>
         <p>機器や電線をクリックすると、ここで詳細を編集できます。Delete キーで削除します。</p>
       </div>
     </aside>

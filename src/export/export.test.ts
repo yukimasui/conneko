@@ -18,6 +18,24 @@ describe('部品表・線番表・I/O 表', () => {
     expect(rows.reduce((n, r) => n + r.qty, 0)).toBe(sampleDiagram.devices.filter((d) => lookup(d.type)?.category !== 'link').length);
   });
 
+  it('チューブは部品表に型式（種類・外径・色）ごとの本数で入り、線番表にチューブの型式で入る', () => {
+    const tube = (id: string, color: string) => ({ id, from: { device: 'AIR1', terminal: 'OUT' }, to: { device: 'SOL1', terminal: 'P' }, color, sizeSq: 0, wireType: 'TU', tubeOD: 6 });
+    const d = {
+      devices: [
+        { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
+        { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+      ],
+      wires: [tube('T1', 'blue'), tube('T2', 'blue'), tube('T3', 'black')],
+    };
+    const rows = bomRows(d, lookup).filter((r) => r.model.startsWith('TU'));
+    expect(rows.map((r) => [r.model, r.qty])).toEqual([
+      ['TU0604B', 1],
+      ['TU0604BU', 2],
+    ]);
+    expect(wireRows(d, lookup).rows[0]).toMatchObject({ wireType: 'チューブ', spec: 'チューブ TU0604BU（φ6 青）' });
+    expect(bomRows(d, lookup).find((r) => r.ids.includes('SOL1'))?.model).toBe('SY3120-5LZ-C6');
+  });
+
   it('線番表は全シートの電線を含み、I/O 表は I/O ごとのコメントと接続先を持つ', () => {
     expect(wireRows(sampleDiagram, lookup).rows).toHaveLength(sampleDiagram.wires.length);
     const r000 = ioRows(sampleDiagram, lookup).find((r) => r.address === 'R000')!;

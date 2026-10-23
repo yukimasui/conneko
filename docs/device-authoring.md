@@ -201,6 +201,27 @@ airLinks: [
 modelOf: (p) => `CDM2B${p.bore}-${p.stroke}Z`,
 ```
 
+空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号で描く図）に出すため、エア機器には `pneumatic`（`PneumaticHint`）を書く。
+記号の種類（`symbol`）と、記号のポート名から端子IDへの対応（`ports`）を書く。ポート名は types.ts の `PneumaticSymbolKind` の説明のとおり。
+
+```ts
+// 5 ポート 2 位置シングルソレノイド（ISO のポート番号: 1=P, 4=A, 2=B, 5=EA, 3=EB）
+pneumatic: {
+  symbol: 'valve',
+  ports: { '1': 'P', '2': 'B', '4': 'A', '3': 'EB', '5': 'EA' },
+  valve: { ways: 5, positions: 2, operators: { a: 'solenoid', b: 'spring' }, solenoids: { a: '+' } },
+},
+// 複動シリンダ（オートスイッチ付き）
+pneumatic: { symbol: 'cylinder', ports: { head: 'HEAD', rod: 'ROD' }, cylinder: { acting: 'double', magnet: true, switches: { head: 'SW1.BK', rod: 'SW2.BK' } } },
+// フィルタレギュレータ（圧力計付き）
+pneumatic: { symbol: 'filter-regulator', ports: { in: 'IN', out: 'OUT' }, gauge: true },
+// スピードコントローラ（in → out が自由流れ）
+pneumatic: { symbol: 'speed-controller', ports: { in: 'IN', out: 'OUT' } },
+```
+
+- 方向制御弁は、通電していない位置（スプリング側・`operators.b` の側）が記号の右の箱になる。3 位置は `center` で中立の形を選ぶ
+- パラメータで記号が変わる機器（シングル・ダブルを選べる電磁弁など）は、パラメータごとに定義を分けるか、機器ごとに `pneumatic` を書き分ける
+
 カテゴリは `air-supply`（エア源・3 点セット）、`valve`（電磁弁・バルブ）、`actuator`（シリンダ・アクチュエータ）、`air-fitting`（継手・速度制御・エア周辺）を使う。
 
 ## 展開図の記号（`schematic`）

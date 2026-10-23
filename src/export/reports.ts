@@ -3,7 +3,7 @@
  * 画面の接続リスト、印刷、CSV 保存で共通に使う。
  */
 import { buildModel, key } from '../check/model';
-import { getTubeColor, tubeModel } from '../data/tubes';
+import { getTubeColor, getTubeType, tubeModel } from '../data/tubes';
 import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
 import { deviceModel, paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
@@ -160,6 +160,26 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     };
     g.qty++;
     g.ids.push(x.id);
+    groups.set(k, g);
+  }
+  // チューブ（種類・外径・色ごとの本数。長さは図面にないので本数だけ）
+  for (const w of d.wires) {
+    if (!isTube(w)) continue;
+    const od = w.tubeOD ?? 6;
+    const model = tubeModel(w.wireType, od, w.color);
+    const k = `tube|${model}`;
+    const g = groups.get(k) ?? {
+      category: 'air-fitting' as DeviceCategory,
+      maker: 'SMC',
+      model,
+      name: getTubeType(w.wireType)?.name ?? 'チューブ',
+      spec: `外径 φ${od}、${getTubeColor(w.color)?.name ?? w.color}（本数。長さは現物合わせ）`,
+      qty: 0,
+      ids: [],
+      estimated: false,
+    };
+    g.qty++;
+    g.ids.push(w.id);
     groups.set(k, g);
   }
   return [...groups.values()]

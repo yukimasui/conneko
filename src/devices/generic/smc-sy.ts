@@ -188,6 +188,16 @@ export function buildSy(s: SySpec): DeviceDefinition {
       },
     ],
     modelOf: (p) => `${s.model}-C${p.portAB}`,
+    pneumatic: {
+      symbol: 'valve',
+      ports: { '1': 'P', '2': 'B', '4': 'A', '3': 'EB', '5': 'EA' },
+      valve: {
+        ways: 5,
+        positions: 2,
+        operators: { a: 'solenoid', b: double ? 'solenoid' : 'spring' },
+        solenoids: double ? { a: 'A+', b: 'B+' } : { a: '+' },
+      },
+    },
     loadCurrent: COIL_CURRENT,
     schematic: { elements: pilots.map((p) => ({ kind: 'coil' as const, terminals: [`${p.side}+`, `${p.side}-`] })) },
   };

@@ -73,6 +73,7 @@ const def: DeviceDefinition = {
       default: 8,
     },
   ],
+  pneumatic: { symbol: 'source', ports: { out: 'OUT' } },
   terminals: [
     {
       id: 'OUT',
