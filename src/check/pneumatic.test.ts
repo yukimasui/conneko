@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { getDeviceDefinition } from '../devices/registry';
 import type { DeviceDefinition, TerminalDef } from '../devices/types';
-import { normalizeTubes } from '../model/air';
+import { airCandidates, normalizeTubes } from '../model/air';
+import { applyMateCandidate } from '../model/mates';
+import { deviceDefinitions } from '../devices/registry';
 import type { Diagram, DiagramWire } from '../model/diagram';
 import { splitCrossSheetWires } from '../model/ops';
 import { checkDiagram } from './checkDiagram';
@@ -171,5 +173,24 @@ describe('チューブの補完とエアのリンク', () => {
     const p = airPressures(buildModel(out, getDeviceDefinition, () => {}));
     expect(p.get('SOL1:P')).toBe(0.5);
     expect(checkDiagram(out, getDeviceDefinition).filter((i) => i.rule.startsWith('link-'))).toEqual([]);
+  });
+});
+
+describe('エアのポートから引いたときの候補', () => {
+  it('エア源の出口からは一次側のポートを持つ機器、電磁弁の A からは作業ポートを持つ機器を出し、選ぶとチューブでつなぐ', () => {
+    const d: Diagram = {
+      devices: [
+        { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
+        { id: 'SOL1', type: 'smc.sy3120-5lz', x: 300, y: 0 },
+      ],
+      wires: [],
+    };
+    const fromSource = airCandidates(d, { device: 'AIR1', terminal: 'OUT' }, deviceDefinitions, getDeviceDefinition);
+    expect(fromSource[0]).toMatchObject({ device: 'SOL1', pairs: [{ from: 'OUT', to: 'P' }] });
+    expect(fromSource.some((c) => !c.device && c.type === 'smc.sy3220-5lz')).toBe(true);
+    const fromA = airCandidates(d, { device: 'SOL1', terminal: 'A' }, deviceDefinitions, getDeviceDefinition);
+    expect(fromA.every((c) => c.pairs[0].to !== 'P')).toBe(true);
+    const { diagram } = applyMateCandidate(d, { device: 'AIR1', terminal: 'OUT' }, fromSource[0], { x: 0, y: 0 }, getDeviceDefinition);
+    expect(diagram.wires[0]).toMatchObject({ wireType: 'TU', tubeOD: 8, from: { device: 'AIR1', terminal: 'OUT' }, to: { device: 'SOL1', terminal: 'P' } });
   });
 });
