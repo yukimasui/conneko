@@ -213,7 +213,8 @@ pins: (p) => Array.from({ length: 16 }, (_, i) => ({ id: `CN1#${i + 1}`, label: 
 - `kind`（`AirPortKind`）: `supply`（エア源の出口。`pressure` を書く）、`in`（一次側）、`out`（二次側）、`work`（電磁弁の A・B、シリンダのポートなど）、`exhaust`（排気。未接続でも警告しない）、`pilot`、`vacuum`
 - `tubeOD`: 適合チューブの外径[mm]。ねじポートの機器は、付ける継手のチューブ外径を書く（パラメータで選べるなら `{ param: 'portSize' }`）
 - `minPressure` / `maxPressure`: 使用圧力範囲[MPa]。届く圧力が範囲の外なら警告する
-- `thread`: ポートのねじの呼び（`M5`・`Rc1/8` など）。ねじのポートに付ける継手は、ねじの大きさで付けられる外径が決まる（M5 なら φ6 まで。`src/data/threads.ts`）。部品表には、チューブをつないだねじのポートごとにワンタッチ管継手（KQ2H）が入る
+- `thread`: ポートのねじの呼び（`M5`・`Rc1/8` など）。ねじのポートに付ける継手は、ねじの大きさで付けられる外径が決まる（M5 なら φ6 まで。`src/data/threads.ts`）。部品表には、チューブをつないだねじのポートごとにワンタッチ管継手（KQ2H）が入る。
+  ポートに継手付きの部品（直付けのスピードコントローラなど）を付けたときは `thread` を書かない（チューブをつなぐのはその部品のワンタッチ管継手なので、KQ2H を入れず、ねじと継手の外径のチェックもしない）
 - `male: true`: おねじのポート（サイレンサ、エルボ形スピードコントローラのシリンダ側など）。相手のめねじのポートへ直接ねじ込むので、つないだ線は直結として扱う（チューブの本数・継手に数えず、ねじの大きさの一致を確かめる）
 - 使わないことがあるポート（パイロットポート、片側だけ使うポートなど）は `optional: true`
 - 電磁弁のソレノイド、オートスイッチ・圧力スイッチのリード線は、ふつうの電気の端子（`input`・`signal` など）として同じ機器に書く。エアのポートと電気の端子は 1 つの機器に混ぜてよい
@@ -261,6 +262,9 @@ pneumatic: { symbol: 'cylinder', ports: { head: 'HEAD', rod: 'ROD' }, cylinder: 
 pneumatic: { symbol: 'filter-regulator', ports: { in: 'IN', out: 'OUT' }, gauge: true },
 // スピードコントローラ（in → out が自由流れ）
 pneumatic: { symbol: 'speed-controller', ports: { in: 'IN', out: 'OUT' } },
+// ポートにスピードコントローラを直付けしたシリンダ（メータアウトは弁 → シリンダが自由流れ）
+pneumatic: { symbol: 'cylinder', ports: { head: 'HEAD', rod: 'ROD' }, cylinder: { acting: 'double' },
+  speedControllers: { head: { control: 'meter-out', model: 'AS2201F-01-06S' }, rod: { control: 'meter-out', model: 'AS2201F-01-06S' } } },
 ```
 
 - 方向制御弁は、通電していない位置（スプリング側・`operators.b` の側）が記号の右の箱になる。3 位置は `center` で中立の形を選ぶ
@@ -276,6 +280,15 @@ SMC のエアシリンダ・エアチャック・ロータリテーブルは `sr
 - スイッチの位置（ヘッド側＝後退端、ロッド側＝前進端）が絵と端子の名前で決まり、ストロークで長さが変わってもシリンダの両端に付いたまま動く
 - 端子は `SW1.BN` / `SW1.BK` / `SW1.BU`（SW1 はヘッド側、SW2 はロッド側）。出力は `signal`（`npn` / `pnp` / `2wire`）と内部経路 `switch: 'output'` で表し、PLC の入力との信号のチェックが効く
 - 2 線式の出力が 1 台に複数ある機器は、出力の内部経路（`switch: 'output'`）で結ばれた 2 本ずつを 1 つのスイッチとして 2 線式のチェックを行う（`src/check/signals.ts`）
+
+スピードコントローラ（エルボ形 AS□201F / AS□211F）も、アクチュエータのパラメータ `speedController`（`none` / `meter-out` / `meter-in`）でポートに直付けできる（`speed-controller.ts` の `portSpeedController()` など）。
+- 型式はポートのねじとチューブ外径（パラメータ `fitting`）で決まる（`elbowModel()`。例: M5・φ4 → `AS1201F-M5-04`、Rc1/8・φ6 → `AS2201F-01-06S`）。合う型式がない組み合わせ（M3 のポート、Rc1/2 に φ8 など）は付けず、絵に赤い文字を出す
+- 付けたポートは `air.thread` を書かず（継手はスピードコントローラのもの）、端子の説明に型式を書く
+- 部品表には `accessories`（下記）で 1 ポート 1 個として載せ、空圧回路図には `pneumatic.speedControllers`（記号のポート名 → 制御方式と型式）で速度制御弁の記号を描く
+
+機器に付ける付属品（部品表に機器とは別の行で載せる部品）は `accessories`（`Accessory[]`。パラメータで変わるなら関数）に書く。
+`model`・`name`（必須）と、`maker`（省略時は機器のメーカー）・`category`（省略時は機器と同じ）・`spec`（仕様欄）・`terminal`（付ける端子。機器名の欄に `CY1.HEAD` のように出る）・`qty`・`estimated` を書く。
+同じメーカー・型式・仕様の付属品は、機器をまたいで数をまとめる。読む側は `deviceAccessories()` を通す。
 
 カテゴリは `air-supply`（エア源・3 点セット）、`valve`（電磁弁・バルブ）、`actuator`（シリンダ・アクチュエータ）、`air-fitting`（継手・速度制御・エア周辺）を使う。
 

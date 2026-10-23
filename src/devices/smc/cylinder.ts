@@ -7,6 +7,8 @@
  * - オートスイッチ（D-M9 シリーズ）はパラメータで選ぶと、チューブの両端（SW1: ヘッド側＝後退端、SW2: ロッド側＝前進端）に付き、
  *   リード線が下へ出る（src/devices/smc/autoswitch.ts）
  * - 単動（S: スプリングリターン・押出し、T: スプリングエクステンド・引込み）はエアを入れる側のポートだけを端子にし、反対側は呼吸口として描く
+ * - スピードコントローラ（エルボ形 AS□201F / AS□211F）はパラメータで選ぶと、使うポートに直付けする（src/devices/smc/speed-controller.ts）。
+ *   型式はポートのねじとチューブ外径で決まり、部品表に 1 ポート 1 個で載る
  *
  * シリンダは中でエアが通り抜けないので airLinks は書かない。
  */
@@ -29,6 +31,16 @@ import {
   switchTerminals,
   type SwitchName,
 } from './autoswitch';
+import {
+  elbowMissing,
+  elbowOnPort,
+  portAirThread,
+  portSpeedController,
+  speedControllerAccessories,
+  speedControllerHint,
+  speedControllerNote,
+  speedControllerParam,
+} from './speed-controller';
 
 /** チューブ内径ごとの寸法・仕様（寸法は mm） */
 export interface BoreSpec {
@@ -421,6 +433,7 @@ function seriesParams(s: CylinderSeries): ParamDef[] {
     options: [4, 6, 8, 10, 12].map((v) => ({ value: v, label: `φ${v}` })),
     default: s.defaultFitting ?? 6,
   });
+  out.push(speedControllerParam);
   out.push(...switchParams({ names: { 1: 'ヘッド側・後退端', 2: 'ロッド側・前進端' }, magnet: !s.magnetStandard }));
   return out;
 }
@@ -448,9 +461,15 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
       [L.portHead, 'HEAD'],
       [L.portRod, 'ROD'],
     ];
+    // スピードコントローラのつまみは、隣のカバー・支持金具に重ならないよう本体の内側へ向ける
+    // （薄形の短いストロークなどでポートどうしが近く、つまみがぶつかるときは外側へ）
+    const inward = L.portRod - L.portHead >= Math.max(7, od * 1.25) + 3 + 16;
     for (const [x, id] of ports) {
       const used = act === 'D' || (act === 'S' ? id === 'HEAD' : id === 'ROD');
-      out += used ? fitting(x, L.top, od) : breather(x, L.top);
+      const sc = portSpeedController(p, b.thread, od);
+      if (!used) out += breather(x, L.top);
+      else if (sc?.model) out += elbowOnPort(x, L.top, od, (id === 'HEAD') === inward ? 'right' : 'left', sc);
+      else out += fitting(x, L.top, od) + (sc ? elbowMissing(x, L.top) : '');
     }
     out += text(f(L.portHead), f(L.top + 6.5), 'H', 4.2, '#333');
     out += text(f(L.portRod), f(L.top + 6.5), 'R', 4.2, '#333');
@@ -474,19 +493,20 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
     const act = actionOf(p);
     const single = act === 'T' ? (b.minPressurePull ?? b.minPressureSingle) : b.minPressureSingle;
     const range = { minPressure: act === 'D' ? b.minPressure : (single ?? b.minPressure), maxPressure: s.maxPressure };
+    const sc = portSpeedController(p, b.thread, Number(p.fitting));
     const port = (id: 'HEAD' | 'ROD', x: number): TerminalDef => ({
       id,
       label: id === 'HEAD' ? 'ヘッド側' : 'ロッド側',
       hint: id === 'HEAD' ? 'ヘッド側' : 'ロッド側',
       note:
         id === 'HEAD'
-          ? `ヘッド側ポート（${b.thread}。給気でロッドが前進する）`
-          : `ロッド側ポート（${b.thread}。給気でロッドが後退する）`,
+          ? `ヘッド側ポート（${b.thread}。給気でロッドが前進する${speedControllerNote(sc)}）`
+          : `ロッド側ポート（${b.thread}。給気でロッドが後退する${speedControllerNote(sc)}）`,
       x,
       y: L.top - 20,
       side: 'top',
       role: 'air',
-      air: { kind: 'work', tubeOD: { param: 'fitting' }, thread: b.thread, ...range },
+      air: { kind: 'work', tubeOD: { param: 'fitting' }, ...portAirThread(sc, b.thread), ...range },
     });
     const air: TerminalDef[] = [];
     if (act !== 'T') air.push(port('HEAD', L.portHead));
@@ -506,6 +526,7 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
     description:
       `${s.description}` +
       `チューブ内径・ストローク・支持形式・ポートに付けるワンタッチ管継手のチューブ外径をパラメータで選ぶ。ポートは HEAD（ヘッド側: 給気で前進）と ROD（ロッド側: 給気で後退）。` +
+      'パラメータ speedController でエルボ形スピードコントローラ（メータアウト / メータイン）をポートに直付けできる（型式はポートのねじとチューブ外径で決まり、部品表に 1 ポート 1 個で載る。別にスピードコントローラを置かなくてよい）。' +
       `5 ポート電磁弁の A・B に 1 本ずつつなぐ。最高使用圧力 ${s.maxPressure}MPa。` +
       extraDesc +
       switchDescription({ 1: 'ヘッド側（後退端）', 2: 'ロッド側（前進端）' }),
@@ -521,9 +542,18 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
     links: switchLinks,
     params,
     ...(s.estimated ? { estimated: s.estimated } : {}),
+    accessories: (p) => {
+      const b = boreOf(s, p);
+      const act = actionOf(p);
+      const ports: [string, string][] = [];
+      if (act !== 'T') ports.push(['HEAD', b.thread]);
+      if (act !== 'S') ports.push(['ROD', b.thread]);
+      return speedControllerAccessories(p, ports, Number(p.fitting));
+    },
     pneumatic: (p) => {
       const act = actionOf(p);
       const switches = pneumaticSwitches(p);
+      const thread = boreOf(s, p).thread;
       return {
         symbol: 'cylinder',
         ports: (act === 'D' ? { head: 'HEAD', rod: 'ROD' } : act === 'S' ? { head: 'HEAD' } : { rod: 'ROD' }) as Record<string, string>,
@@ -533,6 +563,7 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
           magnet: !!s.magnetStandard || hasMagnet(p),
           ...(switches ? { switches } : {}),
         },
+        ...speedControllerHint(p, [...(act !== 'T' ? [['head', thread] as [string, string]] : []), ...(act !== 'S' ? [['rod', thread] as [string, string]] : [])], Number(p.fitting)),
       };
     },
   };

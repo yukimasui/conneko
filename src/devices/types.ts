@@ -124,7 +124,11 @@ export interface AirPortSpec {
    * （パラメータで選べる場合は { param }）。つないだチューブの外径と違えば警告する
    */
   tubeOD?: NumOrParam;
-  /** ポートのねじの呼び（'M5'、'Rc1/8'、'Rc1/4' など。表示・部品表用） */
+  /**
+   * ポートのねじの呼び（'M5'、'Rc1/8'、'Rc1/4' など。表示・部品表用）。
+   * ポートに継手付きの部品（直付けのスピードコントローラなど。accessories に書く）を付けたときは書かない
+   * （チューブをつなぐのはその部品のワンタッチ管継手で、ねじのポートに付ける継手は要らない）
+   */
   thread?: string;
   /**
    * おねじのポート（サイレンサ、エルボ形スピードコントローラのシリンダ側など）。相手のめねじのポートへ直接ねじ込むので、
@@ -528,6 +532,29 @@ export interface DeviceDefinition {
    * オートスイッチの有無などパラメータで変わる場合は関数にする（利用側は resolveDevice() の pneumatic を読む）
    */
   pneumatic?: ParamDependent<PneumaticHint>;
+  /**
+   * 機器に付ける付属品（シリンダのポートに直付けしたスピードコントローラなど）。部品表に機器とは別の行で載る。
+   * パラメータで変わる場合は関数にする（利用側は deviceAccessories() を通して読む）
+   */
+  accessories?: ParamDependent<Accessory[]>;
+}
+
+/** 機器の付属品（部品表の 1 行。同じメーカー・型式・仕様のものは数をまとめる） */
+export interface Accessory {
+  model: string;
+  name: string;
+  /** 省略時は機器のメーカー */
+  maker?: string;
+  /** 部品表の分類（省略時は機器と同じ） */
+  category?: DeviceCategory;
+  /** 部品表の仕様欄 */
+  spec?: string;
+  /** 付ける端子の ID（部品表の機器名の欄に「CY1.HEAD」のように書く）。省略時は機器名 */
+  terminal?: string;
+  /** 数（省略時は 1） */
+  qty?: number;
+  /** 推定の値を含む */
+  estimated?: boolean;
 }
 
 /**
@@ -612,6 +639,11 @@ export interface PneumaticHint {
   units?: ('filter' | 'mist-separator' | 'regulator' | 'lubricator' | 'filter-regulator')[];
   /** 圧力計付き（減圧弁・3 点セット） */
   gauge?: boolean;
+  /**
+   * アクチュエータのポートに直付けした速度制御弁（記号のポート名 → 制御方式と型式）。
+   * 回路図では、ポートとチューブの間に速度制御弁の記号を描く（メータアウトは弁 → アクチュエータが自由流れ）
+   */
+  speedControllers?: Record<string, { control: 'meter-out' | 'meter-in'; model: string }>;
 }
 
 /**
@@ -654,6 +686,13 @@ export function resolveNum(
 /** パラメータに応じた型式（modelOf があれば組み立てたもの） */
 export function deviceModel(def: DeviceDefinition, params: ParamValues | undefined): string {
   return def.modelOf ? def.modelOf(paramsWithDefaults(def, params)) : def.model;
+}
+
+/** パラメータに応じた付属品（accessories があれば求めたもの） */
+export function deviceAccessories(def: DeviceDefinition, params: ParamValues | undefined): Accessory[] {
+  const a = def.accessories;
+  if (!a) return [];
+  return typeof a === 'function' ? a(paramsWithDefaults(def, params)) : a;
 }
 
 /** パラメータに応じた機器の大きさ（size があれば求めたもの） */

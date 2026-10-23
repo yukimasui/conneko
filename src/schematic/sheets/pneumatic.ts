@@ -593,6 +593,24 @@ export function pneumaticPages(
         return;
       }
       let cur: XY = to;
+      // ポートに直付けしたスピードコントローラ（アクチュエータのすぐ下。途中の機器の段より上）
+      const attached = endSym ? col.actuator?.hint.speedControllers?.[endSym] : undefined;
+      if (attached && act) {
+        const sy = yAct + 15;
+        // メータアウトは弁 → アクチュエータが自由流れ（上向き）
+        const d = drawSpeedController(pen, cur[0] + 2.5, sy, attached.control === 'meter-out');
+        pen.line([cur, d.pins.top], { layer: 'WIRE' });
+        // 型式は記号の右に 2 行で書く。右に同じアクチュエータの別のポートがあって入らなければ左に書く
+        const [series, rest] = [attached.model.slice(0, attached.model.indexOf('-')), attached.model.slice(attached.model.indexOf('-'))];
+        const tw = Math.max(textWidth(series, 1.8), textWidth(rest, 1.8));
+        const others = Object.values(act.pins).map((p) => p[0]).filter((x) => x > cur[0] + 0.1);
+        const leftSide = others.length > 0 && Math.min(...others) - 3.5 < d.box.x + d.box.w + 1 + tw + 1;
+        const tx = leftSide ? d.box.x - 1 : d.box.x + d.box.w + 1;
+        const align = leftSide ? 'right' : 'left';
+        pen.text(tx, sy + 5, series, { height: 1.8, align });
+        pen.text(tx, sy + 8, rest, { height: 1.8, align });
+        cur = d.pins.bottom;
+      }
       // アクチュエータの側から途中の機器を上から順に置く
       [...ln.chain].reverse().forEach((c, j) => {
         const e = entries.get(c.id)!;
