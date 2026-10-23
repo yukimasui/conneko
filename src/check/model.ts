@@ -126,6 +126,23 @@ export interface Model {
   bus: BusLayout;
 }
 
+/** 通信方式の表示名（チェック結果に出す） */
+const PROTOCOL_NAMES: Record<string, string> = {
+  ethernet: 'Ethernet',
+  'ethernet-ip': 'EtherNet/IP',
+  ethercat: 'EtherCAT',
+  profinet: 'PROFINET',
+  'cc-link-ie-field': 'CC-Link IE Field',
+  'cc-link-ie-field-basic': 'CC-Link IE Field Basic',
+  'mechatrolink-iii': 'MECHATROLINK-III',
+  'modbus-tcp': 'Modbus/TCP',
+  slmp: 'SLMP',
+  'rs-232c': 'RS-232C',
+  'rs-485': 'RS-485',
+  usb: 'USB',
+};
+const protocolNames = (ps: string[]) => ps.map((p) => PROTOCOL_NAMES[p] ?? p).join('・');
+
 export function supplyLabel(s: Supply): string {
   if (s.conductor === 'PE') return CONDUCTOR_NAMES.PE;
   return `${s.system}${s.voltage}V ${CONDUCTOR_NAMES[s.conductor]}`;
@@ -276,7 +293,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
           push({
             severity: 'warning',
             rule: 'protocol-mismatch',
-            message: `ケーブル ${w.id}: ${w.from.device}.${w.from.terminal}（${a.protocols.join('/')}）と ${w.to.device}.${w.to.terminal}（${b.protocols.join('/')}）に共通の通信方式がありません`,
+            message: `ケーブル ${w.id}: ${w.from.device}.${w.from.terminal}（${protocolNames(a.protocols)}）と ${w.to.device}.${w.to.terminal}（${protocolNames(b.protocols)}）に共通の通信方式がありません`,
             devices: [w.from.device, w.to.device],
             wires: [w.id],
           });
@@ -366,7 +383,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
       push({
         severity: 'warning',
         rule: 'protocol-mismatch',
-        message: `${kind}「${name}」: ${a.key.replace(':', '.')}（${a.protocols.join('/')}）と ${b.key.replace(':', '.')}（${b.protocols.join('/')}）に共通の通信方式がありません`,
+        message: `${kind}「${name}」: ${a.key.replace(':', '.')}（${protocolNames(a.protocols)}）と ${b.key.replace(':', '.')}（${protocolNames(b.protocols)}）に共通の通信方式がありません`,
         devices: [a.key.split(':')[0], b.key.split(':')[0]],
         wires: [],
         key: `protocol-network:${name}:${a.key}:${b.key}`,

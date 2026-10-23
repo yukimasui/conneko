@@ -14,8 +14,8 @@ interface Props {
   initial: string;
   /** 'add': 置く、'replace': 置いた機器の機種を変える */
   mode: 'add' | 'replace';
-  /** 差し替えのとき、いまの機種の端子のうち新しい機種にないものを数えるための関数（外れる電線の数） */
-  dropCount?: (type: string) => number;
+  /** 差し替えのとき、その機種にすると外れる電線の数と、外れる装着の数 */
+  impact?: (type: string) => { wires: number; mounts: number };
   onPick: (type: string) => void;
   onClose: () => void;
 }
@@ -24,7 +24,7 @@ interface Props {
  * 「機種を選ぶ」ダイアログ。ファミリー（漏電ブレーカー・電磁弁など）の中から、メーカー・極数・切換えの種類などの観点で絞り込んで機種を選ぶ。
  * 定格電流・ストロークなどのパラメータは、置いたあとにプロパティで変える
  */
-export function DevicePicker({ family, initial, mode, dropCount, onPick, onClose }: Props) {
+export function DevicePicker({ family, initial, mode, impact, onPick, onClose }: Props) {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState(initial);
 
@@ -53,7 +53,7 @@ export function DevicePicker({ family, initial, mode, dropCount, onPick, onClose
     setFilters(next);
   };
 
-  const dropped = mode === 'replace' && current && dropCount ? dropCount(current.type) : 0;
+  const lost = mode === 'replace' && current && impact && current.type !== initial ? impact(current.type) : { wires: 0, mounts: 0 };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -125,7 +125,8 @@ export function DevicePicker({ family, initial, mode, dropCount, onPick, onClose
                 {current.params!.map((p) => p.label).join('・')} は、{mode === 'add' ? '置いたあと' : '変えたあと'}にプロパティで選べます。
               </p>
             )}
-            {dropped > 0 && <p className="small warning-text">この機種には同じ端子がないため、電線 {dropped} 本が外れます。</p>}
+            {lost.wires > 0 && <p className="small warning-text">この機種には同じ端子がないため、電線 {lost.wires} 本が外れます。</p>}
+            {lost.mounts > 0 && <p className="small warning-text">この機種には装着できないため、装着していた {lost.mounts} 台が外れます（図面には残ります）。</p>}
           </div>
         )}
         <div className="modal__actions">

@@ -35,7 +35,7 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
-import { attachBase, needsBase } from './model/plc';
+import { attachBase, baseTypesFor, needsBase } from './model/plc';
 import { ValveEditor } from './editor/ValveEditor';
 import { DevicePicker } from './editor/DevicePicker';
 import { deviceFamilies, familyOf } from './devices/families';
@@ -184,7 +184,7 @@ function Editor() {
   const [toast, setToast] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, fitView, deleteElements } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
+  const { screenToFlowPosition, fitView, deleteElements, getViewport, setCenter } = useReactFlow<DeviceFlowNode, WireFlowEdge>();
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -543,6 +543,17 @@ function Editor() {
   );
 
   // --- 機器の追加 ---
+  /** 置いたばかりで、ベースユニットを付ける CPU の機器 ID */
+  const pendingBase = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pendingBase.current;
+    if (!id || !diagram.devices.some((x) => x.id === id)) return;
+    pendingBase.current = null;
+    if (!needsBase(diagram, id, getDeviceDefinition, deviceDefinitions)) return;
+    const r = attachBase(diagram, id, getDeviceDefinition, deviceDefinitions);
+    if (r.baseId) applyDiagram(r.diagram, `${id} を装着する ${r.added.join('・')}（ベースユニット・電源ユニット）を付けました。増設ユニットは「ユニット構成…」で足します`);
+  }, [diagram, applyDiagram]);
+
   const addDevice = useCallback(
     (type: string, at?: { x: number; y: number }) => {
       const def = getDeviceDefinition(type);
@@ -552,6 +563,10 @@ function Editor() {
       if (!pos) {
         const r = canvasRef.current?.getBoundingClientRect();
         pos = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
+      }
+      // ベースユニットに装着して使う CPU（三菱 iQ-R）は、置いたあとにベースユニットと電源ユニットを付ける（下の effect）
+      if (def.bus?.role === 'cpu' && !def.bus.host && baseTypesFor(def, deviceDefinitions).length) {
+        pendingBase.current = nextDeviceId(def.labelPrefix, nodesRef.current.map((n) => n.id));
       }
       setNodes((ns) => {
         const id = nextDeviceId(def.labelPrefix, ns.map((n) => n.id));
@@ -571,6 +586,17 @@ function Editor() {
           pos = { x: p.x + def.width / 2, y: p.y + def.height / 2 };
         }
         const place = pos!;
+        // 置いた機器が画面の外（重ならない位置へずらした結果など）なら、拡大率はそのままで画面をその機器へ移す
+        window.setTimeout(() => {
+          const r = canvasRef.current?.getBoundingClientRect();
+          if (!r) return;
+          const vp = getViewport();
+          const sx = place.x * vp.zoom + vp.x;
+          const sy = place.y * vp.zoom + vp.y;
+          const mx = (def.width * vp.zoom) / 2;
+          const my = (def.height * vp.zoom) / 2;
+          if (sx - mx < 0 || sy - my < 0 || sx + mx > r.width || sy + my > r.height) setCenter(place.x, place.y, { zoom: vp.zoom, duration: 300 });
+        }, 0);
         return [
           ...ns.map((n) => ({ ...n, selected: false })),
           {
@@ -583,7 +609,7 @@ function Editor() {
         ];
       });
     },
-    [screenToFlowPosition, setNodes, sheet],
+    [screenToFlowPosition, setNodes, sheet, getViewport, setCenter],
   );
 
   const onDrop = useCallback(
@@ -1137,7 +1163,7 @@ function Editor() {
             minZoom={0.2}
             maxZoom={3}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="#c5ccd6" />
@@ -1198,7 +1224,10 @@ function Editor() {
               family={family}
               initial={dev.type}
               mode="replace"
-              dropCount={(type) => replaceDeviceType(diagram, dev.id, type, getDeviceDefinition).droppedWires.length}
+              impact={(type) => {
+                const r = replaceDeviceType(diagram, dev.id, type, getDeviceDefinition);
+                return { wires: r.droppedWires.length, mounts: r.unmounted.length };
+              }}
               onPick={(type) => {
                 setDevicePicker(null);
                 const r = replaceDeviceType(diagram, dev.id, type, getDeviceDefinition);

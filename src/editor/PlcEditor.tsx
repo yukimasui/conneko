@@ -60,9 +60,12 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
   const units = new Map(diagram.devices.filter((x) => x.mount?.device === hostId).map((x) => [x.id, x]));
   const count = fixed ? slotCount(diagram, hostId, getDeviceDefinition) : slots.size + 1;
   const roles = hostDef.bus?.host?.slotRoles ?? {};
+  const roleCount = Object.keys(roles).length;
   const emptyPoints = hostDef.bus?.host?.numbering?.emptySlot;
   const system = ioSystem(diagram, hostId, getDeviceDefinition);
-  const candidates = compatibleTypes(hostDef, deviceDefinitions);
+  // 専用の位置（電源・CPU）のユニットは、その位置が空いているときだけ追加の候補に出す（電源の型式は電源ユニットの「機種を変える…」で替える）
+  const roleFree = (role: string) => Object.entries(roles).some(([slot, r]) => r === role && !slots.has(Number(slot)));
+  const candidates = compatibleTypes(hostDef, deviceDefinitions).filter((d) => !d.bus?.role || roleFree(d.bus.role));
   const free = freeUnits(diagram, hostId, getDeviceDefinition);
 
   /** ベースユニットを大きくできるか（いまより大きい同じ種類のベースがあるか） */
@@ -96,7 +99,7 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
     if (!id) return;
     const from = [...slots].find(([, x]) => x === id)?.[0];
     if (from === slot) return;
-    apply(moveUnit(diagram, hostId, id, slot, getDeviceDefinition), `${id} を位置 ${slot} へ移しました`);
+    apply(moveUnit(diagram, hostId, id, slot, getDeviceDefinition), `${id} を${fixed && roleCount && !roles[slot] ? `スロット ${slot - roleCount - 1}` : `位置 ${slot}`}へ移しました`);
   };
 
   // ベースユニットの大きさを自動で合わせるときは、最後に 1 つ空きを足して、そこへ落とせば大きいベースに替わるようにする
@@ -130,8 +133,8 @@ function RackEditor({ diagram, hostId, onApply, onJump }: { diagram: Diagram; ho
               onDrop={drop(slot)}
             >
               <div className="plc-slot__no">
-                {slot}
-                {role && <span className="plc-slot__role">{ROLE_NAMES[role] ?? role}</span>}
+                {/* ベースユニットは、本体の印字どおり入出力スロットを 0 から数える（電源・CPU は役割の名前） */}
+                {role ? <span className="plc-slot__role">{ROLE_NAMES[role] ?? role}</span> : fixed && roleCount ? `スロット ${slot - roleCount - 1}` : slot}
               </div>
               {unit && def ? (
                 <div

@@ -235,7 +235,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'hub', name: 'スイッチングハブ', keywords: ['HUB', 'ハブ', 'LAN'], test: named(/スイッチングハブ/) },
   // --- エア ---
   { id: 'air-source', name: 'エア源', keywords: ['工場エア', 'コンプレッサ'], test: named(/^エア源/) },
-  { id: 'frl', name: '3 点セット（F.R.L.）', keywords: ['FRL', '2点セット', 'エア3点セット'], test: named(/点セット/), default: 'smc.ac-b' },
+  { id: 'frl', name: '3 点セット（F.R.L.）', keywords: ['FRL', '2点セット', 'エア3点セット'], test: named(/点セット/), default: 'smc.ac' },
   {
     id: 'air-prep',
     name: 'フィルタ・レギュレータ（単体）',
