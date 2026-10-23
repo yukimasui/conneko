@@ -396,6 +396,80 @@ textarea {
   background: var(--accent);
 }
 
+/* 選択中の機器の端子の横に出す呼び名。電線が出る向きの外側に置き、上下の端子は縦書きにして隣と重ねない */
+.terminal-callout {
+  position: absolute;
+  z-index: 5;
+  padding: 1px 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #1e3a8a;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #93c5fd;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.terminal-callout--left {
+  transform: translate(calc(-100% - 7px), -50%);
+}
+.terminal-callout--right {
+  transform: translate(7px, -50%);
+}
+.terminal-callout--top,
+.terminal-callout--bottom {
+  writing-mode: vertical-rl;
+  /* 英字・記号も立てて並べる（横倒しだと「-V」が「<」のように見える） */
+  text-orientation: upright;
+  padding: 3px 1px;
+}
+.terminal-callout--top {
+  transform: translate(-50%, calc(-100% - 7px));
+}
+.terminal-callout--bottom {
+  transform: translate(-50%, 7px);
+}
+
+/* 端子にマウスを乗せたときのポップアップ（body に描く。遅延なしで出す） */
+.terminal-popup {
+  position: fixed;
+  z-index: 1000;
+  max-width: 280px;
+  transform: translateY(-50%);
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+.terminal-popup__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.terminal-popup__printed {
+  font-weight: 700;
+}
+.terminal-popup__hint {
+  padding: 0 5px;
+  border-radius: 3px;
+  color: #1e3a8a;
+  background: #dbeafe;
+  font-weight: 600;
+}
+.terminal-popup__note {
+  margin-top: 2px;
+}
+.terminal-popup__row {
+  margin-top: 2px;
+  color: var(--muted);
+}
+
 .wire__selected {
   fill: none;
   stroke: rgba(37, 99, 235, 0.35);
@@ -551,23 +625,39 @@ textarea {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.terminal-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.terminal-chip {
+.terminal-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: #f1f4f8;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  line-height: 1.4;
 }
-.terminal-chip.is-connected {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1e40af;
+.terminal-table td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+.terminal-table strong {
+  color: var(--text);
+}
+/* 印字。接続済みは青い丸、未接続は白い丸を付ける */
+.terminal-table__printed {
+  width: 38%;
+  font-weight: 600;
+  word-break: break-all;
+}
+.terminal-table__printed::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  vertical-align: 0;
+}
+.terminal-table tr.is-connected .terminal-table__printed::before {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .mini-issues {
   margin: 0;
