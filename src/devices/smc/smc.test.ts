@@ -27,7 +27,11 @@ describe('SMC エアシリンダの型式', () => {
   });
 
   it('CJ2・CQ2・MB・MGP・MHZ2・MSQ の型式', () => {
-    expect(deviceModel(def('smc.cj2'), { switch: 'M9B' })).toBe('CDJ2B16-60Z-M9B');
+    // CJ2 のマグネット内蔵は末尾にスイッチの取付金具（φ6 はバンド取付のみ）
+    expect(deviceModel(def('smc.cj2'), { switch: 'M9B' })).toBe('CDJ2B16-60Z-M9B-B');
+    expect(deviceModel(def('smc.cj2'), { switch: 'magnet', switchMount: 'A', action: 'S', stroke: 45 })).toBe('CDJ2B16-45SZ-A');
+    expect(deviceModel(def('smc.cj2'), { bore: 6, switch: 'M9N', switchMount: 'A', stroke: 30 })).toBe('CDJ2B6-30Z-M9N-B');
+    expect(deviceModel(def('smc.cj2'), {})).toBe('CJ2B16-60Z');
     expect(deviceModel(def('smc.cq2'), { switch: 'M9NW' })).toBe('CDQ2B25-20DZ-M9NW');
     expect(deviceModel(def('smc.mb'), { switch: 'M9PW' })).toBe('MDBB40-100Z-M9PW');
     expect(deviceModel(def('smc.mgp'), { switch: 'M9BW' })).toBe('MGPM20-50Z-M9BW');
@@ -57,6 +61,12 @@ describe('SMC エアシリンダの端子と見た目', () => {
     const r = resolveDevice(def('smc.cm2'), { bore: 40, fitting: 8 });
     expect(r.air.get('HEAD')).toEqual({ kind: 'work', thread: 'Rc1/4', tubeOD: 8, pressure: undefined, minPressure: 0.05, maxPressure: 1.0 });
     expect(resolveDevice(def('smc.cj2'), {}).air.get('ROD')).toMatchObject({ thread: 'M5', tubeOD: 4, maxPressure: 0.7 });
+    // 単動の最低使用圧力は押出し・引込みで違う
+    expect(resolveDevice(def('smc.cm2'), { action: 'S' }).air.get('HEAD')?.minPressure).toBe(0.18);
+    expect(resolveDevice(def('smc.cm2'), { action: 'T' }).air.get('ROD')?.minPressure).toBe(0.23);
+    // ショックアブソーバ内蔵の MSQ は 0.6MPa まで
+    expect(resolveDevice(def('smc.msq'), { adjust: 'R' }).air.get('A')?.maxPressure).toBe(0.6);
+    expect(resolveDevice(def('smc.msq'), {}).air.get('A')?.maxPressure).toBe(1.0);
   });
 
   it('オートスイッチのリード線が端子になり、ヘッド側は後退端・ロッド側は前進端と分かる', () => {

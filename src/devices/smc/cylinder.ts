@@ -50,17 +50,35 @@ export interface BoreSpec {
   rodOut: number;
   /** 最低使用圧力[MPa]（複動） */
   minPressure: number;
-  /** 最低使用圧力[MPa]（単動） */
+  /** 最低使用圧力[MPa]（単動。minPressurePull があれば押出し形 S） */
   minPressureSingle?: number;
+  /** 最低使用圧力[MPa]（単動引込み形 T） */
+  minPressurePull?: number;
   /** 選べるストローク（省略時はシリーズの strokes） */
   strokes?: number[];
 }
 
 export type CylinderLook = 'round' | 'tierod' | 'compact' | 'guided';
 
+/** 支持形式の描き方 */
+export type MountShape =
+  | 'basic'
+  | 'through'
+  | 'tapped'
+  | 'foot'
+  | 'flange-rod'
+  | 'flange-head'
+  | 'clevis1'
+  | 'clevis2'
+  | 'trunnion-center'
+  | 'trunnion-head'
+  | 'trunnion-rod';
+
 export interface MountSpec {
+  /** 型式の記号 */
   code: string;
   label: string;
+  shape: MountShape;
 }
 
 export interface CylinderSeries {
@@ -142,16 +160,21 @@ function boreOf(s: CylinderSeries, p: ParamValues): BoreSpec {
   return s.bores.find((b) => b.bore === Number(p.bore)) ?? s.bores.find((b) => b.bore === s.defaultBore)!;
 }
 
+/** 選んだ支持形式の描き方（支持形式がないシリーズは本体取付け） */
+function shapeOf(s: CylinderSeries, p: ParamValues): MountShape | undefined {
+  return s.mounts.find((m) => m.code === p.mount)?.shape;
+}
+
 function layout(s: CylinderSeries, p: ParamValues): Layout {
   const b = boreOf(s, p);
   const k = s.scale;
-  const mount = String(p.mount);
+  const mount = shapeOf(s, p);
   const bodyH = f(b.cover * k);
   const tubeH = f(b.tube * k);
   const rodH = f(Math.max(b.rod * k, 3));
   // 左右の取付け金具の出っ張り
-  const clevis = mount === 'C' || mount === 'D' ? Math.max(10, b.bore * 0.5) * k : 0;
-  const headFlange = mount === 'G' ? 4 : 0;
+  const clevis = mount === 'clevis1' || mount === 'clevis2' ? Math.max(10, b.bore * 0.5) * k : 0;
+  const headFlange = mount === 'flange-head' ? 4 : 0;
   const tubeLen = (b.tubeBase + drawnStroke(Number(p.stroke))) * k;
   const length = clevis + headFlange + (b.head + b.rodCover + b.rodOut) * k + tubeLen;
   const sw = switchOf(p);
@@ -167,7 +190,7 @@ function layout(s: CylinderSeries, p: ParamValues): Layout {
   const top = FIT + 3;
   const cy = f(top + bodyH / 2);
   const bottom = f(top + bodyH);
-  const foot = mount === 'L' ? Math.max(6, b.cover * 0.25) * k : 0;
+  const foot = mount === 'foot' ? Math.max(6, b.cover * 0.25) * k : 0;
   const mountBottom = f(bottom + foot);
   const yFan = f(mountBottom + 16);
   const yEnd = f(yFan + 26);
@@ -259,10 +282,10 @@ function defs(): string {
 }
 
 /** 取付け金具（フート・フランジ・クレビス） */
-function mountSvg(L: Layout, mount: string, b: BoreSpec, k: number): string {
+function mountSvg(L: Layout, mount: MountShape | undefined, b: BoreSpec, k: number): string {
   const { top, bottom, cy, bodyH } = L;
   const plate = '#4b5157';
-  if (mount === 'L') {
+  if (mount === 'foot') {
     // 軸方向フート（両カバーの下）
     const fw = Math.max(6, b.head * k * 0.9);
     const foot = (x: number) => `
@@ -271,27 +294,28 @@ function mountSvg(L: Layout, mount: string, b: BoreSpec, k: number): string {
   <circle cx="${f(x - fw / 2 - 2.5)}" cy="${f(L.mountBottom - 1.5)}" r="0.9" fill="#ccc"/><circle cx="${f(x + fw / 2 + 2.5)}" cy="${f(L.mountBottom - 1.5)}" r="0.9" fill="#ccc"/>`;
     return foot((L.xHead + L.xTube0) / 2) + foot((L.xTube1 + L.xRodCover) / 2);
   }
-  if (mount === 'F' || mount === 'G') {
+  if (mount === 'flange-rod' || mount === 'flange-head') {
     // フランジ（ロッド側 F・ヘッド側 G）
-    const x = mount === 'F' ? L.xRodCover - 1 : L.xHead - 4;
+    const x = mount === 'flange-rod' ? L.xRodCover - 1 : L.xHead - 4;
     const h = bodyH * 1.45;
     return `<rect x="${f(x)}" y="${f(cy - h / 2)}" width="5" height="${f(h)}" rx="0.8" fill="${plate}" stroke="#222" stroke-width="0.5"/>
   <circle cx="${f(x + 2.5)}" cy="${f(cy - h / 2 + 3)}" r="1.1" fill="#ddd"/><circle cx="${f(x + 2.5)}" cy="${f(cy + h / 2 - 3)}" r="1.1" fill="#ddd"/>`;
   }
-  if (mount === 'C' || mount === 'D') {
+  if (mount === 'clevis1' || mount === 'clevis2') {
     // クレビス（ヘッド側。C は 1 山、D は 2 山とピン）
     const x1 = L.xHead;
     const x0 = L.xLeft;
     const h = Math.min(bodyH * 0.7, 26);
     const pinX = x0 + (x1 - x0) * 0.4;
     return `<path d="M${x1} ${f(cy - h / 2)} H${f(pinX)} A${f(h / 2)} ${f(h / 2)} 0 0 0 ${f(pinX)} ${f(cy + h / 2)} H${x1} Z" fill="${plate}" stroke="#222" stroke-width="0.5"/>
-  ${mount === 'D' ? `<rect x="${f(x0)}" y="${f(cy - 1.2)}" width="${f(x1 - x0)}" height="2.4" fill="#1d2023" opacity="0.6"/>` : ''}
+  ${mount === 'clevis2' ? `<rect x="${f(x0)}" y="${f(cy - 1.2)}" width="${f(x1 - x0)}" height="2.4" fill="#1d2023" opacity="0.6"/>` : ''}
   <circle cx="${f(pinX)}" cy="${cy}" r="${f(Math.max(2, h * 0.18))}" fill="#c9ced3" stroke="#555" stroke-width="0.5"/>`;
   }
-  if (mount === 'T') {
-    // センタトラニオン
-    const x = (L.xTube0 + L.xTube1) / 2;
-    return `<rect x="${f(x - 6)}" y="${f(top - 2)}" width="12" height="${f(bodyH + 4)}" fill="${plate}" stroke="#222" stroke-width="0.5"/><circle cx="${f(x)}" cy="${cy}" r="3" fill="#c9ced3" stroke="#555" stroke-width="0.5"/>`;
+  if (mount === 'trunnion-center' || mount === 'trunnion-head' || mount === 'trunnion-rod') {
+    // トラニオン（中間・ヘッド側・ロッド側）
+    const x = mount === 'trunnion-head' ? (L.xHead + L.xTube0) / 2 : mount === 'trunnion-rod' ? (L.xTube1 + L.xRodCover) / 2 : (L.xTube0 + L.xTube1) / 2;
+    const w = Math.min(12, bodyH * 0.4);
+    return `<rect x="${f(x - w / 2)}" y="${f(top + bodyH * 0.2)}" width="${f(w)}" height="${f(bodyH * 0.6)}" rx="1" fill="${plate}" stroke="#222" stroke-width="0.5" opacity="0.9"/><circle cx="${f(x)}" cy="${cy}" r="${f(w * 0.3)}" fill="#c9ced3" stroke="#555" stroke-width="0.5"/>`;
   }
   return '';
 }
@@ -331,7 +355,7 @@ function bodySvg(s: CylinderSeries, L: Layout, b: BoreSpec, p: ParamValues): str
     out += `<rect x="${L.xTube1}" y="${f(top)}" width="${f(L.xRodCover - L.xTube1)}" height="${bodyH}" rx="${f(bodyH * 0.12)}" fill="url(#cover-{{uid}})" stroke="#5f666d" stroke-width="0.6"/>`;
     // かしめの溝
     out += [L.xTube0 + 1.5, L.xTube1 - 1.5].map((x) => `<line x1="${f(x)}" y1="${f(cy - tubeH / 2 + 0.6)}" x2="${f(x)}" y2="${f(cy + tubeH / 2 - 0.6)}" stroke="#7d848b" stroke-width="0.8"/>`).join('');
-    if (p.mount === 'B') {
+    if (shapeOf(s, p) === 'basic') {
       // 基本形: ロッドカバーの取付けねじに取付けナット
       const nx = L.xRodCover - (L.xRodCover - L.xTube1) * 0.45;
       out += `<rect x="${f(nx)}" y="${f(top - bodyH * 0.12)}" width="${f(Math.max(3, b.rodCover * k * 0.25))}" height="${f(bodyH * 1.24)}" rx="0.6" fill="url(#hex-{{uid}})" stroke="#5c6166" stroke-width="0.5"/>`;
@@ -354,7 +378,7 @@ function bodySvg(s: CylinderSeries, L: Layout, b: BoreSpec, p: ParamValues): str
     out += `<rect x="${L.xHead}" y="${f(top)}" width="${f(L.xRodCover - L.xHead)}" height="${bodyH}" rx="1.6" fill="url(#alu-{{uid}})" stroke="#5f666d" stroke-width="0.6"/>`;
     out += `<line x1="${f(L.xHead + 1)}" y1="${f(cy + bodyH * 0.18)}" x2="${f(L.xRodCover - 1)}" y2="${f(cy + bodyH * 0.18)}" stroke="#8b9299" stroke-width="0.7"/>`;
     out += `<line x1="${f(L.xHead + 1)}" y1="${f(cy - bodyH * 0.3)}" x2="${f(L.xRodCover - 1)}" y2="${f(cy - bodyH * 0.3)}" stroke="#8b9299" stroke-width="0.5"/>`;
-    if (s.look === 'compact' && (p.mount === 'B' || p.mount === 'A')) {
+    if (s.look === 'compact' && (shapeOf(s, p) === 'through' || shapeOf(s, p) === 'tapped')) {
       // 通し穴（B）・両端タップ（A）
       out += [top + bodyH * 0.18, top + bodyH * 0.82].map((y) => `<line x1="${f(L.xHead)}" y1="${f(y)}" x2="${f(L.xRodCover)}" y2="${f(y)}" stroke="#6d747b" stroke-width="0.5" stroke-dasharray="2 1.5"/>`).join('');
     }
@@ -413,8 +437,12 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
     const od = Number(p.fitting);
     const sw = switchOf(p);
     let out = defs();
-    out += mountSvg(L, String(p.mount), b, s.scale);
+    // トラニオンは本体の手前に描く（ほかの取付け金具は本体の後ろ）
+    const shape = shapeOf(s, p);
+    const front = shape === 'trunnion-center' || shape === 'trunnion-head' || shape === 'trunnion-rod';
+    if (!front) out += mountSvg(L, shape, b, s.scale);
     out += bodySvg(s, L, b, p);
+    if (front) out += mountSvg(L, shape, b, s.scale);
     // ポート
     const ports: [number, 'HEAD' | 'ROD'][] = [
       [L.portHead, 'HEAD'],
@@ -444,7 +472,8 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
     const b = boreOf(s, p);
     const L = layout(s, p);
     const act = actionOf(p);
-    const range = { minPressure: act === 'D' ? b.minPressure : (b.minPressureSingle ?? b.minPressure), maxPressure: s.maxPressure };
+    const single = act === 'T' ? (b.minPressurePull ?? b.minPressureSingle) : b.minPressureSingle;
+    const range = { minPressure: act === 'D' ? b.minPressure : (single ?? b.minPressure), maxPressure: s.maxPressure };
     const port = (id: 'HEAD' | 'ROD', x: number): TerminalDef => ({
       id,
       label: id === 'HEAD' ? 'ヘッド側' : 'ロッド側',

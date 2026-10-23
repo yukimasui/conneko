@@ -75,7 +75,7 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
       label: '角度調整',
       options: [
         { value: 'A', label: '調整ボルト（A）' },
-        { value: 'R', label: 'ショックアブソーバ内蔵（R。サイズ 10 以上）' },
+        { value: 'R', label: 'ショックアブソーバ内蔵（R。サイズ 10 以上・0.6MPa まで）' },
       ],
       default: 'A',
     },
@@ -153,7 +153,8 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
       y: L.top - 20,
       side: 'top',
       role: 'air',
-      air: { kind: 'work', tubeOD: { param: 'fitting' }, thread: L.z.thread, minPressure: L.z.minPressure, maxPressure: L.z.maxPressure },
+      // ショックアブソーバ内蔵（R）の最高使用圧力は 0.6MPa
+      air: { kind: 'work', tubeOD: { param: 'fitting' }, thread: L.z.thread, minPressure: L.z.minPressure, maxPressure: p.adjust === 'R' && L.z.absorber ? Math.min(0.6, L.z.maxPressure) : L.z.maxPressure },
     });
     return [port('A'), port('B'), ...switchTerminals(p, L.leads, L.yEnd, NAMES)];
   };

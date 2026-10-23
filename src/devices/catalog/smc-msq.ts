@@ -5,6 +5,9 @@ import { buildRotary } from '../smc/rotary';
  *
  * 型式: MSQB[サイズ][角度調整][-オートスイッチ][リード線][個数]
  *   角度調整は A 調整ボルト / R ショックアブソーバ内蔵（サイズ 10 以上）。例: MSQB20A-M9BW。回転角度は 0〜190° で調整できる
+ * 出典: SMC MSQ カタログ（static.smc.eu の MSQ_EU.pdf・MSQ-A_EU.pdf）
+ *   使用圧力: サイズ 1〜7 は 0.1〜0.7MPa、10〜200 は 0.1〜1.0MPa（ショックアブソーバ内蔵は 0.6MPa まで）
+ *   ポート: サイズ 1〜3 は M3、7 は M5、10〜50 は M5（側面ポート）、70〜200 は Rc1/8
  */
 export default buildRotary({
   type: 'smc.msq',
@@ -24,5 +27,5 @@ export default buildRotary({
   defaultSize: 20,
   model: (p, sw) => `MSQB${p.size}${p.adjust === 'R' && Number(p.size) >= 10 ? 'R' : 'A'}${sw}`,
   description: 'SMC のロータリテーブル MSQ シリーズ（ラック＆ピニオン形、基本形 MSQB）。テーブルが 0〜190° の範囲で往復回転する。',
-  estimated: '外形寸法、サイズ 1〜7 の使用圧力範囲、ポートのねじは推定',
+  estimated: '外形寸法、サイズ 1〜7 と 70〜200 のポートのねじは推定',
 });
