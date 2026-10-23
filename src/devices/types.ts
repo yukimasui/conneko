@@ -392,6 +392,12 @@ export interface BusSpec {
      * 返した値は親の params に加わり（図面で明示した params が優先）、modelOf・svg で使える。引数の params は既定値を補完済み
      */
     fromUnits?: (units: { type: string; def: DeviceDefinition; params: ParamValues }[]) => ParamValues;
+    /**
+     * 通信タイプ（シリアル伝送）のマニホールド: SI ユニットの出力を、装着した電磁弁のソレノイドへ連の順に割り付ける（src/model/bus.ts）。
+     * 出力番号は 0 から、連 1（D 側）から順に、各連の A 側・B 側の順に数える。割り付けた番号は連の params の solA / solB に入る。
+     * 連のソレノイドの数は、連の機器の pneumatic.valve.operators（'solenoid' の数）で数える
+     */
+    serial?: SerialOutputSpec;
   };
   /** 専用の位置に装着するユニットの種類（host.slotRoles と対応。例: 'power'、'cpu'） */
   role?: string;
@@ -401,6 +407,20 @@ export interface BusSpec {
   load?: Record<string, NumOrParam>;
   /** 入出力の点数と番号の表し方。装着すると params の ioIn / ioOut（先頭番号の点数）が自動で決まる */
   io?: { inputs?: number; outputs?: number; format: IoFormat };
+}
+
+/** 通信タイプのマニホールドの SI ユニットの出力（BusSpec.host.serial） */
+export interface SerialOutputSpec {
+  /**
+   * 配線。'double' はどの連も 2 点（ダブル配線。シングルの弁の B 側とブランクプレートの連は空き）、
+   * 'specified' は連の弁のソレノイドの数（配線指定。シングル 1 点、ダブル・3 位置 2 点、ブランクプレート 1 点）。
+   * パラメータで選ぶ場合は { param }（値は 'double' / 'specified'）
+   */
+  wiring: 'double' | 'specified' | { param: string };
+  /** SI ユニットの出力点数（パラメータで変わる場合は関数。引数は既定値を補完済みのパラメータ）。割り付けた点数がこれを超えると指摘する */
+  outputs: number | ((params: ParamValues) => number);
+  /** SI ユニットの型式（I/O 表・部品表に書く）。引数は既定値を補完済みのパラメータ */
+  unitModel: (params: ParamValues) => string;
 }
 
 export interface ParamOption {

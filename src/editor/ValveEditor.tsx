@@ -9,6 +9,7 @@ import {
   addStation,
   airTargets,
   changeStationType,
+  isSerialManifold,
   manifoldOf,
   manifoldRows,
   manifoldSummary,
@@ -167,6 +168,15 @@ function OutputSelect({ row, sol, outputs, onChange }: { row: StationRow; sol: S
   );
 }
 
+/** 通信タイプのマニホールドの、ソレノイドの SI ユニットの出力（連の順に自動で決まる） */
+function SerialCell({ row, side }: { row: StationRow; side: 'A' | 'B' }) {
+  // 連の 1 点目が A 側、2 点目が B 側。ダブル配線のシングルの弁の B 側・ブランクプレートの連の点は空き
+  const p = row.serial[side === 'A' ? 0 : 1];
+  if (p?.side === side) return <span className="io-address">出力 {p.output}</span>;
+  if (p && !p.side) return <span className="muted small">空き（出力 {p.output}）</span>;
+  return <span className="muted small">—</span>;
+}
+
 /** バルブエディタ（マニホールドの連の構成と、A・B のつなぎ先・ソレノイドの PLC 出力） */
 export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Props) {
   const hostId = manifoldOf(diagram, deviceId, lookup);
@@ -174,7 +184,8 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
   const [addType, setAddType] = useState('');
   const host = hostId ? diagram.devices.find((x) => x.id === hostId) : undefined;
   const hostDef = host && lookup(host.type);
-  const outputs = useMemo(() => plcOutputs(diagram, lookup), [diagram]);
+  const serial = isSerialManifold(hostDef);
+  const outputs = useMemo(() => (serial ? [] : plcOutputs(diagram, lookup)), [diagram, serial]);
   const rows = useMemo(() => (hostId ? manifoldRows(diagram, hostId, lookup, outputs) : []), [diagram, hostId, outputs]);
   const targets = useMemo(() => (hostId ? airTargets(diagram, hostId, lookup) : []), [diagram, hostId]);
   const types = useMemo(() => (hostDef ? stationTypes(hostDef, deviceDefinitions) : { valves: [], blanks: [] }), [hostDef]);
@@ -215,8 +226,8 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
                   <th>A・B の継手</th>
                   <th>4(A) のつなぎ先</th>
                   <th>2(B) のつなぎ先</th>
-                  <th>SOL A の出力</th>
-                  <th>SOL B の出力</th>
+                  <th>{serial ? 'SOL A（SI ユニット）' : 'SOL A の出力'}</th>
+                  <th>{serial ? 'SOL B（SI ユニット）' : 'SOL B の出力'}</th>
                   <th />
                 </tr>
               </thead>
@@ -279,21 +290,27 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
                           )}
                         </td>
                       ))}
-                      {(['A', 'B'] as const).map((side) => (
-                        <td key={side}>
-                          <OutputSelect
-                            row={r}
-                            sol={r.solenoids.find((s) => s.side === side)}
-                            outputs={outputs}
-                            onChange={(p) =>
-                              onApply(
-                                setSolenoidOutput(diagram, r.device.id, side, p, SOL_WIRE, lookup),
-                                p ? `${r.device.id} の SOL ${side} を ${p.address} につなぎました` : `${r.device.id} の SOL ${side} の出力を外しました`,
-                              )
-                            }
-                          />
-                        </td>
-                      ))}
+                      {(['A', 'B'] as const).map((side) =>
+                        serial ? (
+                          <td key={side}>
+                            <SerialCell row={r} side={side} />
+                          </td>
+                        ) : (
+                          <td key={side}>
+                            <OutputSelect
+                              row={r}
+                              sol={r.solenoids.find((s) => s.side === side)}
+                              outputs={outputs}
+                              onChange={(p) =>
+                                onApply(
+                                  setSolenoidOutput(diagram, r.device.id, side, p, SOL_WIRE, lookup),
+                                  p ? `${r.device.id} の SOL ${side} を ${p.address} につなぎました` : `${r.device.id} の SOL ${side} の出力を外しました`,
+                                )
+                              }
+                            />
+                          </td>
+                        ),
+                      )}
                       <td className="valve-actions">
                         <button type="button" disabled={i === 0} onClick={() => onApply(moveUnit(diagram, hostId, r.device.id, r.slot - 1, lookup), `${r.device.id} を連 ${r.slot - 1} へ移しました`)} title="左（D 側）へ">
                           ←
@@ -391,6 +408,11 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
               <p className="muted small">
                 連数 {summary.stations}（ブランクプレートを含む）・ソレノイド {summary.solenoids} 点。連 1 は D 側（左）。部品表には、この型式のマニホールドと各連の電磁弁・ブランクプレートが載ります。
               </p>
+              {summary.serial && (
+                <p className="small">
+                  SI ユニット {summary.serial.unitModel}: 出力 {summary.serial.used} / {summary.serial.outputs} 点を使用（{summary.serial.wiring === 'double' ? 'ダブル配線。どの連も 2 点' : '配線指定。シングルの連は 1 点'}）
+                </p>
+              )}
               {summary.notes.map((n) => (
                 <p key={n} className="small sev-text-warning">
                   {n}
@@ -399,7 +421,10 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
             </section>
           </div>
           <p className="muted small">
-            4(A)・2(B) のつなぎ先を選ぶとチューブを引きます（別のシートの機器ならエアのリンクを置いてつなぎます）。SOL の出力を選ぶと、PLC の出力からソレノイドへ電線を引きます（シンク出力は −、ソース出力は + の側。もう一方は電源へつなぎます）。
+            4(A)・2(B) のつなぎ先を選ぶとチューブを引きます（別のシートの機器ならエアのリンクを置いてつなぎます）。
+            {serial
+              ? 'ソレノイドはマニホールドの中で SI ユニットにつながり、出力番号は連 1 から順に（各連の A 側・B 側）自動で決まります。配線（ダブル配線・配線指定）と SI ユニットはマニホールドのパラメータで選びます。'
+              : 'SOL の出力を選ぶと、PLC の出力からソレノイドへ電線を引きます（シンク出力は −、ソース出力は + の側。もう一方は電源へつなぎます）。'}
           </p>
         </div>
       </div>

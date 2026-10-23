@@ -8,7 +8,7 @@ import { getTubeColor, getTubeType, tubeModel } from '../data/tubes';
 import { airPortOf, isDirectTube } from '../model/air';
 import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
-import { deviceAccessories, deviceModel, paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
+import { deviceAccessories, deviceModel, paramLabel, paramsWithDefaults, type DeviceCategory, type DeviceDefinition } from '../devices/types';
 import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
 import { computeBus, effectiveParams } from '../model/bus';
 import { compareAddress, ioHosts, ioSystem } from '../model/io';
@@ -153,10 +153,12 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     if (!def || def.category === 'link') continue;
     const params = effectiveParams(x, bus);
     const model = deviceModel(def, params);
-    const spec = (def.params ?? [])
-      .filter((p) => !NOT_SPEC.has(p.key))
-      .map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`)
-      .join('、');
+    // 通信タイプのマニホールドは SI ユニットの型式も書く（マニホールドの型式に SI ユニットの記号が入り、一緒に手配する）
+    const serial = def.bus?.host?.serial;
+    const spec = [
+      ...(def.params ?? []).filter((p) => !NOT_SPEC.has(p.key)).map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`),
+      ...(serial ? [`SI ユニット ${serial.unitModel(paramsWithDefaults(def, params))}`] : []),
+    ].join('、');
     const k = `${def.type}|${model}|${spec}`;
     const g = groups.get(k) ?? {
       category: def.category,
@@ -247,6 +249,10 @@ export interface IoRow {
   via: string;
 }
 
+/**
+ * I/O 表の行。PLC の入出力のあとに、通信タイプのマニホールドの SI ユニットの出力（ソレノイドの割付け。空きの点も）を続ける。
+ * SI ユニットの出力の番号は「出力0」のように書き、接続先は弁の機器名（ダブルソレノイド・3 位置は側も）にする
+ */
 export function ioRows(d: Diagram, lookup: DefLookup): IoRow[] {
   const rows: IoRow[] = [];
   for (const host of ioHosts(d, lookup)) {
@@ -263,6 +269,22 @@ export function ioRows(d: Diagram, lookup: DefLookup): IoRow[] {
           via: p.via.join('・'),
         });
       }
+    }
+  }
+  const devices = new Map(d.devices.map((x) => [x.id, x]));
+  for (const [host, s] of computeBus(d.devices, lookup).serial) {
+    for (const p of s.points) {
+      const two = s.points.some((q) => q.device === p.device && q.side === 'B');
+      rows.push({
+        host,
+        unit: host,
+        model: s.unitModel,
+        address: `出力${p.output}`,
+        dir: '出力',
+        comment: p.side ? (devices.get(p.device)?.note ?? '') : '（空き）',
+        connections: p.side ? `${p.device}${two ? `（SOL ${p.side}）` : ''}` : '',
+        via: p.output >= s.outputs ? 'SI ユニットの点数を超えています' : '',
+      });
     }
   }
   return rows;

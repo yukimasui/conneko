@@ -83,6 +83,23 @@ CPU の右に連結する増設ユニットや、ベースユニットに装着�
 - 装着した電磁弁の P・EA・EB はマニホールドの中で SUP（`P`）・EXH（`EA`・`EB`）につながるので、チューブはつながない。
   エア源からマニホールドの `P` へ、各電磁弁の `A`・`B` からシリンダなどへチューブでつなぐ。ソレノイドは各弁のリード線（`A+`・`A-`・`B+`・`B-`）に電線でつなぐ。
 
+通信タイプ（SI ユニット付き）のマニホールド（`smc.ss5y3-10s` など）には、プラグイン形の電磁弁（`smc.sy3100-5u1` など）とブランクプレート（`smc.sy30m-26-1a`）を同じ書き方で装着する。
+
+```json
+{ "id": "MF2", "type": "smc.ss5y3-10s", "x": 300, "y": 0, "params": { "protocol": "D", "points": "A", "polarity": "NPN", "wiring": "double" } },
+{ "id": "SOL5", "type": "smc.sy3100-5u1", "x": 0, "y": 0, "mount": { "device": "MF2", "slot": 1 } },
+{ "id": "SOL6", "type": "smc.sy3200-5u1", "x": 0, "y": 0, "mount": { "device": "MF2", "slot": 2 } },
+{ "id": "CBL1", "type": "smc.ex500-ap050-s", "x": 300, "y": 200 }
+```
+
+- `params`: `protocol`（`D` = EtherCAT、`E` = EtherNet/IP、`F` = PROFINET）、`points`（`A` = 32 点、`B` = 16 点）、`polarity`（`NPN` / `PNP`）、
+  `wiring`（`double` = ダブル配線。どの連も 2 点、`specified` = 配線指定。シングルの連は 1 点）。
+- プラグイン形の弁にはソレノイドの端子がない（電線をつながない）。SI ユニットの出力番号は連 1 から順に自動で決まる
+  （ダブル配線なら SOL5 = 出力 0（出力 1 は空き）、SOL6 = 出力 2・3）。
+- SI ユニットの通信ポート `IN`（`OUT` は渡り配線）を PLC の通信ポート（KV-X の `PORT3` など、プロトコルが同じもの）へケーブル（`"wireType": "CABLE"`）でつなぐ。
+  電源コネクタ `PWR` には電源ケーブル `smc.ex500-ap050-s` の `CN` をケーブルでつなぎ、芯線（`BN`・`WH`・`BU`・`BK`）を DC24V 電源へ電線でつなぐ
+  （EtherCAT・PROFINET は BN = 電磁弁用 +24V、WH = 電磁弁用 0V、BU = 制御用 +24V、BK = 制御用 0V）。
+
 ## settings（図面の設定）
 
 | キー | 説明 |

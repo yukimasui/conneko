@@ -5,7 +5,8 @@
  * - 上の段にアクチュエータ（シリンダ・エアチャックなど）、その下に速度制御弁などの途中の機器、その下に方向制御弁を、弁ごとに縦の列にする
  * - 弁の P（1）は下の主管へつなぐ。主管の左にエア源と 3 点セットを流れの順に並べる
  * - 排気ポート（3・5）は、サイレンサをつないだものはサイレンサの記号、何もつないでいなければ大気への排気（三角）を描く
- * - 記号の横に機器名・型式、ソレノイド・オートスイッチの横に PLC の入出力番号（つないでいれば）を書く
+ * - 記号の横に機器名・型式、ソレノイド・オートスイッチの横に PLC の入出力番号（つないでいれば）を書く。
+ *   通信タイプのマニホールドに装着した弁のソレノイドは、SI ユニットの出力（例: MF2 出力3）を書く
  * 線は、弁の作業ポートからアクチュエータのポートまでを、途中の機器を通る道筋で描く（チューブの引き回しそのものではない）。
  *
  * 編集画面では記号のまとまり（機器ごと。マニホールドは装着した弁ごと）をドラッグで動かせる。動かした位置はシートの items
@@ -15,6 +16,7 @@ import type { Model } from '../../check/model';
 import { key } from '../../check/model';
 import { airPressures } from '../../check/pneumatic';
 import { deviceModel, type DeviceDefinition, type PneumaticHint, type ValveOperator } from '../../devices/types';
+import { serialOutputName } from '../../model/bus';
 import type { Diagram } from '../../model/diagram';
 import { ioRows } from '../../export/reports';
 import type { SchematicSheetOut } from '../format';
@@ -686,8 +688,8 @@ export function pneumaticLayout(
         const label = (side: 'a' | 'b') => {
           const t = sol?.[side];
           if (!t && !(v.hint.valve?.operators[side] === 'solenoid')) return undefined;
-          // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる
-          const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-'));
+          // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる。通信タイプのマニホールドの弁は SI ユニットの出力
+          const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-')) ?? serialOutputName(model.bus, v.id, side === 'a' ? 'A' : 'B');
           const name = v.hint.valve?.operators.b === 'solenoid' ? `${v.id}${side.toUpperCase()}` : v.id;
           return addr ? `${name}（${addr}）` : name;
         };

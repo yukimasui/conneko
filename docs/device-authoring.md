@@ -180,6 +180,37 @@ pins: [
 - 連の A・B ポートは、その連の機器の端子にする（マニホールドベースの継手も連の絵に含める）。ソレノイドのリード線も連の機器の端子。
 - 分類が `valve` で `bus.host` を持つ機器はマニホールドとみなし、右クリック・インスペクタからバルブエディタ（`src/editor/ValveEditor.tsx`）で連の構成・つなぎ先を編集できる。
 
+#### 通信タイプ（SI ユニット付き）のマニホールド
+
+フィールドバスの SI ユニットを付けたマニホールド（お手本は `src/devices/smc/sy-serial.ts` の SS5Y□-10S ＋ EX260）は、親の `bus.host.serial` を書く。
+連の弁（プラグイン形）はソレノイドの電気端子を持たず、SI ユニットの出力番号が連の順に自動で決まる。
+
+```ts
+// 親（SI ユニット付きのマニホールド）
+bus: {
+  kind: 'smc-ss5y3-10s',
+  host: {
+    slots: 24,
+    airGallery: { P: 'P', EA: 'EA', EB: 'EB' },
+    fromUnits: manifoldParams,
+    serial: {
+      wiring: { param: 'wiring' },          // 'double'（どの連も 2 点）/ 'specified'（ソレノイドの数。ブランクプレートは 1 点）
+      outputs: (p) => (p.points === 'B' ? 16 : 32), // SI ユニットの出力点数
+      unitModel: (p) => 'EX260-SEC2',       // SI ユニットの型式（I/O 表・部品表に書く）
+    },
+  },
+},
+// 連（プラグイン形の弁）: エアのポートだけ。ソレノイドの数は pneumatic.valve.operators の 'solenoid' で数える
+pneumatic: syPneumatic('double'),
+```
+
+- 出力番号は 0 から、連 1（D 側）から順に、各連の A 側・B 側の順に割り付ける（`src/model/bus.ts` の `computeBus`。結果は `layout.serial`）。
+  割り付けた番号は連の `params.solA` / `params.solB` に入るので、連の `svg` を関数にすれば絵に書ける。点数が `outputs` を超えると `manifold-outputs-over` を指摘する。
+- インスペクタ・バルブエディタ・空圧回路図（ソレノイドの横に「MF1 出力3」）・I/O 表（SI ユニットの出力。空きの点も）に出力番号が出る。部品表のマニホールドの仕様に SI ユニットの型式を書く。
+- SI ユニットの通信ポート（M12 D コード）は `kind: 'M12D'`、`mates: ['RJ45']`、`protocols` を書く。RJ-45 の通信ポート・ネットワークリンクとケーブルでつながり、
+  プロトコルが合わなければ警告する。`mates` に `'RJ45'` を含むピンのないコネクタは LAN ポートとして扱い（`isLanPort`）、引くとネットワークの候補を出す。
+- 電源コネクタ（M12）はピン（`PWR#1` …）に `role: 'input'` と `accepts` を書き、片側バラ線の電源ケーブル（`smc.ex500-ap050-s`）でつなぐと DC24V の受電をチェックできる。
+
 ## パラメータで変わる端子・ピン・内部経路
 
 `terminals` / `pins` / `links` はパラメータを受け取って配列を返す関数にもできる（引数は既定値と `ioIn` / `ioOut` を補完済み）。
