@@ -8,6 +8,7 @@
  * 端子記号は一次側（LINE）1/3/5、二次側（LOAD）2/4/6（2極は 1/3・2/4）。
  */
 import type { DeviceDefinition, ParamDef, ParamValues } from '../types';
+import { poleHint } from './pole-hint';
 
 export interface WsvBreakerSpec {
   type: string;
@@ -285,8 +286,8 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
     height: H,
     svg,
     terminals: [
-      ...poles.map((q) => ({ id: q.line, x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
-      ...poles.map((q) => ({ id: q.load, x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
+      ...poles.map((q, i) => ({ id: q.line, hint: poleHint(poles.length, i, '一次'), x: q.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
+      ...poles.map((q, i) => ({ id: q.load, hint: poleHint(poles.length, i, '二次'), x: q.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
     ],
     links: poles.map((q) => ({ from: q.line, to: q.load, directed: true, protects: true })),
     params,

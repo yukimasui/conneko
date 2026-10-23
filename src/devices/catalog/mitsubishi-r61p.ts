@@ -168,17 +168,18 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
   const ac = { system: 'AC' as const, minVoltage: 85, maxVoltage: 264 };
   const side = 'right' as const;
   const terminals: TerminalDef[] = [
-    { id: 'ERR1', label: 'ERR', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[0], side, role: 'signal', optional: true },
-    { id: 'ERR2', label: 'ERR', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[1], side, role: 'signal', optional: true },
-    { id: 'FG', label: 'FG', x: MAIN_X, y: MAIN_Y[2], side, role: 'ground' },
-    { id: 'LG', label: 'LG', x: MAIN_X, y: MAIN_Y[3], side, role: 'ground' },
-    { id: 'N', label: 'INPUT N', x: MAIN_X, y: MAIN_Y[4], side, role: 'input', accepts: ac },
-    { id: 'L', label: 'INPUT L', x: MAIN_X, y: MAIN_Y[5], side, role: 'input', accepts: ac },
+    { id: 'ERR1', label: 'ERR', hint: '正常時に閉', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[0], side, role: 'signal', optional: true },
+    { id: 'ERR2', label: 'ERR', hint: '正常時に閉', note: 'ERR 接点（正常時に閉）', x: MAIN_X, y: MAIN_Y[1], side, role: 'signal', optional: true },
+    { id: 'FG', label: 'FG', hint: '機能接地', x: MAIN_X, y: MAIN_Y[2], side, role: 'ground' },
+    { id: 'LG', label: 'LG', hint: 'フィルタ接地', x: MAIN_X, y: MAIN_Y[3], side, role: 'ground' },
+    { id: 'N', label: 'INPUT N', hint: 'AC入力', x: MAIN_X, y: MAIN_Y[4], side, role: 'input', accepts: ac },
+    { id: 'L', label: 'INPUT L', hint: 'AC入力', x: MAIN_X, y: MAIN_Y[5], side, role: 'input', accepts: ac },
   ];
   if (svc) {
     terminals.push(
       {
         id: '+24V',
+        hint: 'サービス出力',
         x: SVC_X,
         y: SVC_Y[0],
         side: 'left',
@@ -187,6 +188,7 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
       },
       {
         id: '24G',
+        hint: 'サービス出力',
         x: SVC_X,
         y: SVC_Y[1],
         side: 'left',

@@ -55,9 +55,9 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: 'L', x: 35, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 100, conductor: 'L' } },
-    { id: 'N', x: 70, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 100, conductor: 'N' } },
-    { id: 'PE', x: 105, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 0, conductor: 'PE' } },
+    { id: 'L', hint: 'AC100V', x: 35, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 100, conductor: 'L' } },
+    { id: 'N', hint: 'AC100V', x: 70, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 100, conductor: 'N' } },
+    { id: 'PE', hint: '接地', x: 105, y: TY, side: 'bottom', role: 'supply', supply: { system: 'AC', voltage: 0, conductor: 'PE' } },
   ],
 };
 

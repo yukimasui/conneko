@@ -17,6 +17,8 @@ export interface SocketTerminal {
   print?: string;
   /** 端子の意味（例: 'COM（極 1）'） */
   note: string;
+  /** 吹き出しに出す短い呼び名（10 文字まで。例: 'コイル+'） */
+  hint?: string;
   /** コイル（受電端子）の極性。'any' は極性なし */
   coil?: '+' | '-' | 'any';
 }
@@ -165,7 +167,7 @@ export function buildRelaySocket(s: RelaySocketSpec): DeviceDefinition {
 `;
 
   const terminals: TerminalDef[] = s.terminals.map((t) => {
-    const base = { id: t.id, label: t.print ?? t.id, note: t.note, x: t.x, y: t.y, side: t.side };
+    const base = { id: t.id, label: t.print ?? t.id, note: t.note, ...(t.hint ? { hint: t.hint } : {}), x: t.x, y: t.y, side: t.side };
     if (t.coil) {
       const conductors = t.coil === 'any' ? {} : { conductors: [t.coil] as ('+' | '-')[] };
       return { ...base, role: 'input' as const, accepts: { ...s.coil, ...conductors } };

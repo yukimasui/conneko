@@ -18,7 +18,7 @@ import { buildRelaySocket, cContact, type RelayFace, type SocketTerminal } from 
 type Coil = 'dc24' | 'ac100';
 
 /** 端子の向き・印字の位置を決めた PYF08A-E の端子（W 46 × H 144、1mm ≒ 2px） */
-function pyf08(notes: Record<string, string>, coilPolarity: { '13': '+' | '-' | 'any'; '14': '+' | '-' | 'any' }): SocketTerminal[] {
+function pyf08(notes: Record<string, string>, hints: Record<string, string>, coilPolarity: { '13': '+' | '-' | 'any'; '14': '+' | '-' | 'any' }): SocketTerminal[] {
   const L = 11;
   const C = 23;
   const R = 35;
@@ -28,13 +28,14 @@ function pyf08(notes: Record<string, string>, coilPolarity: { '13': '+' | '-' | 
     y,
     side,
     note: notes[id],
+    hint: hints[id],
     ...(id === '13' || id === '14' ? { coil: coilPolarity[id] } : {}),
   });
   return [t('4', C, 14, 'top'), t('1', R, 14, 'top'), t('8', L, 37, 'left'), t('5', R, 37, 'right'), t('12', L, 107, 'left'), t('9', R, 107, 'right'), t('14', L, 130, 'bottom'), t('13', C, 130, 'bottom')];
 }
 
 /** PYF14A-E の端子（W 74 × H 144。1・4 段目は半ピッチずらす） */
-function pyf14(notes: Record<string, string>, coilPolarity: { '13': '+' | '-' | 'any'; '14': '+' | '-' | 'any' }): SocketTerminal[] {
+function pyf14(notes: Record<string, string>, hints: Record<string, string>, coilPolarity: { '13': '+' | '-' | 'any'; '14': '+' | '-' | 'any' }): SocketTerminal[] {
   const col = [12, 28, 44, 60];
   const t = (id: string, x: number, y: number, side: SocketTerminal['side']): SocketTerminal => ({
     id,
@@ -42,6 +43,7 @@ function pyf14(notes: Record<string, string>, coilPolarity: { '13': '+' | '-' | 
     y,
     side,
     note: notes[id],
+    hint: hints[id],
     ...(id === '13' || id === '14' ? { coil: coilPolarity[id] } : {}),
   });
   return [
@@ -74,6 +76,18 @@ function poleNotes(poles: 2 | 4, coilNote: { '13': string; '14': string }, what 
   return notes;
 }
 
+/** 極ごとの端子の呼び名（COM1 / NC1 / NO1 など）とコイルの呼び名。what はタイマーの接点の前置き（'限時'） */
+function poleHints(poles: 2 | 4, coil: { '13': string; '14': string }, what = ''): Record<string, string> {
+  const hints: Record<string, string> = { '13': coil['13'], '14': coil['14'] };
+  const list = poles === 2 ? [{ com: '9', nc: '1', no: '5' }, { com: '12', nc: '4', no: '8' }] : [1, 2, 3, 4].map((n) => ({ com: String(8 + n), nc: String(n), no: String(4 + n) }));
+  list.forEach((p, i) => {
+    hints[p.com] = `${what}COM${i + 1}`;
+    hints[p.nc] = `${what}NC${i + 1}`;
+    hints[p.no] = `${what}NO${i + 1}`;
+  });
+  return hints;
+}
+
 function poleLinks(poles: 2 | 4) {
   return poles === 2 ? [...cContact('9', '1', '5'), ...cContact('12', '4', '8')] : [1, 2, 3, 4].flatMap((n) => cContact(String(8 + n), String(n), String(4 + n)));
 }
@@ -93,6 +107,7 @@ export function buildMy(poles: 2 | 4, coil: Coil): DeviceDefinition {
   const polarity = dc ? ({ '13': '-', '14': '+' } as const) : ({ '13': 'any', '14': 'any' } as const);
   const coilNote = dc ? { '13': 'コイル −（0V）', '14': 'コイル +（+24V）' } : { '13': 'コイル（AC100/110V）', '14': 'コイル（AC100/110V）' };
   const notes = poleNotes(poles, coilNote);
+  const hints = poleHints(poles, dc ? { '13': 'コイル−', '14': 'コイル+' } : { '13': 'コイル', '14': 'コイル' });
   const name = `MY${poles}N`;
   const socket = poles === 2 ? 'PYF08A-E' : 'PYF14A-E';
   const W = poles === 2 ? 46 : 74;
@@ -126,7 +141,7 @@ export function buildMy(poles: 2 | 4, coil: Coil): DeviceDefinition {
     socketColor: SOCKET_COLOR,
     seat: '#0b0b0c',
     ink: '#f2f2f2',
-    terminals: poles === 2 ? pyf08(notes, polarity) : pyf14(notes, polarity),
+    terminals: poles === 2 ? pyf08(notes, hints, polarity) : pyf14(notes, hints, polarity),
     labelOffset: poles === 2 ? pyf08Label : pyf14Label,
     relay,
     coil: c.accepts,
@@ -159,6 +174,7 @@ const H3Y_RANGES = ['0.5s', '1s', '5s', '10s', '30s', '60s', '120s', '3min', '5m
  */
 export function buildH3y(): DeviceDefinition {
   const notes = poleNotes(2, { '13': '電源 −（0V）', '14': '電源 +（+24V）' }, '限時接点 ');
+  const hints = poleHints(2, { '13': '電源−', '14': '電源+' }, '限時');
   const W = 46;
   const base = buildRelaySocket({
       type: 'omron.h3y-2.dc24',
@@ -178,7 +194,7 @@ export function buildH3y(): DeviceDefinition {
       socketColor: SOCKET_COLOR,
       seat: '#0b0b0c',
       ink: '#f2f2f2',
-      terminals: pyf08(notes, { '13': '-', '14': '+' }),
+      terminals: pyf08(notes, hints, { '13': '-', '14': '+' }),
       labelOffset: pyf08Label,
       relay: { x: 4, y: 50, w: W - 8, h: 44, cover: '#c9cbc6', ink: '#222', lines: ['H3Y-2', '{{range}}'], textTop: 0.02, dial: { x: W / 2, y: 79, r: 8 }, led: { x: 9, y: 62, color: '#ff8a1e' } },
       coil: { system: 'DC', minVoltage: 20.4, maxVoltage: 26.4 },

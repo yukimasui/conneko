@@ -132,13 +132,14 @@ const def: DeviceDefinition = {
   height: H,
   svg: (p) => svg(Number(p.outputCurrent) || DEFAULT_CURRENT),
   terminals: [
-    { id: 'L', x: IN[0].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
-    { id: 'N', x: IN[1].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
-    { id: 'PE', label: '⏚', x: IN[2].x, y: IN_Y, side: 'top', role: 'ground' },
+    { id: 'L', hint: 'AC入力', x: IN[0].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
+    { id: 'N', hint: 'AC入力', x: IN[1].x, y: IN_Y, side: 'top', role: 'input', accepts: inputAccepts },
+    { id: 'PE', label: '⏚', hint: '接地', x: IN[2].x, y: IN_Y, side: 'top', role: 'ground' },
     // 出力（+V / -V が2組。2組目は渡り配線用なので未接続でも警告しない）
     {
       id: '+V1',
       label: '+V',
+      hint: '出力 +24V',
       x: OUT[0].x,
       y: OUT_Y,
       side: 'bottom',
@@ -148,6 +149,7 @@ const def: DeviceDefinition = {
     {
       id: '+V2',
       label: '+V',
+      hint: '出力 +24V',
       x: OUT[1].x,
       y: OUT_Y,
       side: 'bottom',
@@ -158,6 +160,7 @@ const def: DeviceDefinition = {
     {
       id: '-V1',
       label: '-V',
+      hint: '出力 0V',
       x: OUT[2].x,
       y: OUT_Y,
       side: 'bottom',
@@ -167,6 +170,7 @@ const def: DeviceDefinition = {
     {
       id: '-V2',
       label: '-V',
+      hint: '出力 0V',
       x: OUT[3].x,
       y: OUT_Y,
       side: 'bottom',

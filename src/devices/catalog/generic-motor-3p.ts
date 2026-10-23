@@ -177,13 +177,14 @@ const def: DeviceDefinition = {
   terminals: [
     ...TERMINALS.map((t) => ({
       id: t.id,
+      hint: 'AC200V入力',
       x: t.x,
       y: TY,
       side: 'top' as const,
       role: 'input' as const,
       accepts: { system: 'AC' as const, minVoltage: 200, maxVoltage: 220, conductors: ['R', 'S', 'T'] as ('R' | 'S' | 'T')[] },
     })),
-    { id: 'E', label: '⏚', x: EX, y: TY, side: 'top', role: 'ground' },
+    { id: 'E', label: '⏚', hint: '接地', x: EX, y: TY, side: 'top', role: 'ground' },
   ],
   params: [
     {

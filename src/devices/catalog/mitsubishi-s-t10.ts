@@ -125,19 +125,20 @@ const def: DeviceDefinition = {
   svg,
   terminals: [
     // 主接点 一次側
-    { id: '1/L1', x: COLS[0], y: TOP_Y, side: 'top', role: 'line' },
-    { id: '3/L2', x: COLS[1], y: TOP_Y, side: 'top', role: 'line' },
-    { id: '5/L3', x: COLS[2], y: TOP_Y, side: 'top', role: 'line' },
+    { id: '1/L1', hint: '一次側', x: COLS[0], y: TOP_Y, side: 'top', role: 'line' },
+    { id: '3/L2', hint: '一次側', x: COLS[1], y: TOP_Y, side: 'top', role: 'line' },
+    { id: '5/L3', hint: '一次側', x: COLS[2], y: TOP_Y, side: 'top', role: 'line' },
     // 主接点 二次側
-    { id: '2/T1', x: COLS[0], y: BOT_Y, side: 'bottom', role: 'load' },
-    { id: '4/T2', x: COLS[1], y: BOT_Y, side: 'bottom', role: 'load' },
-    { id: '6/T3', x: COLS[2], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '2/T1', hint: '二次側', x: COLS[0], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '4/T2', hint: '二次側', x: COLS[1], y: BOT_Y, side: 'bottom', role: 'load' },
+    { id: '6/T3', hint: '二次側', x: COLS[2], y: BOT_Y, side: 'bottom', role: 'load' },
     // 補助接点 1a（13-14）
-    { id: '13', label: '13NO', note: '補助 a 接点', x: COLS[3], y: TOP_Y, side: 'top', role: 'signal', optional: true },
-    { id: '14', label: '14NO', note: '補助 a 接点', x: COLS[3], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
+    { id: '13', hint: 'a 接点', label: '13NO', note: '補助 a 接点', x: COLS[3], y: TOP_Y, side: 'top', role: 'signal', optional: true },
+    { id: '14', hint: 'a 接点', label: '14NO', note: '補助 a 接点', x: COLS[3], y: BOT_Y, side: 'bottom', role: 'signal', optional: true },
     // 操作コイル（AC200V品の定格は 50/60Hz 200〜240V）
     {
       id: 'A1',
+      hint: 'コイル',
       x: A1_X,
       y: COIL_Y,
       side: 'top',
@@ -146,6 +147,7 @@ const def: DeviceDefinition = {
     },
     {
       id: 'A2',
+      hint: 'コイル',
       x: A2_X,
       y: COIL_Y,
       side: 'top',

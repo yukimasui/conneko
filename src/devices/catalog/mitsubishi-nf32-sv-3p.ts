@@ -1,4 +1,5 @@
 import type { DeviceDefinition, ParamValues } from '../types';
+import { poleHint } from '../mitsubishi/pole-hint';
 
 /**
  * 三菱電機 ノーヒューズ遮断器（配線用遮断器）NF32-SV 3P（WS-Vシリーズ 汎用品）。
@@ -146,8 +147,8 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    ...POLES.map((p) => ({ id: p.line, x: p.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
-    ...POLES.map((p) => ({ id: p.load, x: p.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
+    ...POLES.map((p, i) => ({ id: p.line, hint: poleHint(POLES.length, i, '一次'), x: p.x, y: TY_LINE, side: 'top' as const, role: 'line' as const })),
+    ...POLES.map((p, i) => ({ id: p.load, hint: poleHint(POLES.length, i, '二次'), x: p.x, y: TY_LOAD, side: 'bottom' as const, role: 'load' as const })),
   ],
   links: POLES.map((p) => ({ from: p.line, to: p.load, directed: true, protects: true })),
   params: [

@@ -26,13 +26,13 @@ export const coilText = (coil: CoilKind) => (coil === 'DC24V' ? ['−  +', 'DC',
 export function coilTerminals(coil: CoilKind, a1x: number, a2x: number, y: number): TerminalDef[] {
   if (coil === 'DC24V') {
     return [
-      { id: 'A1', label: 'A1(+)', x: a1x, y, side: 'top', role: 'input', accepts: { ...COIL_DC24V, conductors: ['+'] } },
-      { id: 'A2', label: 'A2(−)', x: a2x, y, side: 'top', role: 'input', accepts: { ...COIL_DC24V, conductors: ['-'] } },
+      { id: 'A1', label: 'A1(+)', hint: 'コイル+', x: a1x, y, side: 'top', role: 'input', accepts: { ...COIL_DC24V, conductors: ['+'] } },
+      { id: 'A2', label: 'A2(−)', hint: 'コイル−', x: a2x, y, side: 'top', role: 'input', accepts: { ...COIL_DC24V, conductors: ['-'] } },
     ];
   }
   return [
-    { id: 'A1', x: a1x, y, side: 'top', role: 'input', accepts: COIL_AC200V },
-    { id: 'A2', x: a2x, y, side: 'top', role: 'input', accepts: COIL_AC200V },
+    { id: 'A1', hint: 'コイル', x: a1x, y, side: 'top', role: 'input', accepts: COIL_AC200V },
+    { id: 'A2', hint: 'コイル', x: a2x, y, side: 'top', role: 'input', accepts: COIL_AC200V },
   ];
 }
 
@@ -105,8 +105,11 @@ export const auxTerminal = (
   side: TerminalDef['side'],
   kind: 'NO' | 'NC',
   mirror = false,
+  /** 同じ種類の接点が複数あるときの区別（'a 接点2' のように番号を付ける） */
+  no?: number,
 ): TerminalDef => ({
   id,
+  hint: `${kind === 'NO' ? 'a' : 'b'} 接点${no ?? ''}`,
   label: `${id}${kind}`,
   note: kind === 'NO' ? '補助 a 接点' : mirror ? '補助 b 接点（ミラー接点）' : '補助 b 接点',
   x,

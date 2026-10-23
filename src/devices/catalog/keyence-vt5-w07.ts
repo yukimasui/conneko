@@ -200,7 +200,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: [
-    { id: 'FG', label: 'FG', x: POWER[0].x, y: PY, side: 'bottom', role: 'ground' },
+    { id: 'FG', label: 'FG', hint: '機能接地', x: POWER[0].x, y: PY, side: 'bottom', role: 'ground' },
     {
       id: '24V+',
       label: '+',
