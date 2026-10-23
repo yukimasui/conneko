@@ -34,6 +34,7 @@ export function buildRoundCable(size: 'M12' | 'M8'): DeviceDefinition {
     name: 'センサー用コネクタケーブル（片側バラ線）',
     model: `${size} 4ピン ストレート`,
     category: 'sensor',
+    cable: true,
     description:
       `センサー用の ${size} 4 ピン（A コード）コネクタケーブル。片側はストレート型のメスコネクタ（CN）、もう片側はバラ線。` +
       'センサー側のオスコネクタとケーブルでつなぎ、芯線をネジ端子台・PLC の入力につなぐ。芯線の色はピン 1 茶（+V）・2 白・3 青（0V）・4 黒（IEC 60947-5-2 の標準）。' +
