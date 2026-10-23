@@ -256,7 +256,17 @@ export const FAMILY_RULES: FamilyRule[] = [
       { label: 'シリーズ', value: (d) => /^SY\d/.exec(d.model)?.[0]?.concat('000') },
     ],
   },
-  { id: 'manifold', name: 'マニホールド', keywords: ['マニホ', 'バルブマニホールド'], test: named(/^マニホールド/), default: 'smc.ss5y3-41' },
+  {
+    id: 'manifold',
+    name: 'マニホールド',
+    keywords: ['マニホ', 'バルブマニホールド', 'SI ユニット', '省配線', 'EtherCAT', 'EtherNet/IP', 'PROFINET'],
+    test: named(/^マニホールド/),
+    default: 'smc.ss5y3-41',
+    facets: [
+      { label: '配線', value: (d) => (d.bus?.host?.serial ? '通信（SI ユニット付き）' : '個別配線') },
+      { label: 'シリーズ', value: (d) => /^SS5Y(\d)/.exec(d.model)?.[1]?.replace(/^(\d)$/, 'SY$1000') },
+    ],
+  },
   { id: 'manifold-blank', name: 'ブランクプレート（マニホールド用）', test: named(/^ブランクプレート/), hidden: true },
   { id: 'cylinder', name: 'エアシリンダ', keywords: ['シリンダ', 'エアシリ'], test: (d) => d.category === 'actuator' && /シリンダ/.test(d.name), default: 'smc.cm2' },
   { id: 'gripper', name: 'エアチャック', keywords: ['チャック', 'ハンド'], test: named(/^エアチャック/) },
