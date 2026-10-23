@@ -187,50 +187,50 @@ const accessoryModels = (type: string, p: ParamValues) => deviceAccessories(def(
 
 describe('ポートに直付けするスピードコントローラ', () => {
   it('エルボ形の型式は、ねじとチューブ外径から SMC のバリエーション表どおりに決まる', () => {
-    expect(elbowModel('M5', 4, 'meter-out')).toBe('AS1201F-M5-04');
-    expect(elbowModel('M5', 3.2, 'meter-in')).toBe('AS1211F-M5-23');
-    expect(elbowModel('01', 6, 'meter-out')).toBe('AS2201F-01-06S');
-    expect(elbowModel('02', 10, 'meter-out')).toBe('AS2201F-02-10S');
+    expect(elbowModel('M5', 4, 'meter-out')).toBe('AS1201F-M5-04A');
+    expect(elbowModel('M5', 3.2, 'meter-in')).toBe('AS1211F-M5-23A');
+    expect(elbowModel('01', 6, 'meter-out')).toBe('AS2201F-01-06SA');
+    expect(elbowModel('02', 10, 'meter-out')).toBe('AS2201F-02-10SA');
     // R1/4 の φ12 はボディサイズ 3
-    expect(elbowModel('02', 12, 'meter-in')).toBe('AS3211F-02-12S');
-    expect(elbowModel('03', 8, 'meter-out')).toBe('AS3201F-03-08S');
-    expect(elbowModel('04', 16, 'meter-out')).toBe('AS4201F-04-16S');
+    expect(elbowModel('02', 12, 'meter-in')).toBe('AS3211F-02-12SA');
+    expect(elbowModel('03', 8, 'meter-out')).toBe('AS3201F-03-08SA');
+    expect(elbowModel('04', 16, 'meter-out')).toBe('AS4201F-04-16SA');
     // 合わない組み合わせ
     expect(elbowModel('M5', 8, 'meter-out')).toBeUndefined();
     expect(elbowModel('01', 12, 'meter-out')).toBeUndefined();
     expect(elbowModel('04', 8, 'meter-out')).toBeUndefined();
     // 別に置くエルボ形の機器も同じ型式
-    expect(deviceModel(def('smc.as2201f'), { size: '04-12' })).toBe('AS4201F-04-12S');
-    expect(deviceModel(def('smc.as2211f'), { size: '02-12' })).toBe('AS3211F-02-12S');
+    expect(deviceModel(def('smc.as2201f'), { size: '04-12' })).toBe('AS4201F-04-12SA');
+    expect(deviceModel(def('smc.as2211f'), { size: '02-12' })).toBe('AS3211F-02-12SA');
   });
 
   it('シリンダ: 使うポートごとに 1 個付き、ポートの継手はスピードコントローラのワンタッチ管継手になる', () => {
     expect(deviceAccessories(def('smc.cm2'), {})).toEqual([]);
     expect(accessoryModels('smc.cm2', { speedController: 'meter-out' })).toEqual([
-      ['HEAD', 'AS2201F-01-06S'],
-      ['ROD', 'AS2201F-01-06S'],
+      ['HEAD', 'AS2201F-01-06SA'],
+      ['ROD', 'AS2201F-01-06SA'],
     ]);
     expect(accessoryModels('smc.cm2', { bore: 40, fitting: 8, speedController: 'meter-in' })).toEqual([
-      ['HEAD', 'AS2211F-02-08S'],
-      ['ROD', 'AS2211F-02-08S'],
+      ['HEAD', 'AS2211F-02-08SA'],
+      ['ROD', 'AS2211F-02-08SA'],
     ]);
     // 単動はエアを入れる側だけ
-    expect(accessoryModels('smc.cm2', { action: 'S', speedController: 'meter-in' })).toEqual([['HEAD', 'AS2211F-01-06S']]);
+    expect(accessoryModels('smc.cm2', { action: 'S', speedController: 'meter-in' })).toEqual([['HEAD', 'AS2211F-01-06SA']]);
     expect(accessoryModels('smc.cj2', { speedController: 'meter-out' })).toEqual([
-      ['HEAD', 'AS1201F-M5-04'],
-      ['ROD', 'AS1201F-M5-04'],
+      ['HEAD', 'AS1201F-M5-04A'],
+      ['ROD', 'AS1201F-M5-04A'],
     ]);
-    expect(accessoryModels('smc.mb', { bore: 100, fitting: 12, speedController: 'meter-out' })[0]).toEqual(['HEAD', 'AS4201F-04-12S']);
+    expect(accessoryModels('smc.mb', { bore: 100, fitting: 12, speedController: 'meter-out' })[0]).toEqual(['HEAD', 'AS4201F-04-12SA']);
     // シリンダの型式は変わらない（スピードコントローラは別に注文する）
     expect(deviceModel(def('smc.cm2'), { speedController: 'meter-out' })).toBe('CM2B25-100Z');
 
     const r = resolveDevice(def('smc.cm2'), { speedController: 'meter-out' });
     expect(r.air.get('HEAD')).toMatchObject({ kind: 'work', tubeOD: 6 });
     expect(r.air.get('HEAD')?.thread).toBeUndefined();
-    expect(r.terminal('HEAD')!.note).toContain('AS2201F-01-06S');
+    expect(r.terminal('HEAD')!.note).toContain('AS2201F-01-06SA');
     expect(r.pneumatic?.speedControllers).toEqual({
-      head: { control: 'meter-out', model: 'AS2201F-01-06S' },
-      rod: { control: 'meter-out', model: 'AS2201F-01-06S' },
+      head: { control: 'meter-out', model: 'AS2201F-01-06SA' },
+      rod: { control: 'meter-out', model: 'AS2201F-01-06SA' },
     });
     // 合う型式がなければ付けない（ねじは元のまま、絵に赤い文字）
     const ng = resolveDevice(def('smc.mb'), { bore: 100, fitting: 8, speedController: 'meter-out' });
@@ -253,19 +253,19 @@ describe('ポートに直付けするスピードコントローラ', () => {
 
   it('エアチャック・ロータリ: M5・Rc1/8 のポートに付く。M3 のポートには付かない', () => {
     expect(accessoryModels('smc.mhz2', { speedController: 'meter-in' })).toEqual([
-      ['OPEN', 'AS1211F-M5-04'],
-      ['CLOSE', 'AS1211F-M5-04'],
+      ['OPEN', 'AS1211F-M5-04A'],
+      ['CLOSE', 'AS1211F-M5-04A'],
     ]);
-    expect(accessoryModels('smc.mhz2', { action: 'C', fitting: 6, speedController: 'meter-out' })).toEqual([['OPEN', 'AS1201F-M5-06']]);
+    expect(accessoryModels('smc.mhz2', { action: 'C', fitting: 6, speedController: 'meter-out' })).toEqual([['OPEN', 'AS1201F-M5-06A']]);
     expect(accessoryModels('smc.mhz2', { size: 10, speedController: 'meter-out' })).toEqual([]);
     expect(resolveDevice(def('smc.mhz2'), { size: 10, speedController: 'meter-out' }).air.get('OPEN')?.thread).toBe('M3');
     expect(resolveDevice(def('smc.mhz2'), { speedController: 'meter-out' }).pneumatic?.speedControllers).toEqual({
-      open: { control: 'meter-out', model: 'AS1201F-M5-04' },
-      close: { control: 'meter-out', model: 'AS1201F-M5-04' },
+      open: { control: 'meter-out', model: 'AS1201F-M5-04A' },
+      close: { control: 'meter-out', model: 'AS1201F-M5-04A' },
     });
     expect(accessoryModels('smc.msq', { size: 70, fitting: 8, speedController: 'meter-out' })).toEqual([
-      ['A', 'AS2201F-01-08S'],
-      ['B', 'AS2201F-01-08S'],
+      ['A', 'AS2201F-01-08SA'],
+      ['B', 'AS2201F-01-08SA'],
     ]);
     expect(accessoryModels('smc.msq', { size: 1, speedController: 'meter-out' })).toEqual([]);
   });
@@ -292,7 +292,7 @@ describe('ポートに直付けするスピードコントローラ', () => {
         .map((i) => i.rule);
     // CQ2 φ25 は M5。φ8 の継手は付かない
     expect(rules(valveToActuator('smc.cq2', { fitting: 8 }, ['HEAD', 'ROD'], 8))).toContain('air-fitting-thread');
-    // φ6 のスピードコントローラ（AS1201F-M5-06）なら出ない
+    // φ6 のスピードコントローラ（AS1201F-M5-06A）なら出ない
     const ok = valveToActuator('smc.cq2', { fitting: 6, speedController: 'meter-out' }, ['HEAD', 'ROD']);
     expect(rules(ok)).not.toContain('air-fitting-thread');
     expect(rules(ok)).not.toContain('tube-od-mismatch');
@@ -311,7 +311,7 @@ describe('ポートに直付けするスピードコントローラ', () => {
 
   it('部品表: スピードコントローラは 1 ポート 1 個で載り、そのポートにはハーフユニオンを入れない', () => {
     const rows = bomRows(valveToActuator('smc.cm2', { speedController: 'meter-out' }, ['HEAD', 'ROD']), getDeviceDefinition);
-    expect(rows.find((r) => r.model === 'AS2201F-01-06S')).toMatchObject({
+    expect(rows.find((r) => r.model === 'AS2201F-01-06SA')).toMatchObject({
       category: 'air-fitting',
       maker: 'SMC',
       name: 'スピードコントローラ（エルボ形・メータアウト）',
@@ -334,7 +334,7 @@ describe('ポートに直付けするスピードコントローラ', () => {
       wires: [],
     };
     const r2 = bomRows(two, getDeviceDefinition);
-    expect(r2.find((r) => r.model === 'AS2201F-01-06S')).toMatchObject({ qty: 4, ids: ['CY1.HEAD', 'CY1.ROD', 'CY2.HEAD', 'CY2.ROD'] });
-    expect(r2.find((r) => r.model === 'AS1211F-M5-04')).toMatchObject({ qty: 1, ids: ['HD1.CLOSE'], name: 'スピードコントローラ（エルボ形・メータイン）' });
+    expect(r2.find((r) => r.model === 'AS2201F-01-06SA')).toMatchObject({ qty: 4, ids: ['CY1.HEAD', 'CY1.ROD', 'CY2.HEAD', 'CY2.ROD'] });
+    expect(r2.find((r) => r.model === 'AS1211F-M5-04A')).toMatchObject({ qty: 1, ids: ['HD1.CLOSE'], name: 'スピードコントローラ（エルボ形・メータイン）' });
   });
 });

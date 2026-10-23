@@ -147,7 +147,7 @@ describe('空圧回路図', () => {
     expect(balls(attached('none'))).toEqual([]);
     const texts = buildSchematic(attached('meter-out'), lookup).doc.sheets[0].texts.map((x) => x.text);
     expect(texts.filter((x) => x === 'AS2201F')).toHaveLength(2);
-    expect(texts).toContain('-01-06S');
+    expect(texts).toContain('-01-06SA');
   });
 
   it('エア機器がなければ案内を書く', () => {

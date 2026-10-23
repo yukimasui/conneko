@@ -68,9 +68,9 @@ describe('SMC の 3 点セット・エア周辺機器の定義', () => {
     expect(m('smc.al')).toBe('AL20-02-A');
     expect(m('smc.afm')).toBe('AFM20-02-A');
     expect(m('smc.vhs', { body: '30-03' })).toBe('VHS30-03A');
-    expect(m('smc.as2201f', { size: '02-08' })).toBe('AS2201F-02-08S');
-    expect(m('smc.as2201f', { size: 'M5-04' })).toBe('AS1201F-M5-04');
-    expect(m('smc.as2211f')).toBe('AS2211F-01-06S');
+    expect(m('smc.as2201f', { size: '02-08' })).toBe('AS2201F-02-08SA');
+    expect(m('smc.as2201f', { size: 'M5-04' })).toBe('AS1201F-M5-04A');
+    expect(m('smc.as2211f')).toBe('AS2211F-01-06SA');
     expect(m('smc.as-f.inline', { tubeOD: 4 })).toBe('AS1002F-04');
     expect(m('smc.kq2t', { tubeOD: 8 })).toBe('KQ2T08-00A');
     expect(m('smc.kq2u')).toBe('KQ2U06-00A');

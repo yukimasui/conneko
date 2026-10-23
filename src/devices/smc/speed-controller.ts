@@ -12,7 +12,7 @@
  *     AS1201F-M5: φ2・3.2・4・6 / AS2201F-01・-02: φ3.2〜10 / AS3201F-02・-03: φ6〜12 / AS4201F-04: φ10・12・16
  *   型式の外径は 2 桁（3.2 は 23）。R ねじはシール剤付き（S）、M5 はガスケットシールで S を付けない。
  *   ハンドルの色はメータアウトがアーバングレー、メータインがライトブルー
- *   （このカタログの型式は末尾にプッシュロック式の A が付く（例: AS2201F-01-06SA）が、ここでは A を付けない従来の表記にしている）
+ *   型式の末尾の A はプッシュロック式のつまみ（例: AS2201F-01-06SA）。いまのカタログの標準に合わせて付ける
  *
  * 機器の中の通り道は向きのないもの（絞るのは流量で、届く圧力は変わらない）。
  * 自由流れ（逆止弁が開いて絞らずに流れる向き）を空圧回路図の記号の in → out にそろえる。
@@ -111,7 +111,8 @@ const ELBOW_BODIES: { body: 1 | 2 | 3 | 4; thread: string; ods: number[] }[] = [
 export type SpeedControl = 'meter-out' | 'meter-in';
 
 /**
- * エルボ形の型式（例: M5・φ4 のメータアウト → AS1201F-M5-04、'01'・φ6 のメータイン → AS2211F-01-06S）。
+ * エルボ形の型式（例: M5・φ4 のメータアウト → AS1201F-M5-04A、'01'・φ6 のメータイン → AS2211F-01-06SA）。
+ * 末尾の A はプッシュロック式のつまみ（いまのカタログの標準）。
  * thread はねじの記号（'M5'・'01'〜'04'）。合うボディがなければ undefined
  */
 export function elbowModel(thread: string, od: number, control: SpeedControl): string | undefined {
@@ -119,7 +120,7 @@ export function elbowModel(thread: string, od: number, control: SpeedControl): s
   if (!b) return undefined;
   const size = od === 3.2 ? '23' : pad2(od);
   // R ねじはシール剤付き（S）が標準。M5 は付けない
-  return `AS${b.body}2${control === 'meter-out' ? 0 : 1}1F-${thread}-${size}${thread === 'M5' ? '' : 'S'}`;
+  return `AS${b.body}2${control === 'meter-out' ? 0 : 1}1F-${thread}-${size}${thread === 'M5' ? '' : 'S'}A`;
 }
 
 /** エルボ形 AS□201F（メータアウト）/ AS□211F（メータイン） */
@@ -156,12 +157,12 @@ export function buildAsElbow(type: string, mode: 'meter-out' | 'meter-in'): Devi
   };
   const modelOf = (p: ParamValues) => {
     const [thread, od] = String(p.size).split('-');
-    return elbowModel(thread, Number(od), mode) ?? `AS22${out ? 0 : 1}1F-${thread}-${od}S`;
+    return elbowModel(thread, Number(od), mode) ?? `AS22${out ? 0 : 1}1F-${thread}-${od}SA`;
   };
   return {
     type,
     name: out ? 'スピードコントローラ（エルボ形・メータアウト）' : 'スピードコントローラ（エルボ形・メータイン）',
-    model: out ? 'AS2201F-01-06S' : 'AS2211F-01-06S',
+    model: out ? 'AS2201F-01-06SA' : 'AS2211F-01-06SA',
     modelOf,
     maker: 'SMC',
     category: 'air-fitting',
@@ -266,7 +267,7 @@ export function portAirThread(sc: PortSpeedController | undefined, thread: strin
   return sc?.model ? {} : { thread };
 }
 
-/** 端子の説明に付け足す文（例: '。エルボ形スピードコントローラ AS2201F-01-06S（メータアウト）を直付け'） */
+/** 端子の説明に付け足す文（例: '。エルボ形スピードコントローラ AS2201F-01-06SA（メータアウト）を直付け'） */
 export function speedControllerNote(sc: PortSpeedController | undefined): string {
   if (!sc?.model) return '';
   return `。エルボ形スピードコントローラ ${sc.model}（${sc.control === 'meter-out' ? 'メータアウト: 排気を絞る' : 'メータイン: 給気を絞る'}）を直付け`;
