@@ -3,7 +3,8 @@ import { checkDiagram } from '../check/checkDiagram';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import type { Diagram } from './diagram';
 import { ioSystem } from './io';
-import { addUnit, currentSlots, freeUnits, mountUnit, moveUnit, renumberIoNames, unmountUnit } from './plc';
+import { addUnit, attachBase, currentSlots, fitBase, freeUnits, mountUnit, moveUnit, needsBase, renumberIoNames, unmountUnit } from './plc';
+import { mountedPositions } from './bus';
 import { sampleDiagram } from './sample';
 
 const lookup = getDeviceDefinition;
@@ -69,5 +70,42 @@ describe('PLC エディタの操作', () => {
     // 新しい入出力ユニットは、電源・CPU 専用の位置を避けて最初の空きへ
     const added = addUnit(d, 'BASE', deviceDefinitions.find((x) => x.type === 'mitsubishi.rx40c7')!, lookup);
     expect(added.devices.at(-1)!.mount!.slot).toBe(4);
+  });
+});
+
+describe('ベースユニットの自動付加と大きさの調整（三菱 iQ-R）', () => {
+  const io = (id: string, slot: number) => ({ id, type: 'mitsubishi.rx40c7', x: 0, y: 0, mount: { device: 'BASE1', slot } });
+
+  it('単独の CPU にはベースユニットが要り、付けると CPU スロットに装着して電源ユニットも付ける', () => {
+    const d: Diagram = { devices: [{ id: 'CPU1', type: 'mitsubishi.r04cpu', x: 500, y: 300 }], wires: [] };
+    expect(needsBase(d, 'CPU1', lookup, deviceDefinitions)).toBe(true);
+    const r = attachBase(d, 'CPU1', lookup, deviceDefinitions);
+    expect(r.baseId).toBe('BASE1');
+    const base = r.diagram.devices.find((x) => x.id === 'BASE1')!;
+    expect(base.type).toBe('mitsubishi.r35b');
+    expect(r.diagram.devices.find((x) => x.id === 'CPU1')?.mount).toEqual({ device: 'BASE1', slot: 2 });
+    const ps = r.diagram.devices.find((x) => x.mount?.slot === 1);
+    expect(ps?.type).toBe('mitsubishi.r61p');
+    // CPU が今の位置のまま見えるように、ベースユニットを左に置く
+    expect(mountedPositions(r.diagram.devices, lookup).get('CPU1')).toEqual({ x: 500, y: 300 });
+    expect(needsBase(r.diagram, 'CPU1', lookup, deviceDefinitions)).toBe(false);
+  });
+
+  it('装着したユニットに合わせて、ベースユニットを大きく・小さく替える', () => {
+    const base = (n: number): Diagram => ({
+      devices: [{ id: 'BASE1', type: 'mitsubishi.r35b', x: 0, y: 0 }, ...Array.from({ length: n }, (_, i) => io(`X${i + 1}`, i + 3))],
+      wires: [],
+    });
+    expect(fitBase(base(5), 'BASE1', lookup, deviceDefinitions).model).toBeUndefined();
+    expect(fitBase(base(6), 'BASE1', lookup, deviceDefinitions).model).toBe('R38B');
+    expect(fitBase(base(9), 'BASE1', lookup, deviceDefinitions).model).toBe('R312B');
+    const big: Diagram = { ...base(2), devices: base(2).devices.map((x) => (x.id === 'BASE1' ? { ...x, type: 'mitsubishi.r312b' } : x)) };
+    expect(fitBase(big, 'BASE1', lookup, deviceDefinitions).model).toBe('R35B');
+  });
+
+  it('スロット数のないベースに替えられない CPU（KEYENCE・FX5）にはベースを付けない', () => {
+    const d: Diagram = { devices: [{ id: 'PLC1', type: 'keyence.kv-8000.cpu', x: 0, y: 0 }, { id: 'PLC2', type: 'mitsubishi.fx5u-32mt-es', x: 0, y: 0 }], wires: [] };
+    expect(needsBase(d, 'PLC1', lookup, deviceDefinitions)).toBe(false);
+    expect(needsBase(d, 'PLC2', lookup, deviceDefinitions)).toBe(false);
   });
 });

@@ -112,7 +112,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'timer', name: 'タイマー', test: named(/^タイマー/) },
   // --- 電源ユニット ---
   { id: 'dc-psu', name: 'DC24V 電源', keywords: ['スイッチング電源', '直流電源', 'パワーサプライ'], test: named(/スイッチング電源|^DC24V 電源/), default: 'generic.psu.dc24v' },
-  { id: 'plc-psu', name: 'PLC 電源ユニット', test: named(/^PLC 電源ユニット/) },
+  { id: 'plc-psu', name: 'PLC 電源ユニット', test: named(/^PLC 電源ユニット/), hidden: true },
   // --- 端子台・ケーブル ---
   { id: 'terminal-block', name: '端子台', test: named(/^端子台/), default: 'generic.terminal-block.6p' },
   {
@@ -146,34 +146,45 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'iai-position', name: 'ポジションコントローラー（IAI）', keywords: ['ロボシリンダー', 'コントローラー'], test: named(/^ポジションコントローラー|^多軸ポジションコントローラー/) },
   { id: 'iai-runit', name: 'R-unit（IAI）', keywords: ['RCON', 'ロボシリンダー'], test: named(/^R-unit/) },
   // --- PLC ---
+  // PLC: パレットには CPU（メーカーごと）とリモート I/O だけを出し、増設ユニット・ベース・電源は PLC エディタで足す
   {
-    id: 'plc-cpu',
-    name: 'PLC CPU ユニット',
-    keywords: ['シーケンサ', 'PLC', 'CPU'],
-    test: named(/CPUユニット/, 'plc'),
+    id: 'plc-cpu-mitsubishi',
+    name: 'PLC CPU（三菱電機）',
+    keywords: ['シーケンサ', 'PLC', 'CPU', 'MELSEC', 'iQ-R', 'FX5'],
+    test: (d) => d.category === 'plc' && d.maker === '三菱電機' && /CPUユニット/.test(d.name),
+    default: 'mitsubishi.r04cpu',
+  },
+  {
+    id: 'plc-cpu-keyence',
+    name: 'PLC CPU（KEYENCE）',
+    keywords: ['シーケンサ', 'PLC', 'CPU', 'KV'],
+    test: (d) => d.category === 'plc' && d.maker === 'KEYENCE' && /CPUユニット/.test(d.name),
     default: 'keyence.kv-8000.cpu',
   },
-  { id: 'plc-analog', name: 'PLC アナログ・温度ユニット', keywords: ['アナログ', '温調'], test: named(/^PLC .*(アナログ|温度)/) },
+  { id: 'remote-io', name: 'リモート I/O', keywords: ['EtherCAT', 'カプラ', 'リモートIO', '分散 I/O'], test: named(/通信ユニット（カプラ）/) },
+  { id: 'plc-analog', name: 'PLC アナログ・温度ユニット', keywords: ['アナログ', '温調'], test: named(/^PLC .*(アナログ|温度)/), hidden: true },
   {
     id: 'plc-comm',
     name: 'PLC 通信ユニット',
     keywords: ['Ethernet', 'EtherCAT', 'シリアル', 'RS-232C', 'DeviceNet'],
     test: (d) => d.category === 'plc' && /通信|Ethernet|DeviceNet|データ/.test(d.name),
+    hidden: true,
   },
-  { id: 'plc-motion', name: 'PLC 位置決め・カウンタユニット', keywords: ['モーション', '位置決め', 'カウンタ'], test: named(/^PLC .*(モーション|位置決め|カウンタ)/) },
+  { id: 'plc-motion', name: 'PLC 位置決め・カウンタユニット', keywords: ['モーション', '位置決め', 'カウンタ'], test: named(/^PLC .*(モーション|位置決め|カウンタ)/), hidden: true },
   {
     id: 'plc-io',
     name: 'PLC 入出力ユニット',
     keywords: ['入力ユニット', '出力ユニット', 'I/O ユニット', 'DI', 'DO'],
     test: named(/^PLC .*(入力|出力|入出力)ユニット/),
     default: 'keyence.kv-c32xc.input',
+    hidden: true,
     facets: [
       { label: '入出力', value: (d) => (/入出力/.test(d.name) ? '入出力' : /入力/.test(d.name) ? '入力' : '出力') },
       { label: '点数', value: (d) => (d.bus?.io ? `${(d.bus.io.inputs ?? 0) + (d.bus.io.outputs ?? 0)} 点` : undefined) },
     ],
   },
-  { id: 'plc-base', name: 'PLC ベースユニット', test: named(/^PLC (ベースユニット|ブランクカバー)/) },
-  { id: 'iai-program', name: 'プログラムコントローラー（IAI）', keywords: ['SEL', 'IAI'], test: named(/プログラムコントローラー/) },
+  { id: 'plc-base', name: 'PLC ベースユニット', test: named(/^PLC (ベースユニット|ブランクカバー)/), hidden: true },
+  { id: 'iai-program', name: 'プログラムコントローラー（IAI）', category: 'control', keywords: ['SEL', 'IAI'], test: named(/プログラムコントローラー/) },
   // --- センサー ---
   {
     id: 'photo',

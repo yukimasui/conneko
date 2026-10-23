@@ -25,6 +25,10 @@ describe('機器のファミリー', () => {
     expect(familyOf('smc.sy5240-5lz')?.name).toBe('電磁弁');
     expect(familyOf('smc.ss5y3-41')?.name).toBe('マニホールド');
     expect(familyOf('keyence.kv-c32xc.input')?.name).toBe('PLC 入出力ユニット');
+    expect(familyOf('mitsubishi.r04cpu')?.name).toBe('PLC CPU（三菱電機）');
+    expect(familyOf('mitsubishi.fx5u-32mt-es')?.name).toBe('PLC CPU（三菱電機）');
+    expect(familyOf('keyence.kv-x530')?.name).toBe('PLC CPU（KEYENCE）');
+    expect(familyOf('keyence.kv-ec01')?.name).toBe('リモート I/O');
     expect(familyOf('keyence.em-030')?.name).toBe('近接センサ');
     expect(familyOf('smc.cq2')?.name).toBe('エアシリンダ');
   });

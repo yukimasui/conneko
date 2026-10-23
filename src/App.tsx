@@ -35,6 +35,7 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { attachBase, needsBase } from './model/plc';
 import { ValveEditor } from './editor/ValveEditor';
 import { DevicePicker } from './editor/DevicePicker';
 import { deviceFamilies, familyOf } from './devices/families';
@@ -295,11 +296,17 @@ function Editor() {
     () =>
       new Set(
         diagram.devices
-          .filter((d) => getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type)))
+          .filter(
+            (d) =>
+              (getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type))) ||
+              needsBase(diagram, d.id, getDeviceDefinition, deviceDefinitions),
+          )
           .flatMap((d) => mountFamily(diagram, d.id)),
       ),
     [topo],
   );
+
+
   // マニホールド（親と装着した連）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const valveDevices = useMemo(() => manifoldDevices(diagram, getDeviceDefinition), [topo]);
@@ -362,6 +369,24 @@ function Editor() {
       if (message) notify(message);
     },
     [setNodes, setEdges, notify],
+  );
+
+  /**
+   * PLC エディタを開く。ベースユニットに装着して使う CPU（三菱 iQ-R）がまだ単独なら、ベースユニットと電源ユニットを付けてから開く
+   */
+  const openPlc = useCallback(
+    (id: string, tab: PlcTab) => {
+      if (tab === 'rack' && needsBase(diagram, id, getDeviceDefinition, deviceDefinitions)) {
+        const r = attachBase(diagram, id, getDeviceDefinition, deviceDefinitions);
+        if (r.baseId) {
+          applyDiagram(r.diagram, `${id} を装着する ${r.added.join('・')}（ベースユニット・電源ユニット）を付けました`);
+          setPlcEditor({ id: r.baseId, tab });
+          return;
+        }
+      }
+      setPlcEditor({ id, tab });
+    },
+    [diagram, applyDiagram],
   );
 
   // リンクの名前がなくなったら（リンクの削除・名前の変更・I/O の切断など）、「名前-2」などを元の名前に戻す
@@ -769,8 +794,8 @@ function Editor() {
       const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
       const peers = (linkPeers.get(linkKey(node.data.deviceType, name)) ?? []).filter((p) => p.id !== node.id);
       const items: MenuItem[] = [
-        ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
-        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
+        ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => openPlc(node.id, 'rack') }] : []),
+        ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => openPlc(node.id, 'io') }] : []),
         ...(valveDevices.has(node.id) ? [{ label: 'バルブエディタ（連の構成・つなぎ先）…', onClick: () => setValveEditor(node.id) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
         ...(alignableLinkCount(diagram, node.id, getDeviceDefinition)
@@ -792,7 +817,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
+    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, openPlc, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -1122,7 +1147,7 @@ function Editor() {
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
           ioDevices={ioDevices}
           plcDevices={plcDevices}
-          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : setPlcEditor({ id, tab }))}
+          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : openPlc(id, tab))}
           valveDevices={valveDevices}
           onPickMate={pickMate}
           onChangeType={(id) => setDevicePicker({ mode: 'replace', deviceId: id })}

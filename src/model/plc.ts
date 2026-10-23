@@ -208,3 +208,76 @@ export function removeUnit(d: Diagram, unitId: string, lookup: DefLookup): Diagr
   };
   return hostId ? setSlots(out, hostId, currentSlots(out, hostId), lookup) : out;
 }
+
+/** unit を装着できる、スロットの位置が決まった親（ベースユニット）の機種。スロット数の少ない順 */
+export function baseTypesFor(unit: DeviceDefinition, defs: DeviceDefinition[]): DeviceDefinition[] {
+  return defs.filter((x) => hasFixedSlots(x) && busAccepts(x, unit)).sort((a, b) => (a.bus!.host!.slots ?? 0) - (b.bus!.host!.slots ?? 0));
+}
+
+/**
+ * ベースユニットに装着して使う CPU（三菱 iQ-R の R04CPU など）で、まだベースユニットに装着していないもの。
+ * PLC エディタを開くと、ベースユニットと電源ユニットを自動で付ける（attachBase）
+ */
+export function needsBase(d: Diagram, id: string, lookup: DefLookup, defs: DeviceDefinition[]): boolean {
+  const dev = d.devices.find((x) => x.id === id);
+  const def = dev && lookup(dev.type);
+  return !!dev && !dev.mount && def?.bus?.role === 'cpu' && !def.bus.host && baseTypesFor(def, defs).length > 0;
+}
+
+/**
+ * CPU を、いちばん小さいベースユニットの CPU スロットに装着し、電源スロットに電源ユニット（型式の若いもの）を付ける。
+ * ベースユニットは、CPU が今の位置のまま見えるように置く。付けたベースユニットの機器 ID を返す
+ */
+export function attachBase(d: Diagram, cpuId: string, lookup: DefLookup, defs: DeviceDefinition[]): { diagram: Diagram; baseId?: string; added: string[] } {
+  const cpu = d.devices.find((x) => x.id === cpuId);
+  const cpuDef = cpu && lookup(cpu.type);
+  const baseDef = cpuDef && baseTypesFor(cpuDef, defs)[0];
+  if (!cpu || !cpuDef || !baseDef) return { diagram: d, added: [] };
+  const host = baseDef.bus!.host!;
+  const roles = Object.entries(host.slotRoles ?? {});
+  const slotOf = (role: string) => Number(roles.find(([, r]) => r === role)?.[0] ?? 0);
+  const cpuSlot = slotOf('cpu');
+  const ids = d.devices.map((x) => x.id);
+  const baseId = nextDeviceId(baseDef.labelPrefix, ids);
+  const origin = host.origin ?? { x: baseDef.width, y: 0 };
+  const dx = origin.x + (host.slotX?.[cpuSlot - 1] ?? 0);
+  const sheet = cpu.sheet;
+  const devices = [
+    ...d.devices.map((x) => (x.id === cpuId ? { ...x, mount: { device: baseId, slot: cpuSlot } } : x)),
+    { id: baseId, type: baseDef.type, x: cpu.x - dx, y: cpu.y - origin.y, ...(sheet ? { sheet } : {}) },
+  ];
+  const added = [baseId];
+  const psSlot = slotOf('power');
+  const psDef = psSlot
+    ? defs.filter((x) => x.bus?.role === 'power' && busAccepts(baseDef, x)).sort((a, b) => a.model.localeCompare(b.model, 'ja', { numeric: true }))[0]
+    : undefined;
+  if (psDef) {
+    const psId = nextDeviceId(psDef.labelPrefix, [...ids, baseId]);
+    devices.push({ id: psId, type: psDef.type, x: cpu.x, y: cpu.y, mount: { device: baseId, slot: psSlot }, ...(sheet ? { sheet } : {}) });
+    added.push(psId);
+  }
+  return { diagram: { ...d, devices }, baseId, added };
+}
+
+/** ベースユニット def と同じ種類（同じバス・同じ専用スロット）で大きさだけ違うベースユニット。スロット数の少ない順 */
+export function baseSizes(def: DeviceDefinition, defs: DeviceDefinition[]): DeviceDefinition[] {
+  const roles = JSON.stringify(def.bus?.host?.slotRoles ?? {});
+  return defs
+    .filter((x) => hasFixedSlots(x) && x.bus!.kind === def.bus?.kind && JSON.stringify(x.bus!.host!.slotRoles ?? {}) === roles)
+    .sort((a, b) => (a.bus!.host!.slots ?? 0) - (b.bus!.host!.slots ?? 0));
+}
+
+/**
+ * ベースユニットの大きさ（スロット数）を、装着したユニットがちょうど入るいちばん小さい機種に替える
+ * （R35B → R38B → R312B のように、同じバスのベースユニットの中から選ぶ）。替えたら新しい型式を返す
+ */
+export function fitBase(d: Diagram, baseId: string, lookup: DefLookup, defs: DeviceDefinition[]): { diagram: Diagram; model?: string } {
+  const base = d.devices.find((x) => x.id === baseId);
+  const def = base && lookup(base.type);
+  if (!base || !def || !hasFixedSlots(def)) return { diagram: d };
+  const used = Math.max(0, ...mountedUnits(d, baseId).map((u) => u.mount!.slot));
+  const family = baseSizes(def, defs);
+  const best = family.find((x) => (x.bus!.host!.slots ?? 0) >= used) ?? family[family.length - 1];
+  if (!best || best.type === def.type) return { diagram: d };
+  return { diagram: { ...d, devices: d.devices.map((x) => (x.id === baseId ? { ...x, type: best.type } : x)) }, model: best.model };
+}
