@@ -21,7 +21,7 @@ import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagr
 import { DEFAULT_WIRE } from './data/wires';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
-import { deviceSize } from './devices/types';
+import { deviceModel, deviceSize } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
@@ -36,6 +36,8 @@ import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, t
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
 import { ValveEditor } from './editor/ValveEditor';
+import { DevicePicker } from './editor/DevicePicker';
+import { deviceFamilies, familyOf } from './devices/families';
 import { SchematicEditor } from './editor/SchematicEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
@@ -51,7 +53,7 @@ import { ioHosts } from './model/io';
 import { isManifold, manifoldDevices } from './model/manifold';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
 import { applyMateCandidate, hasMateCandidates, mateCandidates, type MateCandidate } from './model/mates';
-import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
+import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, replaceDeviceType, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -147,6 +149,10 @@ function Editor() {
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
   const [valveEditor, setValveEditor] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
+  /** 「機種を選ぶ」ダイアログ（置くとき、または置いた機器の機種を変えるとき） */
+  const [devicePicker, setDevicePicker] = useState<
+    { mode: 'add'; familyId: string; initial: string; onChosen: (type: string) => void } | { mode: 'replace'; deviceId: string } | null
+  >(null);
   const [printDialog, setPrintDialog] = useState(false);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -1050,7 +1056,7 @@ function Editor() {
           />
         ) : (
         <>
-        <Palette onAdd={(type) => addDevice(type)} />
+        <Palette onAdd={(type) => addDevice(type)} onPick={(familyId, initial, onChosen) => setDevicePicker({ mode: 'add', familyId, initial, onChosen })} />
         <main className={`canvas${connecting ? ' is-connecting' : ''}`} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <SheetTabs
             sheets={sheets}
@@ -1119,6 +1125,7 @@ function Editor() {
           onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : setPlcEditor({ id, tab }))}
           valveDevices={valveDevices}
           onPickMate={pickMate}
+          onChangeType={(id) => setDevicePicker({ mode: 'replace', deviceId: id })}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
@@ -1127,6 +1134,43 @@ function Editor() {
         <IssuePanel issues={issues} diagram={diagram} onSelect={selectIssue} onSelectWire={selectWire} onJump={focusDevice} />
       </div>
       {about && <AboutDialog onClose={() => setAbout(false)} />}
+      {devicePicker?.mode === 'add' && deviceFamilies.some((f) => f.id === devicePicker.familyId) && (
+        <DevicePicker
+          family={deviceFamilies.find((f) => f.id === devicePicker.familyId)!}
+          initial={devicePicker.initial}
+          mode="add"
+          onPick={(type) => {
+            setDevicePicker(null);
+            devicePicker.onChosen(type);
+          }}
+          onClose={() => setDevicePicker(null)}
+        />
+      )}
+      {devicePicker?.mode === 'replace' &&
+        (() => {
+          const dev = diagram.devices.find((x) => x.id === devicePicker.deviceId);
+          const family = dev && familyOf(dev.type);
+          if (!dev || !family) return null;
+          return (
+            <DevicePicker
+              family={family}
+              initial={dev.type}
+              mode="replace"
+              dropCount={(type) => replaceDeviceType(diagram, dev.id, type, getDeviceDefinition).droppedWires.length}
+              onPick={(type) => {
+                setDevicePicker(null);
+                const r = replaceDeviceType(diagram, dev.id, type, getDeviceDefinition);
+                const def = getDeviceDefinition(type);
+                const notes = [
+                  r.droppedWires.length ? `同じ端子がない電線 ${r.droppedWires.length} 本を外しました` : '',
+                  r.unmounted.length ? `${r.unmounted.join('、')} の装着を外しました` : '',
+                ].filter(Boolean);
+                applyDiagram(r.diagram, `${dev.id} を ${def ? deviceModel(def, r.diagram.devices.find((x) => x.id === dev.id)?.params) : type} に変えました${notes.length ? `（${notes.join('。')}）` : ''}`);
+              }}
+              onClose={() => setDevicePicker(null)}
+            />
+          );
+        })()}
       {printDialog && (
         <PrintDialog
           sheets={sheets}

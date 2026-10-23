@@ -3,6 +3,7 @@ import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../dat
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
+import { familyOf } from '../devices/families';
 import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, type BusLayout } from '../model/bus';
@@ -40,6 +41,8 @@ interface Props {
   valveDevices?: Set<string>;
   /** コネクタにつなげる機器の候補を出す（anchor はボタンの位置） */
   onPickMate: (device: string, terminal: string, anchor: DOMRect) => void;
+  /** 機種を変える（「機種を選ぶ」ダイアログを開く） */
+  onChangeType: (id: string) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -280,6 +283,11 @@ export function Inspector(props: Props) {
                 <div className="estimate-badge" title={def.estimated ?? '説明・端子の情報で「推定」と書いた値は、メーカーの資料で確認できていません'}>
                   推定の値を含む機器データ
                 </div>
+              )}
+              {(familyOf(def.type)?.members.length ?? 0) > 1 && (
+                <button type="button" className="small device-info__change" onClick={() => props.onChangeType(node.id)}>
+                  機種を変える…
+                </button>
               )}
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
