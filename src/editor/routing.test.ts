@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignLanes, manualRoute, orthogonalize, routeWire } from './routing';
+import { assignLanes, autoInner, lCorner, manualRoute, orthogonalize, routeWire } from './routing';
 
 describe('routeWire', () => {
   it('上下の端子を直交配線でつなぐ', () => {
@@ -11,6 +11,49 @@ describe('routeWire', () => {
     }
     expect(points[0]).toEqual({ x: 0, y: 0 });
     expect(points[points.length - 1]).toEqual({ x: 100, y: 200 });
+  });
+});
+
+describe('L 字の経路', () => {
+  // 下向きの端子（センサーの芯線など）から、右下にあるリンク（左向き）へ
+  const down = { sx: 0, sy: 0, sSide: 'bottom' as const, tx: 21, ty: 100, tSide: 'left' as const };
+
+  it('上下と左右に出る端子どうしは、角が両方の外側にあれば角 1 つでつなぐ', () => {
+    expect(lCorner(down)).toEqual({ x: 0, y: 100 });
+    expect(routeWire(down, 0).points).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 100 },
+      { x: 21, y: 100 },
+    ]);
+    // 編集用の頂点もスタブの先・角・スタブの先
+    expect(autoInner(down, 0)).toEqual([
+      { x: 0, y: 30 },
+      { x: 0, y: 100 },
+      { x: -9, y: 100 },
+    ]);
+  });
+
+  it('角が端子の内側や近すぎる位置になるときは、従来の経路にする', () => {
+    // リンクが端子の左にある（角がリンクの裏側になる）
+    expect(lCorner({ ...down, tx: -30 })).toBeUndefined();
+    // リンクが端子のすぐ下（下へ出す長さが足りない）
+    expect(lCorner({ ...down, ty: 10 })).toBeUndefined();
+    // 端子が機器の奥にありスタブが長いときは、スタブの長さ以上離れていること
+    expect(lCorner({ ...down, sStub: 120 })).toBeUndefined();
+    // 両端が同じ向きの系統（上下と上下）は対象外
+    expect(lCorner({ sx: 0, sy: 0, sSide: 'bottom', tx: 100, ty: 200, tSide: 'top' })).toBeUndefined();
+  });
+
+  it('曲がり位置をずらした電線は L 字にしない', () => {
+    expect(routeWire(down, 20).points.length).toBeGreaterThan(3);
+  });
+
+  it('L 字の電線はレーンの割り当ての対象にしない', () => {
+    const lanes = assignLanes([
+      { ...down, id: 'a', manual: false },
+      { ...down, id: 'b', sx: 5, manual: false },
+    ]);
+    expect(lanes.size).toBe(0);
   });
 });
 

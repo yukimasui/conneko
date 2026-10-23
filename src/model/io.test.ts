@@ -133,6 +133,33 @@ describe('シート', () => {
     expect(out.devices.filter((x) => x.type === 'generic.link').map((x) => x.params?.name)).toEqual(['L1', 'L1']);
   });
 
+  it('同じ機器の下向きの端子のリンクは、右の端子のものほど機器の近くに置く（L 字の電線が交差しない並び）', () => {
+    const d: Diagram = {
+      sheets: [
+        { id: 'S1', name: 'A' },
+        { id: 'S2', name: 'B' },
+      ],
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0, sheet: 'S1' },
+        { id: 'PH1', type: 'keyence.pz-g41', x: 0, y: 0, sheet: 'S2' },
+      ],
+      // 置く順（電線の順）は左の端子（茶）から
+      wires: [
+        { id: 'W1', from: { device: 'PSU1', terminal: '+V1' }, to: { device: 'PH1', terminal: 'BN' }, wireNo: 'P24', ...attrs },
+        { id: 'W2', from: { device: 'PSU1', terminal: '-V1' }, to: { device: 'PH1', terminal: 'BU' }, wireNo: 'N24', ...attrs },
+        { id: 'W3', from: { device: 'PSU1', terminal: '+V1' }, to: { device: 'PH1', terminal: 'BK' }, wireNo: 'X1', ...attrs },
+      ],
+    };
+    const out = splitCrossSheetWires(d, lookup);
+    const linkOf = (t: string) => {
+      const w = out.wires.find((x) => x.from.device === 'PH1' && x.from.terminal === t)!;
+      return out.devices.find((x) => x.id === w.to.device)!;
+    };
+    // 端子は左から BN・BU・BK。右の BK のリンクがいちばん上（機器の近く）
+    expect(linkOf('BK').y).toBeLessThan(linkOf('BU').y);
+    expect(linkOf('BU').y).toBeLessThan(linkOf('BN').y);
+  });
+
   it('同じシートの電線をリンクで分けられる（線番がリンクの名前になる）', () => {
     const d: Diagram = { ...base(), wires: [{ id: 'W1', from: { device: 'KM1', terminal: 'A1' }, to: { device: 'PLC1', terminal: '24V+' }, wireNo: 'P24', ...attrs }] };
     const out = splitWireWithLinks(d, 'W1', lookup);
