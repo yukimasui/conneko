@@ -8,6 +8,7 @@ import { busAccepts, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
 import { terminalFacts } from './terminalInfo';
+import { hasMateCandidates } from '../model/mates';
 import { wireWidth } from './WireEdge';
 import type { DeviceFlowNode, WireEdgeData, WireFlowEdge } from './flow';
 
@@ -34,6 +35,8 @@ interface Props {
   /** ユニットを装着できる PLC（親・ユニット）の機器ID */
   plcDevices: Set<string>;
   onOpenPlc: (id: string, tab: 'rack' | 'io') => void;
+  /** コネクタにつなげる機器の候補を出す（anchor はボタンの位置） */
+  onPickMate: (device: string, terminal: string, anchor: DOMRect) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
   onDelete: () => void;
 }
@@ -351,6 +354,11 @@ export function Inspector(props: Props) {
                           {f.hint && <strong>{f.hint}</strong>}
                           {f.note && f.note !== f.hint && <div className="muted">{f.note}</div>}
                           <div className="muted">{[f.kind, f.power].filter(Boolean).join('・')}</div>
+                          {hasMateCandidates(t.connector) && !connected.has(t.id) && (
+                            <button type="button" className="small" onClick={(e) => props.onPickMate(node.id, t.id, e.currentTarget.getBoundingClientRect())}>
+                              つなぐ機器を選ぶ…
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

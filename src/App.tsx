@@ -19,7 +19,7 @@ import './styles.css';
 import iconUrl from './assets/conneko-icon.svg?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
-import { getDeviceDefinition } from './devices/registry';
+import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, resolveDevice } from './devices/resolve';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
@@ -44,7 +44,8 @@ import { buildAiPrompt } from './io/aiPrompt';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
-import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks } from './model/ops';
+import { applyMateCandidate, hasMateCandidates, mateCandidates, type MateCandidate } from './model/mates';
+import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
 import {
   CABLE_WIRE_TYPE,
   nextDeviceId,
@@ -150,6 +151,9 @@ function Editor() {
     at: { x: number; y: number };
     from: { device: string; terminal: string };
     suggestions: Suggestions;
+    mates: MateCandidate[];
+    /** 置いた機器が見えるよう表示を合わせる（インスペクタから開いた場合。ドラッグなら離した位置に置くので不要） */
+    fit?: boolean;
   }>(null);
   // 機器の変更のたびに、装着したユニットを親に合わせて並べ直す
   const setNodes = useCallback((update: DeviceFlowNode[] | ((ns: DeviceFlowNode[]) => DeviceFlowNode[])) => {
@@ -555,9 +559,10 @@ function Editor() {
       const target = event.target as Element | null;
       if (!target?.closest('.react-flow__pane')) return;
       const from = { device: state.fromNode.id, terminal: state.fromHandle.id };
-      // コネクタは LAN ポート（ネットワークの候補を出す）だけ
+      // コネクタは、LAN ポートならネットワーク、ほかはつなげる機器の候補を出す（候補がなければ出さない）
       const conn = terminalOf(from.device, from.terminal)?.connector;
-      if (conn && !(conn.pins === 0 && conn.kind === 'RJ45')) return;
+      const mates = hasMateCandidates(conn) ? mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition) : [];
+      if (conn && !(conn.pins === 0 && conn.kind === 'RJ45') && !mates.length) return;
       const point = 'changedTouches' in event ? event.changedTouches[0] : event;
       setPicker({
         x: point.clientX,
@@ -565,9 +570,36 @@ function Editor() {
         at: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
         from,
         suggestions: suggestConnections(diagram, from, getDeviceDefinition),
+        mates,
       });
     },
     [terminalOf, screenToFlowPosition, diagram],
+  );
+
+  // インスペクタの「つなぐ機器を選ぶ」: 候補はコネクタの外側（電線が出る向きへ少し離した位置）に置く
+  const pickMate = useCallback(
+    (device: string, terminal: string, anchor: DOMRect) => {
+      const from = { device, terminal };
+      const p = terminalPoint(diagram, from, getDeviceDefinition);
+      const mates = mateCandidates(diagram, from, deviceDefinitions, getDeviceDefinition);
+      if (!p || !mates.length) {
+        notify(`${device}.${terminal} につなげる機器が見つかりません`);
+        return;
+      }
+      const away = 160;
+      const dir = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0] }[p.side];
+      setPicker({
+        // インスペクタに重ならないよう、ボタンの左に出す（はみ出す分は ConnectPicker が画面内に収める）
+        x: anchor.left - 310,
+        y: anchor.top,
+        at: { x: p.x + dir[0] * away, y: p.y + dir[1] * away },
+        from,
+        suggestions: suggestConnections(diagram, from, getDeviceDefinition),
+        mates,
+        fit: true,
+      });
+    },
+    [diagram, notify],
   );
 
   // コネクタは同じ種類（または変換ケーブルのある種類）のコネクタとだけ（ケーブルで）つなげる
@@ -1023,6 +1055,7 @@ function Editor() {
           ioDevices={ioDevices}
           plcDevices={plcDevices}
           onOpenPlc={(id, tab) => setPlcEditor({ id, tab })}
+          onPickMate={pickMate}
           onWireChange={changeWire}
           onDelete={deleteSelected}
         />
@@ -1051,7 +1084,19 @@ function Editor() {
           y={picker.y}
           from={`${picker.from.device}.${picker.from.terminal}`}
           suggestions={picker.suggestions}
+          mates={picker.mates}
           onClose={() => setPicker(null)}
+          onMate={(c) => {
+            setPicker(null);
+            const { diagram: next, device } = applyMateCandidate(diagram, picker.from, c, picker.at, getDeviceDefinition);
+            const from = `${picker.from.device}.${picker.from.terminal}`;
+            const what = c.device ? `${from} を ${device} につなぎました` : `${getDeviceDefinition(c.type)?.model ?? c.type}（${device}）を置いて ${from} につなぎました`;
+            applyDiagram(next, `${what}${c.sourceChange ? `（${picker.from.device} の${c.sourceChange.label}）` : ''}`);
+            // つないだ相手を選んで、端子の呼び名を出す
+            setNodes((ns) => ns.map((x) => (x.selected !== (x.id === device) ? { ...x, selected: x.id === device } : x)));
+            setEdges((es) => es.map((e) => (e.selected ? { ...e, selected: false } : e)));
+            if (picker.fit) showSheet(sheet, [picker.from.device, device]);
+          }}
           onPower={(c) => {
             setPicker(null);
             applyDiagram(applyPowerCandidate(diagram, picker.from, c, picker.at, wireDefaults, getDeviceDefinition), `${picker.from.device}.${picker.from.terminal} を ${c.name} につなぎました${c.attach ? `（${c.attach.device} 側にもリンクを置きました）` : ''}`);
