@@ -442,8 +442,14 @@ export interface DeviceDefinition {
   description?: string;
   /** 自動採番する機器名の接頭辞（例: 'ELB' → ELB1, ELB2…） */
   labelPrefix: string;
+  /** 大きさ[px]。size があるときは、パラメータの既定値での大きさ（パレット・置いた直後の位置に使う） */
   width: number;
   height: number;
+  /**
+   * パラメータで大きさが変わる機器（ストロークで長さが変わるシリンダなど）の大きさ。引数は既定値を補完済みのパラメータ。
+   * 利用側は deviceSize() か resolveDevice() の width / height を通して読む。既定値では width / height と同じ値を返すこと
+   */
+  size?: (params: ParamValues) => { width: number; height: number };
   /**
    * SVG の中身（<svg> タグの内側）。viewBox="0 0 width height" で描画される。
    * id 属性（グラデーション等）は複数配置時に衝突するため、必ず '{{uid}}' を含めること
@@ -498,8 +504,11 @@ export interface DeviceDefinition {
   estimated?: string;
   /** 展開図の記号に切り出すときの補足（自動の切り出しで決めきれない機器だけに書く。src/schematic/elements.ts） */
   schematic?: SchematicHint;
-  /** 空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号）での表し方。エア機器に書く */
-  pneumatic?: PneumaticHint;
+  /**
+   * 空圧回路図（JIS B 0125-1 / ISO 1219-1 の記号）での表し方。エア機器に書く。
+   * オートスイッチの有無などパラメータで変わる場合は関数にする（利用側は resolveDevice() の pneumatic を読む）
+   */
+  pneumatic?: ParamDependent<PneumaticHint>;
 }
 
 /**
@@ -621,6 +630,11 @@ export function resolveNum(
 /** パラメータに応じた型式（modelOf があれば組み立てたもの） */
 export function deviceModel(def: DeviceDefinition, params: ParamValues | undefined): string {
   return def.modelOf ? def.modelOf(paramsWithDefaults(def, params)) : def.model;
+}
+
+/** パラメータに応じた機器の大きさ（size があれば求めたもの） */
+export function deviceSize(def: DeviceDefinition, params: ParamValues | undefined): { width: number; height: number } {
+  return def.size ? def.size(paramsWithDefaults(def, params)) : { width: def.width, height: def.height };
 }
 
 /** 既定値を補完したパラメータを返す */

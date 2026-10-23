@@ -56,12 +56,12 @@ const markers = showTerminals
       )
       .join('')
   : '';
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${def.width} ${def.height}" width="${def.width}" height="${def.height}"><rect width="100%" height="100%" fill="#f4f6f8"/>${svgBody}${markers}</svg>`;
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${resolved.width} ${resolved.height}" width="${resolved.width}" height="${resolved.height}"><rect width="100%" height="100%" fill="#f4f6f8"/>${svgBody}${markers}</svg>`;
 
 try {
   const png = new Resvg(svg, { fitTo: { mode: 'zoom', value: 3 }, font: { loadSystemFonts: true } }).render().asPng();
   writeFileSync(out, png);
-  console.log(`rendered: ${out} (${def.width}x${def.height})`);
+  console.log(`rendered: ${out} (${resolved.width}x${resolved.height})`);
 } catch (e) {
   problems.push(`SVGの描画に失敗: ${(e as Error).message}`);
 }

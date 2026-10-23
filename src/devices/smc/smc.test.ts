@@ -33,7 +33,7 @@ const pressures = (d: Diagram) => airPressures(buildModel(d, lookup, () => {}));
 const air = (d: Diagram) => checkDiagram(d, lookup).filter((i) => i.rule.startsWith('air') || i.rule.startsWith('tube'));
 const rules = (d: Diagram) => air(d).map((i) => `${i.rule}:${i.devices.join(',')}`);
 
-const smc = deviceDefinitions.filter((d) => d.type.startsWith('smc.') && d.category !== 'valve');
+const smc = deviceDefinitions.filter((d) => d.type.startsWith('smc.') && (d.category === 'air-supply' || d.category === 'air-fitting'));
 
 describe('SMC の 3 点セット・エア周辺機器の定義', () => {
   it('エアの通り道・空圧回路図のポートは、どのパラメータでも存在するエアのポートを指す', () => {
@@ -47,8 +47,8 @@ describe('SMC の 3 点セット・エア周辺機器の定義', () => {
         for (const l of r.airLinks) {
           expect(airIds.has(l.from) && airIds.has(l.to), `${def.type} airLinks ${l.from}→${l.to}`).toBe(true);
         }
-        expect(def.pneumatic, `${def.type} に pneumatic がない`).toBeDefined();
-        for (const id of Object.values(def.pneumatic!.ports)) expect(airIds.has(id), `${def.type} pneumatic.ports ${id}`).toBe(true);
+        expect(r.pneumatic, `${def.type} に pneumatic がない`).toBeDefined();
+        for (const id of Object.values(r.pneumatic!.ports)) expect(airIds.has(id), `${def.type} pneumatic.ports ${id}`).toBe(true);
         expect(deviceModel(def, v)).not.toMatch(/undefined|NaN/);
       }
       expect(['air-supply', 'air-fitting']).toContain(def.category);
@@ -85,14 +85,14 @@ describe('SMC の 3 点セット・エア周辺機器の定義', () => {
   });
 
   it('空圧回路図の記号: 3 点セットの構成、スピードコントローラの自由流れの向き', () => {
-    expect(getDeviceDefinition('smc.ac')!.pneumatic).toMatchObject({ symbol: 'frl', units: ['filter', 'regulator', 'lubricator'], gauge: true });
-    expect(getDeviceDefinition('smc.ac-d')!.pneumatic).toMatchObject({ symbol: 'frl', units: ['filter-regulator', 'mist-separator'] });
-    expect(getDeviceDefinition('smc.aw')!.pneumatic).toMatchObject({ symbol: 'filter-regulator', gauge: true });
-    expect(getDeviceDefinition('smc.af')!.pneumatic).toEqual({ symbol: 'filter', ports: { in: 'IN', out: 'OUT' } });
+    expect(resolveDevice(getDeviceDefinition('smc.ac')!).pneumatic).toMatchObject({ symbol: 'frl', units: ['filter', 'regulator', 'lubricator'], gauge: true });
+    expect(resolveDevice(getDeviceDefinition('smc.ac-d')!).pneumatic).toMatchObject({ symbol: 'frl', units: ['filter-regulator', 'mist-separator'] });
+    expect(resolveDevice(getDeviceDefinition('smc.aw')!).pneumatic).toMatchObject({ symbol: 'filter-regulator', gauge: true });
+    expect(resolveDevice(getDeviceDefinition('smc.af')!).pneumatic).toEqual({ symbol: 'filter', ports: { in: 'IN', out: 'OUT' } });
     // メータアウト: チューブ（電磁弁）→ シリンダが自由流れ。メータイン: シリンダ → チューブが自由流れ
-    expect(getDeviceDefinition('smc.as2201f')!.pneumatic!.ports).toEqual({ in: 'TUBE', out: 'CYL' });
-    expect(getDeviceDefinition('smc.as2211f')!.pneumatic!.ports).toEqual({ in: 'CYL', out: 'TUBE' });
-    expect(getDeviceDefinition('smc.vhs')!.pneumatic).toEqual({ symbol: 'residual-valve', ports: { in: 'IN', out: 'OUT', exh: 'EXH' } });
+    expect(resolveDevice(getDeviceDefinition('smc.as2201f')!).pneumatic!.ports).toEqual({ in: 'TUBE', out: 'CYL' });
+    expect(resolveDevice(getDeviceDefinition('smc.as2211f')!).pneumatic!.ports).toEqual({ in: 'CYL', out: 'TUBE' });
+    expect(resolveDevice(getDeviceDefinition('smc.vhs')!).pneumatic).toEqual({ symbol: 'residual-valve', ports: { in: 'IN', out: 'OUT', exh: 'EXH' } });
   });
 });
 

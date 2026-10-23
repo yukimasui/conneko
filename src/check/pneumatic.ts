@@ -167,6 +167,8 @@ export function checkPneumatic(m: Model, push: Push) {
     });
   }
 
+  checkCylinderValves(m, ports, push);
+
   // 機器ごとの圧力: 届かない・使用圧力範囲の外・向きの逆
   const vacuum = vacuumNet(m, ports);
   const byDevice = new Map<string, string[]>();
@@ -217,5 +219,95 @@ export function checkPneumatic(m: Model, push: Push) {
         });
       }
     }
+  }
+}
+
+/**
+ * アクチュエータ（シリンダ・エアチャック・ロータリ）の 2 つの作業ポートが、同じ電磁弁の別々の作業ポート（A・B）につながっているか。
+ * チューブ・エアのリンク・電磁弁でない機器の中の通り道（スピードコントローラ・分岐継手など）をたどって、行き着く電磁弁の作業ポートを求める。
+ * - 2 つのポートが同じ電磁弁の同じポートに行き着く: シリンダが動かないため警告
+ * - 別々の電磁弁、または片方だけが電磁弁に行き着く: 注意（3 ポート弁 2 台で動かす回路など、意図したものなら問題ない）
+ */
+function checkCylinderValves(m: Model, ports: Map<string, Port>, push: Push) {
+  const next = new Map<string, string[]>();
+  const add = (a: string, b: string) => next.set(a, [...(next.get(a) ?? []), b]);
+  for (const w of m.tubes) {
+    const a = key(w.from.device, w.from.terminal);
+    const b = key(w.to.device, w.to.terminal);
+    add(a, b);
+    add(b, a);
+  }
+  for (const [a, b] of m.labelLinks) {
+    if (!ports.has(a) || !ports.has(b)) continue;
+    add(a, b);
+    add(b, a);
+  }
+  // 電磁弁・アクチュエータ以外の機器の中の通り道（向きは問わない）
+  for (const { device, def, r } of m.devices.values()) {
+    if (def.category === 'valve' || def.category === 'actuator') continue;
+    for (const l of r.airLinks) {
+      add(key(device.id, l.from), key(device.id, l.to));
+      add(key(device.id, l.to), key(device.id, l.from));
+    }
+  }
+  /** start から行き着く電磁弁の作業ポート */
+  const valvesFrom = (start: string): Set<string> => {
+    const seen = new Set([start]);
+    const found = new Set<string>();
+    const queue = [start];
+    while (queue.length) {
+      const u = queue.shift()!;
+      for (const v of next.get(u) ?? []) {
+        if (seen.has(v)) continue;
+        seen.add(v);
+        const p = ports.get(v);
+        if (p && m.devices.get(p.device)?.def.category === 'valve') {
+          if (p.spec.kind === 'work') found.add(v);
+          continue;
+        }
+        // ほかのアクチュエータの中は通り抜けない
+        if (p && m.devices.get(p.device)?.def.category === 'actuator') continue;
+        queue.push(v);
+      }
+    }
+    return found;
+  };
+  const label = (k: string) => {
+    const p = ports.get(k)!;
+    return `${p.device}.${p.label}`;
+  };
+
+  for (const { device, def } of m.devices.values()) {
+    if (def.category !== 'actuator') continue;
+    const work = [...ports.entries()].filter(([, p]) => p.device === device.id && !p.link && p.spec.kind === 'work').map(([k]) => k);
+    if (work.length !== 2 || !work.every((k) => m.tubesAt.has(k))) continue;
+    const [a, b] = work.map(valvesFrom);
+    if (!a.size && !b.size) continue;
+    const name = (k: string) => ports.get(k)!.label;
+    const shared = [...a].filter((k) => b.has(k));
+    if (shared.length) {
+      push({
+        severity: 'warning',
+        rule: 'air-cylinder-valve',
+        message: `${device.id}: ${name(work[0])} と ${name(work[1])} が同じ電磁弁のポート ${label(shared[0])} につながっています（両側に同じエアが入るため動きません。A と B に 1 本ずつつなぎます）`,
+        devices: [device.id, ports.get(shared[0])!.device],
+        wires: [],
+        key: `air-cylinder-valve:${device.id}`,
+      });
+      continue;
+    }
+    const valveOf = (set: Set<string>) => new Set([...set].map((k) => ports.get(k)!.device));
+    const va = valveOf(a);
+    const vb = valveOf(b);
+    if ([...va].some((v) => vb.has(v))) continue;
+    const describe = (k: string, set: Set<string>) => `${name(k)} → ${set.size ? [...set].map(label).join('・') : '電磁弁なし'}`;
+    push({
+      severity: 'info',
+      rule: 'air-cylinder-valve',
+      message: `${device.id}: 2 つのポートが同じ電磁弁の A・B につながっていません（${describe(work[0], a)}、${describe(work[1], b)}）。3 ポート弁 2 台で動かすなど意図した回路なら問題ありません`,
+      devices: [device.id, ...va, ...vb],
+      wires: [],
+      key: `air-cylinder-valve:${device.id}`,
+    });
   }
 }

@@ -71,7 +71,7 @@ export function airCandidates(d: Diagram, from: TerminalRef, defs: DeviceDefinit
   if (!src || !srcDef || !kind) return [];
   const fits = (def: DeviceDefinition, k: AirPortKind | undefined): boolean => {
     if (!k) return false;
-    if (kind === 'exhaust') return def.pneumatic?.symbol === 'silencer';
+    if (kind === 'exhaust') return resolveDevice(def).pneumatic?.symbol === 'silencer';
     if (kind === 'supply' || kind === 'out') return k === 'in';
     if (kind === 'in') return k === 'out' || k === 'supply';
     return k === kind;

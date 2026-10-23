@@ -36,7 +36,15 @@ const highSource: DeviceDefinition = {
   category: 'air-supply',
   terminals: [port('OUT', { kind: 'supply', pressure: 1.0, tubeOD: 8 })],
 };
-const tests = [regulator, cylinder, highSource];
+/** スピードコントローラ（IN ↔ OUT、向きなしで通す） */
+const speedController: DeviceDefinition = {
+  ...base,
+  type: 'test.speed-controller',
+  category: 'air-fitting',
+  terminals: [port('IN', { kind: 'in', tubeOD: 6 }), port('OUT', { kind: 'out', tubeOD: 6 })],
+  airLinks: [{ from: 'IN', to: 'OUT' }],
+};
+const tests = [regulator, cylinder, highSource, speedController];
 const lookup = (type: string) => tests.find((d) => d.type === type) ?? getDeviceDefinition(type);
 
 let n = 0;
@@ -138,6 +146,37 @@ describe('エア回路のチェック', () => {
     const issues = checkDiagram(circuit(), lookup);
     expect(issues.filter((i) => i.rule === 'unconnected').map((i) => i.message)).toEqual(['SOL1: 端子 + が未接続です', 'SOL1: 端子 − が未接続です']);
     expect(issues.some((i) => i.rule.startsWith('wire-'))).toBe(false);
+  });
+});
+
+describe('シリンダと電磁弁の A・B', () => {
+  const rule = (d: Diagram) => air(d).filter((i) => i.rule === 'air-cylinder-valve');
+
+  it('同じ電磁弁の A・B につないだシリンダは指摘しない（スピードコントローラを挟んでもよい）', () => {
+    expect(rule(circuit())).toEqual([]);
+    const d = circuit();
+    d.devices.push({ id: 'SC1', type: 'test.speed-controller', x: 0, y: 0 });
+    d.wires[2] = tube('SOL1.A', 'SC1.IN');
+    d.wires.push(tube('SC1.OUT', 'CY1.H'));
+    expect(rule(d)).toEqual([]);
+  });
+
+  it('2 つのポートを同じポートにつなぐと警告する', () => {
+    const d = circuit();
+    d.wires[3] = tube('SOL1.A', 'CY1.R');
+    const issues = rule(d);
+    expect(issues.map((i) => i.severity)).toEqual(['warning']);
+    expect(issues[0].message).toContain('SOL1.4(A)');
+  });
+
+  it('別々の電磁弁につなぐと注意を出す', () => {
+    const d = circuit();
+    d.devices.push({ id: 'SOL2', type: 'smc.sy3120-5lz', x: 0, y: 0 });
+    d.wires.push(tube('FR1.OUT', 'SOL2.P', 8));
+    d.wires[3] = tube('SOL2.A', 'CY1.R');
+    const issues = rule(d);
+    expect(issues.map((i) => i.severity)).toEqual(['info']);
+    expect(issues[0].devices).toEqual(['CY1', 'SOL1', 'SOL2']);
   });
 });
 

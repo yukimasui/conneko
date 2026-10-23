@@ -1,0 +1,45 @@
+import { buildCylinder } from '../smc/cylinder';
+
+/**
+ * SMC エアシリンダ MB シリーズ（標準形・タイロッド形、φ32〜125、-Z）。作りは src/devices/smc/cylinder.ts。
+ *
+ * 型式: M[D]B[支持形式][内径]-[ストローク]Z[-オートスイッチ][リード線][個数]
+ *   D はマグネット内蔵。例: MDBB32-100Z-M9BW。エアクッションは両側に標準で付く（N はラバークッション。ここでは扱わない）
+ * 出典: SMC MB-Z カタログ（static.smc.eu の MB-Z-D_EU.pdf）
+ *   ポート: φ32 Rc1/8、φ40・50 Rc1/4、φ63・80 Rc3/8、φ100・125 Rc1/2。ロッド径: 12・16・20・20・25・30・32mm。使用圧力 0.05〜1.0MPa
+ *   オートスイッチ D-M9 はタイロッドに取り付ける
+ */
+export default buildCylinder({
+  type: 'smc.mb',
+  series: 'MB',
+  name: 'エアシリンダ（標準形・タイロッド）',
+  look: 'tierod',
+  scale: 0.9,
+  bores: [
+    { bore: 32, rod: 12, thread: 'Rc1/8', cover: 45, tube: 36, head: 26, rodCover: 26, tubeBase: 30, rodOut: 34, minPressure: 0.05 },
+    { bore: 40, rod: 16, thread: 'Rc1/4', cover: 52, tube: 44, head: 30, rodCover: 30, tubeBase: 32, rodOut: 40, minPressure: 0.05 },
+    { bore: 50, rod: 20, thread: 'Rc1/4', cover: 65, tube: 55, head: 32, rodCover: 32, tubeBase: 34, rodOut: 46, minPressure: 0.05 },
+    { bore: 63, rod: 20, thread: 'Rc3/8', cover: 75, tube: 68, head: 32, rodCover: 32, tubeBase: 36, rodOut: 46, minPressure: 0.05 },
+    { bore: 80, rod: 25, thread: 'Rc3/8', cover: 95, tube: 86, head: 38, rodCover: 38, tubeBase: 40, rodOut: 56, minPressure: 0.05 },
+    { bore: 100, rod: 30, thread: 'Rc1/2', cover: 114, tube: 106, head: 38, rodCover: 38, tubeBase: 40, rodOut: 56, minPressure: 0.05 },
+    { bore: 125, rod: 32, thread: 'Rc1/2', cover: 136, tube: 130, head: 45, rodCover: 45, tubeBase: 46, rodOut: 60, minPressure: 0.05 },
+  ],
+  defaultBore: 40,
+  strokes: [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400, 450, 500],
+  defaultStroke: 100,
+  mounts: [
+    { code: 'B', label: '基本形', shape: 'basic' },
+    { code: 'L', label: '軸方向フート形', shape: 'foot' },
+    { code: 'F', label: 'ロッド側フランジ形', shape: 'flange-rod' },
+    { code: 'G', label: 'ヘッド側フランジ形', shape: 'flange-head' },
+    { code: 'C', label: '1 山クレビス形', shape: 'clevis1' },
+    { code: 'D', label: '2 山クレビス形', shape: 'clevis2' },
+    { code: 'T', label: 'センタトラニオン形', shape: 'trunnion-center' },
+  ],
+  maxPressure: 1.0,
+  defaultFitting: 8,
+  model: (p, b, sw) => `M${p.switch === 'none' ? '' : 'D'}B${p.mount}${b.bore}-${p.stroke}Z${sw}`,
+  representative: 'MB / MDB（φ32〜125）',
+  description: 'SMC のエアシリンダ MB シリーズ（標準形・タイロッド形・複動・片ロッド・エアクッション付き、φ32〜125）。',
+  estimated: '外形寸法（カバー・チューブの長さと径）は推定',
+});

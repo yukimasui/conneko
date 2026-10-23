@@ -344,13 +344,14 @@ export function pneumaticPages(
 ): SchematicSheetOut[] {
   const make = pageMaker(sheet, paper);
   const entries = new Map<string, Entry>();
-  for (const { device, def } of model.devices.values()) {
-    if (!def.pneumatic) continue;
+  for (const { device, def, r } of model.devices.values()) {
+    const hint = r.pneumatic;
+    if (!hint) continue;
     entries.set(device.id, {
       id: device.id,
       def,
-      hint: def.pneumatic,
-      symPort: new Map(Object.entries(def.pneumatic.ports).map(([sym, t]) => [t, sym])),
+      hint,
+      symPort: new Map(Object.entries(hint.ports).map(([sym, t]) => [t, sym])),
       x: device.x,
       model: deviceModel(def, device.params),
     });

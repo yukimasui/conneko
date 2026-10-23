@@ -52,6 +52,10 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 
 確認は `npm run render-device -- <file> <out.png> --param ratedCurrent=30` のようにパラメータを指定して描画する。
 
+パラメータで機器の大きさが変わる場合（ストロークで長さが変わるシリンダなど）は `size: (p) => ({ width, height })` を書く。
+`width` / `height` には既定値のパラメータでの大きさを書く（パレット・置いた直後に使う。`size` の既定値での結果と同じにする）。
+大きさを読む側は `deviceSize(def, params)`（`src/devices/types.ts`）か `resolveDevice()` の `width` / `height` を使う。
+
 ## 接点と出力（`InternalLink.switch`）
 
 | 種類 | 書き方 | 例 |
@@ -225,7 +229,18 @@ pneumatic: { symbol: 'speed-controller', ports: { in: 'IN', out: 'OUT' } },
 ```
 
 - 方向制御弁は、通電していない位置（スプリング側・`operators.b` の側）が記号の右の箱になる。3 位置は `center` で中立の形を選ぶ
-- パラメータで記号が変わる機器（シングル・ダブルを選べる電磁弁など）は、パラメータごとに定義を分けるか、機器ごとに `pneumatic` を書き分ける
+- パラメータで記号が変わる機器（シングル・ダブルを選べる電磁弁、単動・複動やオートスイッチを選べるシリンダなど）は、パラメータごとに定義を分けるか、`pneumatic` をパラメータを受け取る関数にする（読む側は `resolveDevice()` の `pneumatic`）
+
+### シリンダとオートスイッチ（SMC）
+
+SMC のエアシリンダ・エアチャック・ロータリテーブルは `src/devices/smc/` の部品で作る（`cylinder.ts`・`gripper.ts`・`rotary.ts`）。
+シリーズの表（チューブ内径ごとのロッド径・ポートのねじ・最低使用圧力・描画用の寸法、ストローク、支持形式、型式の組み立て）を書いて `buildCylinder()` などに渡す。
+
+オートスイッチ（D-M9N・D-M9P・D-M9B と 2 色表示の W）は、別の機器にせず、アクチュエータのパラメータ `switch`・`switchPos`・`lead` で付ける（`autoswitch.ts`）。
+- SMC はオートスイッチ付きのシリンダを 1 つの型式で注文する（例: `CDM2B25-100Z-M9BW`。末尾が種類・リード線の長さ・個数）。部品表も 1 行になる
+- スイッチの位置（ヘッド側＝後退端、ロッド側＝前進端）が絵と端子の名前で決まり、ストロークで長さが変わってもシリンダの両端に付いたまま動く
+- 端子は `SW1.BN` / `SW1.BK` / `SW1.BU`（SW1 はヘッド側、SW2 はロッド側）。出力は `signal`（`npn` / `pnp` / `2wire`）と内部経路 `switch: 'output'` で表し、PLC の入力との信号のチェックが効く
+- 2 線式の出力が 1 台に複数ある機器は、出力の内部経路（`switch: 'output'`）で結ばれた 2 本ずつを 1 つのスイッチとして 2 線式のチェックを行う（`src/check/signals.ts`）
 
 カテゴリは `air-supply`（エア源・3 点セット）、`valve`（電磁弁・バルブ）、`actuator`（シリンダ・アクチュエータ）、`air-fitting`（継手・速度制御・エア周辺）を使う。
 
