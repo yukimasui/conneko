@@ -118,4 +118,29 @@ describe('alignLinks', () => {
     expect(lk.x).toBeGreaterThan(70);
     expect(lk.y + 15).toBe(328);
   });
+
+  it('下向きの端子のリンクは、端子の横にずらして縦に積み、L 字の電線が交差しない', () => {
+    // 端子台（下向きの端子が 2 段）の端子にリンクをつなぐ
+    const terms = ['1', '2', '3', '4', '5', '6'];
+    const d: Diagram = {
+      devices: [
+        { id: 'TB1', type: 'generic.mil-terminal-block.34p', x: 0, y: 0 },
+        ...terms.map((t, i) => ({ id: `LK${i + 1}`, type: 'generic.link', x: 600 - i * 90, y: 400 + ((i * 7) % 5) * 60, params: { name: `L${t}` } })),
+      ],
+      wires: terms.map((t, i) => ({ id: `W${i + 1}`, from: { device: 'TB1', terminal: t }, to: { device: `LK${i + 1}`, terminal: 'T' }, color: 'blue', sizeSq: 0.75, wireType: 'KIV' })),
+    };
+    const after = alignLinks(d, 'TB1', lookup);
+    const r = routes(after);
+    // すべて L 字（角 1 つ）
+    expect([...r.values()].every((ps) => ps.length === 3)).toBe(true);
+    const ps = [...r.values()];
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) expect(crosses(ps[i], ps[j])).toBe(false);
+    // リンクどうしは重ならない
+    const boxes = after.devices.filter((x) => x.type === 'generic.link').map((l) => [l.x, l.y, l.x + 110, l.y + 30]);
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const [a, b] = [boxes[i], boxes[j]];
+        expect(a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]).toBe(false);
+      }
+  });
 });

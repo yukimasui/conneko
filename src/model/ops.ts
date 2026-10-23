@@ -66,6 +66,7 @@ function linkAt(
   usedIds: string[],
   usedWires: string[],
   linkType = LINK_TYPE,
+  avoid: string[] = placed.map((x) => x.id),
 ) {
   const linkDef = lookup(linkType)!;
   const port = linkDef.netLabel?.terminal ?? 'T';
@@ -79,9 +80,9 @@ function linkAt(
     return { id: wid, from: ref, to: { device: to, terminal: port }, ...attrs };
   };
 
-  // 同じ操作で置いたリンクは使わない（同じシートで電線をリンクで分けるときに、両端が同じリンクになってしまうため）
+  // 同じ電線のもう一方の端に置いたリンクは使わない（同じシートで電線をリンクで分けるときに、両端が同じリンクになってしまうため）
   const near = all
-    .filter((x) => !placed.includes(x))
+    .filter((x) => !avoid.includes(x.id))
     .filter((x) => x.type === linkType && String(x.params?.name ?? '').trim() === name)
     .map((x) => ({ x, dist: Math.hypot(x.x + W / 2 - p.x, x.y + H / 2 - p.y) }))
     .filter((c) => c.dist <= REUSE_DISTANCE)
@@ -94,7 +95,7 @@ function linkAt(
   if (p.side === 'left') {
     x = p.x - gap - W;
   } else if (p.side === 'top' || p.side === 'bottom') {
-    x = p.x + 20;
+    x = p.x + 26;
     y = p.side === 'top' ? p.y - gap - H : p.y + gap;
   }
   // ほかの機器と重ならない位置まで、縦にずらす（上向きの端子なら上へ）
@@ -175,16 +176,44 @@ export function splitCrossSheetWires(d: Diagram, lookup: DefLookup): Diagram {
     const name = x.type === LINK_TYPE ? String(x.params?.name ?? '').trim() : '';
     if (name) nameNet.set(name, netOf({ device: x.id, terminal: 'T' }));
   }
-  let out: Diagram = { ...d, wires: d.wires.filter((w) => !cross.includes(w)) };
-  for (const w of cross) {
-    const { color, sizeSq, wireType, wireNo } = w;
+  // リンクの名前を先に決める（決めた名前は、次の名前を作るときに使用済みとして扱う）
+  const named: DiagramDevice[] = [];
+  const names = cross.map((w) => {
     const net = netOf(w.from);
-    const base = wireNo ?? '';
-    const name = base && nameNet.get(base) === net ? base : uniqueLinkName(out, base);
+    const base = w.wireNo ?? '';
+    const name = base && nameNet.get(base) === net ? base : uniqueLinkName({ ...d, devices: [...d.devices, ...named] }, base);
     nameNet.set(name, net);
-    out = connectTerminals(out, w.from, w.to, { color, sizeSq, wireType, ...(wireNo ? { wireNo } : {}) }, lookup, name, true);
+    named.push({ id: '', type: LINK_TYPE, x: 0, y: 0, params: { name } });
+    return name;
+  });
+  // 電線の両端にリンクを置く。リンクは 1 つずつ、ほかと重ならない位置へずらして置くため、置く順で並びが決まる。
+  // 同じ機器の同じ向きの端子どうしは、電線が交差しない順に置く（左右の端子は上から順。上下の端子はリンクを端子の右に置くので、
+  // 右の端子から順に機器の近くへ置き、左の端子の電線がほかのリンクの横を通らずに L 字で入るようにする）
+  const ends = cross.flatMap((w, i) =>
+    [w.from, w.to].map((ref) => {
+      const p = terminalPoint(d, ref, lookup);
+      const key = !p ? 0 : p.side === 'left' || p.side === 'right' ? p.y : -p.x;
+      return { w, i, ref, group: `${ref.device}|${p?.side ?? ''}`, key };
+    }),
+  );
+  ends.sort((a, b) => (a.group < b.group ? -1 : a.group > b.group ? 1 : a.key - b.key));
+  const placed: DiagramDevice[] = [];
+  const usedIds = d.devices.map((x) => x.id);
+  const usedWires = d.wires.filter((w) => !cross.includes(w)).map((w) => w.id);
+  const newWires: DiagramWire[] = [];
+  // 電線ごとに、一方の端に置いたリンク（もう一方の端では使わない）
+  const firstLink = new Map<number, string>();
+  for (const e of ends) {
+    const { color, sizeSq, wireType, wireNo } = e.w;
+    const dev = d.devices.find((x) => x.id === e.ref.device);
+    if (!dev) continue;
+    const avoid = firstLink.has(e.i) ? [firstLink.get(e.i)!] : [];
+    const r = linkAt(d, placed, e.ref, names[e.i], sheetOf(d, dev), { color, sizeSq, wireType, ...(wireNo ? { wireNo } : {}) }, lookup, usedIds, usedWires, LINK_TYPE, avoid);
+    if (r.device) placed.push(r.device);
+    firstLink.set(e.i, r.wire.to.device);
+    newWires.push(r.wire);
   }
-  return out;
+  return { ...d, devices: [...d.devices, ...placed], wires: [...d.wires.filter((w) => !cross.includes(w)), ...newWires] };
 }
 
 /** 電線を、両端に置いた同じ名前のリンクの組に置き換える（長い電線を図から消して見やすくする） */

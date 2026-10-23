@@ -1,13 +1,14 @@
 /**
  * リンクを端子の横にそろえる。
  *
- * 機器の端子につないだリンクを、端子の並び順のまま機器の横に一列に並べ直す。端子の間隔より詰められないぶんは
+ * 左右の端子: 機器の端子につないだリンクを、端子の並び順のまま機器の横に一列に並べ直す。端子の間隔より詰められないぶんは
  * 列を上下に広げる（並びの中心は端子の並びの中心）。並び順が端子と同じなら、電線の重なりを避けるレーンの
  * 割り当て（src/editor/routing.ts の assignLanes）で電線が交差しない。
- * 左右の端子だけを対象にする（リンクは左右に電線をつなぐ形のため、上下の端子のリンクは動かさない）。
+ * 上下の端子: リンクは左右に電線をつなぐ形なので、端子の真下（上）から L 字で入るよう、端子の横にずらして縦に積む。
+ * 右半分の端子のリンクは端子の右に、左半分は左に置き、外側の端子ほど機器の近くに置く（L 字が入れ子になり交差しない）。
  */
 import { resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition } from '../devices/types';
+import type { DeviceDefinition, TerminalSide } from '../devices/types';
 import { sheetOf, type Diagram, type DiagramDevice } from './diagram';
 import { spread } from './spread';
 
@@ -19,6 +20,9 @@ export const LINK_PITCH = 50;
 const COLUMN_GAP = 90;
 /** 電線 1 本ごとに足す距離（重なりを避けるレーンの間隔。routing.ts の LANE_GAP） */
 const LANE_GAP = 9;
+/** 上下の端子: 機器の外形から最初のリンクまでの距離と、端子からリンクの電線をつなぐ端までの横の距離 */
+const BELOW_GAP = 40;
+const SIDE_SHIFT = 26;
 
 /** 機器 deviceId の端子につないだリンク（その端子とだけつながっているもの）と、つないだ端子 */
 function attachedLinks(d: Diagram, deviceId: string, lookup: DefLookup) {
@@ -27,7 +31,7 @@ function attachedLinks(d: Diagram, deviceId: string, lookup: DefLookup) {
   if (!dev || !def) return [];
   const resolved = resolveDevice(def, dev.params);
   const sheet = sheetOf(d, dev);
-  const out: { link: DiagramDevice; wire: string; side: 'left' | 'right'; y: number }[] = [];
+  const out: { link: DiagramDevice; wire: string; side: TerminalSide; x: number; y: number }[] = [];
   for (const w of d.wires) {
     const [mine, other] = w.from.device === deviceId ? [w.from, w.to] : w.to.device === deviceId ? [w.to, w.from] : [];
     if (!mine || !other) continue;
@@ -36,8 +40,8 @@ function attachedLinks(d: Diagram, deviceId: string, lookup: DefLookup) {
     // ほかの機器ともつないだリンクは動かさない
     if (d.wires.some((x) => x.id !== w.id && (x.from.device === link.id || x.to.device === link.id))) continue;
     const t = resolved.terminal(mine.terminal);
-    if (!t || (t.side !== 'left' && t.side !== 'right')) continue;
-    out.push({ link, wire: w.id, side: t.side, y: dev.y + t.y });
+    if (!t) continue;
+    out.push({ link, wire: w.id, side: t.side, x: dev.x + t.x, y: dev.y + t.y });
   }
   return out;
 }
@@ -67,6 +71,20 @@ export function alignLinks(d: Diagram, deviceId: string, lookup: DefLookup): Dia
       const x = side === 'left' ? dev.x - gap - ldef.width : dev.x + def.width + gap;
       moved.set(it.link.id, { x: Math.round(x), y: Math.round(centers[i] - ldef.height / 2) });
     });
+  }
+  for (const side of ['top', 'bottom'] as const) {
+    const group = items.filter((it) => it.side === side).sort((a, b) => a.x - b.x || a.link.x - b.link.x);
+    const half = Math.floor(group.length / 2);
+    // 左半分は左の端子から、右半分は右の端子から順に、機器の近くへ積む
+    const halves = [group.slice(0, half), group.slice(half).reverse()];
+    halves.forEach((h, k) =>
+      h.forEach((it, i) => {
+        const ldef = lookup(it.link.type)!;
+        const x = k === 0 ? it.x - SIDE_SHIFT - ldef.width : it.x + SIDE_SHIFT;
+        const y = side === 'bottom' ? dev.y + def.height + BELOW_GAP + i * LINK_PITCH : dev.y - BELOW_GAP - ldef.height - i * LINK_PITCH;
+        moved.set(it.link.id, { x: Math.round(x), y: Math.round(y) });
+      }),
+    );
   }
   const wires = new Set(items.map((it) => it.wire));
   return {

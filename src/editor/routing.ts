@@ -74,9 +74,30 @@ function skeleton(e: WireEndpoints): Skeleton {
   return { p0, p1, p3, p4, horizontalMid, mid };
 }
 
-/** 配線の折れ線（頂点列）を求める。offset は中間セグメントのずらし量 */
+/** L 字の角を置くのに、端子から外へ最低限離す距離（スタブが既定の長さのとき。端子は機器の外形から STUB − CLEARANCE 以内） */
+const L_MIN = STUB - CLEARANCE;
+
+/**
+ * 一方の端子が上下、もう一方が左右に出る電線で、角 1 つ（L 字）でつなげるならその角を返す。
+ * 角が両方の端子から電線の出る向きへ十分離れている（機器の外形の外にある）ときだけ L 字にする
+ */
+export function lCorner(e: WireEndpoints): Point | undefined {
+  if (isVertical(e.sSide) === isVertical(e.tSide)) return undefined;
+  const c = isVertical(e.sSide) ? { x: e.sx, y: e.ty } : { x: e.tx, y: e.sy };
+  const need = (stub: number | undefined) => ((stub ?? STUB) > STUB ? stub! : L_MIN);
+  const out = (x: number, y: number, side: TerminalSide) => (c.x - x) * DIR[side].x + (c.y - y) * DIR[side].y;
+  // 端子の位置は画面では端子の縁、出力では中心になるため、わずかな差は許す
+  return out(e.sx, e.sy, e.sSide) >= need(e.sStub) - 0.5 && out(e.tx, e.ty, e.tSide) >= need(e.tStub) - 0.5 ? c : undefined;
+}
+
+/**
+ * 配線の折れ線（頂点列）を求める。offset は中間セグメントのずらし量。
+ * ずらさない電線は、L 字でつなげるなら L 字にする（スタブと中間セグメントで回り込まない）
+ */
 export function routeWire(e: WireEndpoints, offset: number): { points: Point[]; midA: Point; midB: Point; horizontalMid: boolean } {
   const { p0, p1, p3, p4, horizontalMid, mid } = skeleton(e);
+  const corner = offset === 0 ? lCorner(e) : undefined;
+  if (corner) return { points: simplify([p0, corner, p4]), midA: corner, midB: corner, horizontalMid };
   const m = mid + offset;
   const midA = horizontalMid ? { x: p1.x, y: m } : { x: m, y: p1.y };
   const midB = horizontalMid ? { x: p3.x, y: m } : { x: m, y: p3.y };
@@ -132,7 +153,8 @@ export interface LaneInput extends WireEndpoints {
  */
 export function assignLanes(wires: LaneInput[]): Map<string, number> {
   const items = wires
-    .filter((w) => !w.manual)
+    // L 字でつなぐ電線は中間セグメントがないので対象外
+    .filter((w) => !w.manual && !lCorner(w))
     .map((w) => {
       const s = skeleton(w);
       // 中間セグメントの範囲（水平なら x 範囲）と、並べ替えのキー
@@ -243,7 +265,7 @@ export function manualRoute(e: WireEndpoints, route: Point[]): { points: Point[]
 export function autoInner(e: WireEndpoints, offset: number): Point[] {
   const { p1, p3 } = skeleton(e);
   const r = routeWire(e, offset);
-  return [p1, r.midA, r.midB, p3];
+  return r.midA === r.midB ? [p1, r.midA, p3] : [p1, r.midA, r.midB, p3];
 }
 
 /** 折れ線の始点から距離 d の位置 */
