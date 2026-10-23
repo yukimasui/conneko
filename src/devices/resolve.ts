@@ -57,7 +57,7 @@ export interface ResolvedDevice {
   pins: PinDef[];
   links: InternalLink[];
   airLinks: ResolvedAirLink[];
-  /** 端子ID → 数値に解決したエアのポートの仕様（role: 'air' の端子） */
+  /** 端子ID（またはピンID） → 数値に解決したエアのポートの仕様（role: 'air' の端子・ピン） */
   air: Map<string, ResolvedAirPort>;
   safetyChannels: SafetyChannelGroup[];
   commonLimits: CommonLimit[];
@@ -130,7 +130,8 @@ export function resolveDevice(def: DeviceDefinition, params?: ParamValues): Reso
     if (t.accepts) accepts.set(t.id, resolveAccepts(t.accepts, def, p));
   }
   const air = new Map<string, ResolvedAirPort>();
-  for (const t of terminals) {
+  // 画面に出さないエアのポート（role: 'air' のピン）も含める
+  for (const t of [...terminals, ...pins]) {
     if (!t.air) continue;
     const a = t.air;
     air.set(t.id, {

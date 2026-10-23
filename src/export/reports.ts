@@ -8,6 +8,7 @@ import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
 import { deviceModel, paramLabel, type DeviceCategory, type DeviceDefinition } from '../devices/types';
 import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
+import { computeBus, effectiveParams } from '../model/bus';
 import { compareAddress, ioHosts, ioSystem } from '../model/io';
 import { AIR_LINK_TYPE, LINK_TYPE } from '../model/ops';
 
@@ -140,18 +141,21 @@ const NOT_SPEC = new Set(['ioIn', 'ioOut', 'side', 'name']);
 
 export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
   const groups = new Map<string, BomRow>();
+  // 型式は装着で決まるパラメータ（マニホールドの連数など）も使って組み立てる
+  const bus = computeBus(d.devices, lookup);
   for (const x of d.devices) {
     const def = lookup(x.type);
     if (!def || def.category === 'link') continue;
+    const model = deviceModel(def, effectiveParams(x, bus));
     const spec = (def.params ?? [])
       .filter((p) => !NOT_SPEC.has(p.key))
       .map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`)
       .join('、');
-    const k = `${def.type}|${deviceModel(def, x.params)}|${spec}`;
+    const k = `${def.type}|${model}|${spec}`;
     const g = groups.get(k) ?? {
       category: def.category,
       maker: def.maker ?? '汎用',
-      model: deviceModel(def, x.params),
+      model,
       name: def.name,
       spec,
       qty: 0,

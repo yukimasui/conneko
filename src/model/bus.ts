@@ -3,11 +3,12 @@
  *
  * 図面の機器の mount（装着先と位置）から、
  * - 装着したユニットの入出力の先頭番号（params の ioIn / ioOut）
+ * - 装着したユニットから決まる親のパラメータ（bus.host.fromUnits。マニホールドの連数など）
  * - キャンバス上の位置（親の横・中に順に並べる）
  * - 内部電源の収支やスロット数などの指摘
  * を求める。
  */
-import { resolveNum, type DeviceDefinition, type ParamValues } from '../devices/types';
+import { paramsWithDefaults, resolveNum, type DeviceDefinition, type ParamValues } from '../devices/types';
 import type { DiagramDevice } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -194,6 +195,16 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
         });
       }
     }
+  }
+  // 装着したユニットから決まる親のパラメータ（マニホールドの連数など。ユニットがなくても求める）
+  for (const d of devices) {
+    const from = lookup(d.type)?.bus?.host?.fromUnits;
+    if (!from || d.mount) continue;
+    const units = (groups.get(d.id)?.members ?? []).flatMap((m) => {
+      const def = lookup(m.type);
+      return def ? [{ type: m.type, def, params: paramsWithDefaults(def, { ...params.get(m.id), ...m.params }) }] : [];
+    });
+    params.set(d.id, { ...params.get(d.id), ...from(units) });
   }
   return { params, groups, problems };
 }

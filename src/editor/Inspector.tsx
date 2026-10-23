@@ -36,6 +36,8 @@ interface Props {
   /** ユニットを装着できる PLC（親・ユニット）の機器ID */
   plcDevices: Set<string>;
   onOpenPlc: (id: string, tab: 'rack' | 'io') => void;
+  /** マニホールド（親・装着した連）の機器ID。onOpenPlc はこれらの機器ではバルブエディタを開く */
+  valveDevices?: Set<string>;
   /** コネクタにつなげる機器の候補を出す（anchor はボタンの位置） */
   onPickMate: (device: string, terminal: string, anchor: DOMRect) => void;
   onWireChange: (id: string, patch: Partial<WireEdgeData>) => void;
@@ -161,7 +163,7 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
             {mount.device} の位置 {mount.slot}
           </span>
           <button type="button" onClick={() => props.onOpenPlc(mount.device, 'rack')}>
-            PLC エディタで変更…
+            {props.valveDevices?.has(mount.device) ? 'バルブエディタで変更…' : 'PLC エディタで変更…'}
           </button>
         </div>
       ) : hosts.length ? (
@@ -169,7 +171,7 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
           <span className="muted small">未装着</span>
           {hosts.map((h) => (
             <button key={h.id} type="button" onClick={() => props.onOpenPlc(h.id, 'rack')}>
-              {h.id} の PLC エディタ…
+              {h.id} の{props.valveDevices?.has(h.id) ? 'バルブエディタ' : ' PLC エディタ'}…
             </button>
           ))}
         </div>
@@ -271,7 +273,7 @@ export function Inspector(props: Props) {
               <div className="device-info__name">{def.name}</div>
               <div className="muted">
                 {def.maker ? `${def.maker} ` : ''}
-                {deviceModel(def, node.data.params)}
+                {deviceModel(def, params)}
               </div>
               {def.safety && <div className="safety-badge">安全性能 {safetyText(def.safety)}</div>}
               {hasEstimates(def) && (
@@ -282,7 +284,14 @@ export function Inspector(props: Props) {
               {def.description && <p className="muted small">{def.description}</p>}
             </div>
             {def.bus && !def.bus.host && <MountInfo node={node} def={def} props={props} />}
-            {def.bus?.host && <BusHostInfo id={node.id} bus={props.bus} />}
+            {def.bus?.host && !props.valveDevices?.has(node.id) && <BusHostInfo id={node.id} bus={props.bus} />}
+            {props.valveDevices?.has(node.id) && !node.data.mount && (
+              <div className="plc-buttons">
+                <button type="button" className="primary" onClick={() => props.onOpenPlc(node.id, 'rack')}>
+                  バルブエディタ（連の構成・つなぎ先）…
+                </button>
+              </div>
+            )}
             {def.bus?.io && resolved && <IoHeadField node={node} def={def} params={resolved.params} props={props} />}
             {(props.plcDevices.has(node.id) || props.ioDevices.has(node.id)) && (
               <div className="plc-buttons">

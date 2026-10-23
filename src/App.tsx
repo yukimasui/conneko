@@ -34,6 +34,7 @@ import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
 import { Inspector, type WireDefaults } from './editor/Inspector';
 import { PlcEditor, type PlcTab } from './editor/PlcEditor';
+import { ValveEditor } from './editor/ValveEditor';
 import { SchematicEditor } from './editor/SchematicEditor';
 import { useHistory } from './editor/useHistory';
 import { IssuePanel } from './editor/IssuePanel';
@@ -46,6 +47,7 @@ import { airCandidates, isAirPort, normalizeTubes, tubeAttrs } from './model/air
 import { isTubeType } from './data/tubes';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
 import { ioHosts } from './model/io';
+import { isManifold, manifoldDevices } from './model/manifold';
 import { applyIoCandidate, applyNetwork, applyPowerCandidate, suggestConnections, type Suggestions } from './model/suggest';
 import { applyMateCandidate, hasMateCandidates, mateCandidates, type MateCandidate } from './model/mates';
 import { isLanCable, LINK_TYPE, NET_LINK_TYPE, linkKey, mountFamily, moveToSheet, nextSheetId, placeLinkAt, promoteLinkNames, removeSheet, splitCrossSheetWires, splitWireWithLinks, terminalPoint } from './model/ops';
@@ -142,6 +144,7 @@ function Editor() {
   const [schematicSheet, setSchematicSheet] = useState<string>(() => sampleDiagram.schematic?.sheets[0]?.id ?? '');
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [plcEditor, setPlcEditor] = useState<{ id: string; tab: PlcTab } | null>(null);
+  const [valveEditor, setValveEditor] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
   const [printDialog, setPrintDialog] = useState(false);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
@@ -282,9 +285,17 @@ function Editor() {
   // ユニットを装着できる PLC（親と装着したユニット）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const plcDevices = useMemo(
-    () => new Set(diagram.devices.filter((d) => getDeviceDefinition(d.type)?.bus?.host).flatMap((d) => mountFamily(diagram, d.id))),
+    () =>
+      new Set(
+        diagram.devices
+          .filter((d) => getDeviceDefinition(d.type)?.bus?.host && !isManifold(getDeviceDefinition(d.type)))
+          .flatMap((d) => mountFamily(diagram, d.id)),
+      ),
     [topo],
   );
+  // マニホールド（親と装着した連）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const valveDevices = useMemo(() => manifoldDevices(diagram, getDeviceDefinition), [topo]);
 
   const context = useMemo(() => {
     const deviceSeverity = new Map<string, Severity>();
@@ -737,6 +748,7 @@ function Editor() {
       const items: MenuItem[] = [
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => setPlcEditor({ id: node.id, tab: 'rack' }) }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => setPlcEditor({ id: node.id, tab: 'io' }) }] : []),
+        ...(valveDevices.has(node.id) ? [{ label: 'バルブエディタ（連の構成・つなぎ先）…', onClick: () => setValveEditor(node.id) }] : []),
         ...(peers.length ? [{ label: '相手のリンクへ移動', children: peers.map((p) => ({ label: `${p.sheetName}（${p.id}）`, onClick: () => focusDevice(p.id) })) }] : []),
         ...(alignableLinkCount(diagram, node.id, getDeviceDefinition)
           ? [
@@ -757,7 +769,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
+    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
   );
 
   const onEdgeContextMenu = useCallback(
@@ -816,6 +828,7 @@ function Editor() {
       setSchematic(d.schematic);
       setSchematicSheet(d.schematic?.sheets[0]?.id ?? '');
       setPlcEditor(null);
+      setValveEditor(null);
       setMode('diagram');
       showSheet(sheetsOf(d)[0].id);
     },
@@ -1086,7 +1099,8 @@ function Editor() {
           onSheetChange={(id, s) => moveDevicesToSheet([id], s)}
           ioDevices={ioDevices}
           plcDevices={plcDevices}
-          onOpenPlc={(id, tab) => setPlcEditor({ id, tab })}
+          onOpenPlc={(id, tab) => (valveDevices.has(id) ? setValveEditor(id) : setPlcEditor({ id, tab }))}
+          valveDevices={valveDevices}
           onPickMate={pickMate}
           onWireChange={changeWire}
           onDelete={deleteSelected}
@@ -1159,6 +1173,18 @@ function Editor() {
             focusDevice(id);
           }}
           onClose={() => setPlcEditor(null)}
+        />
+      )}
+      {valveEditor && (
+        <ValveEditor
+          diagram={diagram}
+          deviceId={valveEditor}
+          onApply={applyDiagram}
+          onJump={(id) => {
+            setValveEditor(null);
+            focusDevice(id);
+          }}
+          onClose={() => setValveEditor(null)}
         />
       )}
       {modal && (

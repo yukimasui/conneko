@@ -371,6 +371,18 @@ export interface BusSpec {
       /** 空きスロットが占有する点数（iQ-R の初期設定は 16）。省略時は空きスロットを詰めて数える */
       emptySlot?: number;
     };
+    /**
+     * 装着したユニットのエアのポートを、親のポートにつなぐ通路（マニホールドの SUP・EXH の通路）。
+     * 「ユニットのポートID → 親のポートID」で書く（例: { P: 'P', EA: 'R', EB: 'R' }）。
+     * ユニットのポートは、画面に出さないエアのポート（pins に role: 'air' で書いたもの）でも、ふつうの端子でもよい。
+     * エアのチェック（src/check/pneumatic.ts）は、この通路を内部のチューブとみなしてエアの届く範囲を求める
+     */
+    airGallery?: Record<string, string>;
+    /**
+     * 装着したユニット（位置の順）から、親のパラメータを求める（マニホールドの連数・A/B ポートの継手の表記など）。
+     * 返した値は親の params に加わり（図面で明示した params が優先）、modelOf・svg で使える。引数の params は既定値を補完済み
+     */
+    fromUnits?: (units: { type: string; def: DeviceDefinition; params: ParamValues }[]) => ParamValues;
   };
   /** 専用の位置に装着するユニットの種類（host.slotRoles と対応。例: 'power'、'cpu'） */
   role?: string;
@@ -419,6 +431,8 @@ export type DeviceCategory =
 /**
  * コネクタのピン（画面上の端子としては表示しない）。
  * id は '<コネクタ端子ID>#<ピン番号>'（例: 'CN1#1'）。links から参照できる。
+ * role: 'air' のピンは、画面に出さないエアのポート（マニホールドに装着する電磁弁の P・EA・EB など）。id は自由で、
+ * airLinks から参照し、親の bus.host.airGallery で親のポートにつなぐ
  */
 export interface PinDef extends TerminalBase {
   id: string;

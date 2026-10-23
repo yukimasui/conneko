@@ -90,7 +90,8 @@ export function airCandidates(d: Diagram, from: TerminalRef, defs: DeviceDefinit
   const order: DeviceCategory[] = kind === 'work' ? ['actuator', 'air-fitting', 'valve', 'air-supply'] : ['air-supply', 'valve', 'air-fitting', 'actuator'];
   const fresh: MateCandidate[] = [];
   for (const def of defs) {
-    if (def.netLabel || !order.includes(def.category)) continue;
+    // 親に装着して使う機器（マニホールドに装着する電磁弁など）は、単独では置かない
+    if (def.netLabel || !order.includes(def.category) || (def.bus && !def.bus.host)) continue;
     const r = resolveDevice(def);
     const hit = r.terminals.find((t) => t.role === 'air' && fits(def, r.air.get(t.id)?.kind));
     if (hit) fresh.push({ type: def.type, pairs: [{ from: from.terminal, to: hit.id }] });

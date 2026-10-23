@@ -115,7 +115,7 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
   if (def.netLabel) {
     return `- ${d.id}: ${def.name}「${String(params?.[def.netLabel.param] ?? '')}」（type: ${def.type}、シート: ${sheetName}、端子 ${def.netLabel.terminal}）`;
   }
-  const lines = [`- ${d.id}: ${def.name} ${deviceModel(def, d.params)}（type: ${def.type}、シート: ${sheetName}）`];
+  const lines = [`- ${d.id}: ${def.name} ${deviceModel(def, params)}（type: ${def.type}、シート: ${sheetName}）`];
   if (d.note) lines.push(`  用途: ${d.note}`);
   if (def.description) lines.push(`  説明: ${def.description}`);
   const prot = resolveNum(def.protectionCurrent, def, params);
@@ -146,6 +146,11 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
         .join('・');
     lines.push(`  エアの通り道: ${r.airLinks.map((l) => `${l.from}${l.directed ? '→' : '↔'}${l.to}${tag(l) ? `(${tag(l)})` : ''}`).join(', ')}`);
   }
+  // 画面に出さないエアのポート（マニホールドの中でつながるもの）と、マニホールドの通路
+  const hiddenAir = r.pins.filter((p) => p.role === 'air');
+  if (hiddenAir.length) lines.push(`  マニホールドの中でつながるポート（チューブはつながない）: ${hiddenAir.map((p) => `${p.id}(${p.label ?? p.id})`).join(', ')}`);
+  const gallery = Object.entries(def.bus?.host?.airGallery ?? {});
+  if (gallery.length) lines.push(`  装着した電磁弁のポートを中でつなぐ: ${gallery.map(([u, h]) => `${u}→${h}`).join(', ')}`);
   for (const t of r.terminals.filter((x) => x.connector)) {
     const pins = r.pins.filter((p) => p.id.startsWith(`${t.id}#`));
     if (!pins.length) continue;
@@ -211,6 +216,7 @@ export function buildAiPrompt(diagram: Diagram, issues: CheckIssue[]): string {
   - エア源（供給圧力）→ フィルタ・レギュレータ（一次側 → 二次側）→ 電磁弁の P → 電磁弁の A・B → シリンダのポート の順に配管します。排気ポートには配管しません（サイレンサで大気へ逃がします）。
   - 別のシートへのチューブは、エアのリンク（type: "generic.air-link"、端子 "T"）を両方のシートに置き、同じ名前にしてチューブでつなぎます（電線のリンクとは名前が別の空間です）。
   - 電磁弁のソレノイド（コイル）とオートスイッチ・圧力スイッチの電線は、電気の端子なので電線でつなぎます。
+  - マニホールド（電磁弁をまとめるベース）に装着した電磁弁（mount で指定）の P・EA・EB はマニホールドの中で SUP・EXH につながるので配管しません。エア源からはマニホールドの P へ配管し、各電磁弁の A・B からシリンダへ配管します。
   - チューブ種類ID: ${TUBE_TYPES.map((t) => `${t.id}(${t.name}、最高 ${t.maxPressure}MPa)`).join(', ')}、外径: ${TUBE_ODS.join('/')}mm、チューブ色ID: ${TUBE_COLORS.map((c) => `${c.id}(${c.name})`).join(', ')}
 - PLC の入出力の電線は、線番を入出力番号（例: R000）にすると分かりやすくなります。コメント（comments）は入出力の用途です。
 - 電源出力から保護機器（ブレーカー・サーキットプロテクタ）を通して負荷へ給電してください。

@@ -5,6 +5,7 @@
  * - 電磁弁の切り換わる通り道（valve）は、すべての位置の通り道を合わせて届く範囲を求める
  * - レギュレータ（regulate）は、二次側を設定圧力までに下げる
  * - 排気ポートへ向かう機器の中の通り道は、圧力の計算に使わない（排気は大気へ逃がす）
+ * - マニホールドに装着した電磁弁のポート（P・EA・EB）は、親の bus.host.airGallery で親のポート（SUP・EXH）とつながる
  * ポートの圧力は、届く経路のうちいちばん高いもの（レギュレータを通ればその設定圧力まで）とする。
  */
 import { getTubeType } from '../data/tubes';
@@ -28,15 +29,38 @@ interface Port {
   optional: boolean;
   /** エアのリンクのポート（未接続・圧力の指摘はリンクのチェックに任せる） */
   link: boolean;
+  /** 画面に出さないポート（role: 'air' のピン。マニホールドの中で親のポートにつながる） */
+  hidden: boolean;
 }
 
 function airPorts(m: Model): Map<string, Port> {
   const out = new Map<string, Port>();
   for (const { device, def, r } of m.devices.values()) {
-    for (const t of r.terminals) {
+    for (const [t, hidden] of [...r.terminals.map((x) => [x, false] as const), ...r.pins.map((x) => [x, true] as const)]) {
       const spec = r.air.get(t.id);
       if (t.role !== 'air' || !spec) continue;
-      out.set(key(device.id, t.id), { device: device.id, id: t.id, label: t.label ?? t.id, spec, optional: !!t.optional, link: !!def.netLabel });
+      out.set(key(device.id, t.id), { device: device.id, id: t.id, label: t.label ?? t.id, spec, optional: !!t.optional, link: !!def.netLabel, hidden });
+    }
+  }
+  return out;
+}
+
+/**
+ * 装着したユニットのポートと親のポートをつなぐ通路（マニホールドの SUP・EXH）。返り値は [ユニットのポート, 親のポート] の端子キーの組。
+ * どちらかのポートがなければ組にしない
+ */
+export function airGalleryPairs(m: Model): [string, string][] {
+  const out: [string, string][] = [];
+  for (const g of m.bus.groups.values()) {
+    const host = m.devices.get(g.host.id);
+    const gallery = host?.def.bus?.host?.airGallery;
+    if (!host || !gallery) continue;
+    for (const member of g.members) {
+      const unit = m.devices.get(member.id);
+      if (!unit) continue;
+      for (const [unitPort, hostPort] of Object.entries(gallery)) {
+        if (unit.r.air.has(unitPort) && host.r.air.has(hostPort)) out.push([key(member.id, unitPort), key(g.host.id, hostPort)]);
+      }
     }
   }
   return out;
@@ -58,6 +82,12 @@ export function airPressures(m: Model): Map<string, number> {
     if (!ports.has(a) || !ports.has(b)) continue;
     add(a, { to: b, limit: Infinity });
     add(b, { to: a, limit: Infinity });
+  }
+  // マニホールドの通路（排気ポートへ向かう向きは使わない）
+  for (const [a, b] of airGalleryPairs(m)) {
+    const toExhaust = (k: string) => ports.get(k)?.spec.kind === 'exhaust';
+    if (!toExhaust(b)) add(a, { to: b, limit: Infinity });
+    if (!toExhaust(a)) add(b, { to: a, limit: Infinity });
   }
   for (const { device, r } of m.devices.values()) {
     for (const l of r.airLinks) {
@@ -120,11 +150,26 @@ export function checkPneumatic(m: Model, push: Push) {
   if (!ports.size) return;
   const pressure = airPressures(m);
   const linked = new Set(m.labelLinks.flat());
+  /** マニホールドの通路で親のポートとつながったユニットのポート */
+  const joined = new Set(airGalleryPairs(m).map(([a]) => a));
 
-  // 未接続のポート（排気ポート・任意のポートは除く）
+  // 未接続のポート（排気ポート・任意のポート・マニホールドの中でつながるポートは除く）
   for (const [k, p] of ports) {
-    if (p.optional || p.link || p.spec.kind === 'exhaust' || m.tubesAt.has(k)) continue;
+    if (p.hidden || p.optional || p.link || p.spec.kind === 'exhaust' || m.tubesAt.has(k) || joined.has(k)) continue;
     push({ severity: 'warning', rule: 'air-unconnected', message: `${p.device}: ポート ${p.label} が未接続です（チューブをつなぎます）`, devices: [p.device], wires: [], key: `air-unconnected:${k}` });
+  }
+
+  // 画面に出さないポート（マニホールドの中でつながるもの）が、どの親にもつながっていない
+  const unjoined = new Map<string, string[]>();
+  for (const [k, p] of ports) if (p.hidden && !joined.has(k)) unjoined.set(p.device, [...(unjoined.get(p.device) ?? []), p.label]);
+  for (const [device, labels] of unjoined) {
+    push({
+      severity: 'warning',
+      rule: 'air-not-mounted',
+      message: `${device}: マニホールドに装着されていません（${labels.join('・')} はマニホールドの中で SUP・EXH につながります）`,
+      devices: [device],
+      wires: [],
+    });
   }
 
   // チューブの外径と継手、チューブの最高使用圧力
@@ -176,7 +221,7 @@ export function checkPneumatic(m: Model, push: Push) {
   for (const [device, ks] of byDevice) {
     const info = m.devices.get(device)!;
     // 一次側・作業ポートにチューブがあるのに、どこにもエアが届いていない
-    const fed = ks.filter((k) => ['in', 'work'].includes(ports.get(k)!.spec.kind) && (m.tubesAt.has(k) || linked.has(k)));
+    const fed = ks.filter((k) => ['in', 'work'].includes(ports.get(k)!.spec.kind) && (m.tubesAt.has(k) || linked.has(k) || joined.has(k)));
     if (fed.length && !fed.some((k) => pressure.has(k)) && !fed.some((k) => vacuum.has(k))) {
       // 向きのある通り道の出口側だけにエアが来ているなら、つなぐ向きが逆
       const reversed = info.r.airLinks.find((l) => l.directed && pressure.has(key(device, l.to)) && !pressure.has(key(device, l.from)));
