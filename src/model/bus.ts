@@ -25,6 +25,8 @@ export interface BusRailTotal {
   rail: string;
   supply: number;
   load: number;
+  /** load のうち、装着したユニットの分（親自身の消費を除く） */
+  unitLoad: number;
 }
 
 export interface BusGroup {
@@ -191,6 +193,14 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
       const occupied = new Set(g.members.map((m) => m.mount!.slot));
       let lastSlot = Math.min(...g.members.map((m) => m.mount!.slot)) - 1;
       for (const m of g.members) {
+        // 相対番号の親では、手で指定した先頭番号から続けて数える
+        if (numbering.relative) {
+          if (typeof m.params?.ioIn === 'number') {
+            cin = m.params.ioIn;
+            if (numbering.mode === 'shared') cout = cin;
+          }
+          if (numbering.mode === 'separate' && typeof m.params?.ioOut === 'number') cout = m.params.ioOut;
+        }
         if (numbering.emptySlot) {
           for (let s = lastSlot + 1; s < m.mount!.slot; s++) {
             if (occupied.has(s) || roles[s]) continue;
@@ -201,7 +211,8 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
         }
         const io = lookup(m.type)?.bus?.io;
         if (!io) continue;
-        const nIn = roundUp(io.inputs ?? 0, numbering.unit);
+        // 占有するだけの点数（reserve）は入力の後ろに数える
+        const nIn = roundUp((io.inputs ?? 0) + (io.reserve ?? 0), numbering.unit);
         const nOut = roundUp(io.outputs ?? 0, numbering.unit);
         if (numbering.mode === 'shared') {
           params.set(m.id, { ioIn: cin, ioOut: cin + nIn });
@@ -235,13 +246,17 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
 
     // 内部電源の収支
     const totals = new Map<string, BusRailTotal>();
-    const rail = (name: string) => totals.get(name) ?? (totals.set(name, { rail: name, supply: 0, load: 0 }), totals.get(name)!);
+    const rail = (name: string) => totals.get(name) ?? (totals.set(name, { rail: name, supply: 0, load: 0, unitLoad: 0 }), totals.get(name)!);
     for (const d of [g.host, ...g.members]) {
       const def = lookup(d.type);
       if (!def?.bus) continue;
       const p = { ...d.params, ...params.get(d.id) };
       for (const [r, v] of Object.entries(def.bus.supply ?? {})) rail(r).supply += resolveNum(v, def, p) ?? 0;
-      for (const [r, v] of Object.entries(def.bus.load ?? {})) rail(r).load += resolveNum(v, def, p) ?? 0;
+      for (const [r, v] of Object.entries(def.bus.load ?? {})) {
+        const n = resolveNum(v, def, p) ?? 0;
+        rail(r).load += n;
+        if (d !== g.host) rail(r).unitLoad += n;
+      }
     }
     g.rails = [...totals.values()];
     const everyone = [g.host.id, ...g.members.map((m) => m.id)];
@@ -275,6 +290,17 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
     params.set(d.id, { ...params.get(d.id), ...from(units) });
   }
   return { params, groups, serial, problems };
+}
+
+/**
+ * 親の電源端子から流れる、装着したユニットの消費電流[A]（bus.feeds のレールの、ユニットの分の合計）。
+ * 親でなければ 0
+ */
+export function fedUnitLoad(layout: BusLayout, hostId: string, hostDef: DeviceDefinition | undefined): number {
+  const feeds = hostDef?.bus?.feeds;
+  const g = layout.groups.get(hostId);
+  if (!feeds?.length || !g) return 0;
+  return g.rails.filter((r) => feeds.includes(r.rail)).reduce((s, r) => s + r.unitLoad, 0);
 }
 
 /** 通信タイプのマニホールドに装着した連の、ソレノイドの SI ユニットの出力（親の機器ID と出力番号）。割り付けていなければ undefined */

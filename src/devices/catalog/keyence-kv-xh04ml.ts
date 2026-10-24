@@ -49,8 +49,8 @@ const def: DeviceDefinition = {
     { id: 'PORT', label: 'MECHATROLINK-III', x: PORT.x, y: PORT.y, side: 'bottom', role: 'connector', connector: { kind: 'MECHATROLINK3', pins: 0, width: 22, protocols: ['mechatrolink-iii'] }, optional: true },
     { id: 'FG', label: 'FG', hint: '機能接地', x: FG.x, y: FG.y, side: 'bottom', role: 'ground' },
   ],
-  // 占有デバイス: リレー 576 点（36 チャネル）。入出力の内訳は公開資料にないため入力として数える
-  bus: kvUnitBus(160, { inputs: 576 }),
+  // 占有デバイス: リレー 576 点（36 チャネル）。入出力ではなく占有するだけの点数（reserve）として数える
+  bus: kvUnitBus(160, { reserve: 576 }),
 };
 
 export default def;

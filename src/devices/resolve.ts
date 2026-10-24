@@ -87,7 +87,7 @@ function withIoDefaults(def: DeviceDefinition, p: ParamValues): ParamValues {
   if (!io || (p.ioIn !== undefined && p.ioOut !== undefined)) return p;
   const ioIn = Number(p.ioIn ?? 0) || 0;
   const shared = io.format !== 'octal';
-  const ioOut = p.ioOut !== undefined ? p.ioOut : shared ? ioIn + Math.ceil((io.inputs ?? 0) / 16) * 16 : 0;
+  const ioOut = p.ioOut !== undefined ? p.ioOut : shared ? ioIn + Math.ceil(((io.inputs ?? 0) + (io.reserve ?? 0)) / 16) * 16 : 0;
   return { ...p, ioIn, ioOut };
 }
 

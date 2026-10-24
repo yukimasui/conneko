@@ -85,7 +85,10 @@ export function rackPages(
     const io = def.bus?.io;
     const inputs = io?.inputs ?? 0;
     const outputs = io?.outputs ?? 0;
-    const inRange = io ? range(io.format, 'in', Number(params.ioIn ?? 0), inputs) : '';
+    const reserve = io?.reserve ?? 0;
+    // 占有するだけの点数（内部リレーなど）は入力の後ろ
+    const reserveRange = io ? range(io.format, 'in', Number(params.ioIn ?? 0) + inputs, reserve) : '';
+    const inRange = io ? [range(io.format, 'in', Number(params.ioIn ?? 0), inputs), reserveRange && `占有 ${reserveRange}`].filter(Boolean).join(' ') : '';
     const outRange = io ? range(io.format, 'out', Number(params.ioOut ?? 0), outputs) : '';
     const load = Object.entries(def.bus?.load ?? {})
       .map(([rail, v]) => `${rail} ${resolveNum(v, def, params) ?? 0}A`)
@@ -100,7 +103,7 @@ export function rackPages(
     putText(page, cx, y + 19, fitText(def.model, w - 2, 2.2), { height: 2.2, align: 'center' });
     twoLines(def.name, w - 2, 2).forEach((line, i) => putText(page, cx, y + 25 + i * 3.5, line, { height: 2, align: 'center' }));
     let ty = y + 36;
-    for (const [label, text] of [['入力', inRange], ['出力', outRange]] as const) {
+    for (const [label, text] of [[inputs ? '入力' : '占有', inputs ? inRange : reserveRange], ['出力', outRange]] as const) {
       if (!text) continue;
       putText(page, cx, ty, label, { height: 2, align: 'center' });
       putText(page, cx, ty + 3.5, fitText(text.replace(/（.*$/, ''), w - 2, 2), { height: 2, align: 'center' });

@@ -203,21 +203,26 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
 function IoHeadField({ node, def, params, props }: { node: DeviceFlowNode; def: DeviceDefinition; params: ParamValues; props: Props }) {
   const io = def.bus!.io!;
   const rows = [
-    ...(io.inputs ? [{ key: 'ioIn', dir: 'in' as const, label: '入力', count: io.inputs }] : []),
-    ...(io.outputs ? [{ key: 'ioOut', dir: 'out' as const, label: '出力', count: io.outputs }] : []),
+    // 占有するだけの点数（内部リレーなど）は入力の後ろに数え、先頭番号は ioIn で決まる
+    ...(io.inputs || io.reserve ? [{ key: 'ioIn', dir: 'in' as const, label: io.inputs ? '入力' : '占有', count: io.inputs || io.reserve!, offset: 0 }] : []),
+    ...(io.inputs && io.reserve ? [{ key: 'ioIn', dir: 'in' as const, label: '占有', count: io.reserve, offset: io.inputs, fixed: true }] : []),
+    ...(io.outputs ? [{ key: 'ioOut', dir: 'out' as const, label: '出力', count: io.outputs, offset: 0 }] : []),
   ];
+  // 相対番号しか付けない親（KV-EC01 など）に装着したユニットは、先頭番号を手で指定できる
+  const host = node.data.mount ? getDeviceDefinition(props.nodes.find((n) => n.id === node.data.mount!.device)?.data.deviceType ?? '') : undefined;
+  const auto = !!node.data.mount && !host?.bus?.host?.numbering?.relative;
   return (
     <div className="field">
-      <span>先頭番号{node.data.mount ? '（装着位置から自動）' : ''}</span>
+      <span>先頭番号{auto ? '（装着位置から自動）' : node.data.mount ? '（番号は親の設定で決まるので、手で指定できます）' : ''}</span>
       {rows.map((r) => {
-        const head = Number(params[r.key] ?? 0);
+        const head = Number(params[r.key] ?? 0) + r.offset;
         const range = `${ioName(io.format, r.dir, head)}〜${ioName(io.format, r.dir, head + r.count - 1)}`;
-        return node.data.mount ? (
-          <div key={r.key} className="muted small">
+        return auto || r.fixed ? (
+          <div key={`${r.key}:${r.label}`} className="muted small">
             {r.label} {range}
           </div>
         ) : (
-          <label key={r.key} className="io-head">
+          <label key={`${r.key}:${r.label}`} className="io-head">
             {r.label}
             <input
               key={`${node.id}-${head}`}

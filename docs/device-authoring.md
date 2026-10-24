@@ -168,6 +168,13 @@ bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } }
 - `host.accepts` で、親が受け入れるユニットのバスの種類を複数にできる。
 - ベースユニットのようにスロットの位置が決まっている親は `host.slotX`（位置ごとの x 座標）、専用の位置は `host.slotRoles: { 1: 'power', 2: 'cpu' }`
   とユニット側の `bus.role` で表す。空きスロットが番号を占有する場合は `numbering.emptySlot` に点数を書く。
+- 番号が親の設定で決まり、連結順の相対番号しか付けられない親（KV-EC01 の PDO 割付など）は `numbering.relative: true`。
+  装着したユニットの先頭番号を画面（または図面の `params.ioIn` / `ioOut`）で指定でき、後ろのユニットはその続きから数える。
+- 入出力ではなく番号を占有するだけのユニット（KV-XH04ML のリレー 576 点など）は `io: { reserve: 576, format: 'kv' }`。入力の後ろに数える。
+- 内部電源を親の電源端子からそのまま供給する親（KEYENCE KV の CPU・KV-EC01 の DC24V）は `feeds: ['DC24V']`。
+  装着したユニットのそのレールの消費を親の `loadCurrent` に加えて、上流の保護（`overload`）と比べる。
+- 電源出力の端子と内部電源が容量を分け合う場合（FX5U の DC24V サービス電源と増設ユニットへの DC24V）は、
+  端子の `supply` に `limitCurrent`（容量）と `busRail: '24V'` を書く。端子から受電している機器と装着したユニットの消費の合計を容量と比べる（`supply-overload`）。
 
 ### マニホールド（電磁弁を連ごとに装着するベース）
 

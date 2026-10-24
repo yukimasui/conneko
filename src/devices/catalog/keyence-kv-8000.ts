@@ -211,6 +211,8 @@ const def: DeviceDefinition = {
     // 拡張ユニット込みの上限 3.2A。CPU 自身の 0.4A も同じ電源から流れるので load に入れる
     supply: { [KV_RAIL]: 3.2 },
     load: { [KV_RAIL]: 0.4 },
+    // 拡張ユニットの消費は CPU の電源端子から流れる（上流の保護と比べるときに CPU の消費に加える）
+    feeds: [KV_RAIL],
   },
 };
 

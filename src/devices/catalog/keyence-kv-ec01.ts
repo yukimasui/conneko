@@ -77,11 +77,12 @@ const def: DeviceDefinition = {
     host: {
       accepts: [KV_NANO_BUS],
       // 連結台数の上限は公開資料で確認できないため指定しない（電流の上限 1.8A でチェックする）
-      // リレー番号は EtherCAT の PDO 割付で決まる。ここでは連結順の相対番号（先頭 R000）として並べる
-      numbering: { mode: 'shared', unit: 16, start: { input: 0, output: 0 } },
+      // リレー番号は EtherCAT の PDO 割付で決まる。ここでは連結順の相対番号（先頭 R000）として並べ、ユニットの先頭番号を手で指定できる
+      numbering: { mode: 'shared', unit: 16, start: { input: 0, output: 0 }, relative: true },
     },
     supply: { [KV_RAIL]: 1.8 },
     load: { [KV_RAIL]: 0.12 },
+    feeds: [KV_RAIL],
   },
 };
 

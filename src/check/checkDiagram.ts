@@ -13,6 +13,7 @@
 import { checkPneumatic } from './pneumatic';
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram } from '../model/diagram';
+import { fedUnitLoad } from '../model/bus';
 import { hasEstimates } from '../devices/estimates';
 import { terminationName } from '../data/terminations';
 import { paramLabel, paramOptions, resolveNum, unavailableParams, type Conductor, type PowerSystem } from '../devices/types';
@@ -21,6 +22,7 @@ import {
   classifySupplies,
   CONDUCTOR_NAMES,
   key,
+  loadCurrentOf,
   protocolNames,
   supplyLabel,
   terminalName,
@@ -68,6 +70,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkWireTerminals(m, push, protection);
   checkLoadProtection(m, push, protection);
   checkOutputCurrents(m, push);
+  checkSupplyCapacity(m, push);
   checkSignals(m, push);
   checkSafety(m, push);
   checkWireColors(m, push);
@@ -401,9 +404,10 @@ function checkLoadProtection(m: Model, push: Push, protection: Map<string, numbe
       push({ severity: 'warning', rule: 'no-protection', message: `${device.id}: 上流に保護機器（ブレーカー・サーキットプロテクタなど）がありません`, devices: [device.id], wires: [], key: `no-protection:${device.id}` });
       continue;
     }
-    const load = resolveNum(def.loadCurrent, def, device.params);
+    const load = loadCurrentOf(m, m.devices.get(device.id)!);
     if (load !== undefined && load > worst) {
-      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流 ${load}A が上流の保護電流 ${worst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
+      const units = fedUnitLoad(m.bus, device.id, def) > 0 ? '（装着したユニットの消費を含む）' : '';
+      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流${units} ${load}A が上流の保護電流 ${worst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
     }
   }
 }
@@ -416,11 +420,63 @@ function outputLoad(m: Model, owner: string, point: string): { current: number; 
     if (info.device.id !== owner && info.terminal.role === 'input') ids.add(info.device.id);
   }
   let current = 0;
-  for (const id of ids) {
-    const d = m.devices.get(id)!;
-    current += resolveNum(d.def.loadCurrent, d.def, d.device.params) ?? 0;
-  }
+  for (const id of ids) current += loadCurrentOf(m, m.devices.get(id)!) ?? 0;
   return { current, devices: [...ids] };
+}
+
+/**
+ * 電源の容量（DC の + 側の電源出力の limitCurrent）と、その電源から受電している機器の消費電流の合計を比べる。
+ * 接点・出力はすべて閉じたとみなす（同時に動かない負荷も合計するので、多めに数える）。
+ * busRail を書いた電源出力（FX5U のサービス電源など）は、装着したユニットのそのレールの消費も合わせる
+ */
+function checkSupplyCapacity(m: Model, push: Push) {
+  // 電源出力の all のグループ → その機器の電源出力
+  const groups = new Map<string, { device: string; keys: string[] }[]>();
+  for (const [k, s] of m.supplies) {
+    if (s.kind !== 'power' || s.system !== 'DC' || s.conductor !== '+') continue;
+    const root = m.all.find(k);
+    const list = groups.get(root) ?? [];
+    const own = list.find((x) => x.device === s.device);
+    if (own) own.keys.push(k);
+    else list.push({ device: s.device, keys: [k] });
+    groups.set(root, list);
+  }
+  for (const [root, sources] of groups) {
+    // 別々の機器の電源を並列にしている場合は parallel-source などで指摘するので、ここでは確かめない
+    if (sources.length !== 1 || m.potentialOf(sources[0].keys[0]).kind !== 'ok') continue;
+    const { device: owner, keys } = sources[0];
+    const ownerInfo = m.devices.get(owner)!;
+    const specs = keys.map((k) => m.terminals.get(k)!.terminal.supply!);
+    const limits = specs.map((s) => resolveNum(s.limitCurrent, ownerInfo.def, ownerInfo.device.params)).filter((n): n is number => n !== undefined);
+    if (!limits.length) continue;
+    const capacity = Math.max(...limits);
+    // この電源から受電している機器（受電端子が同じグループにある、ほかの機器）
+    const fed = new Set<string>();
+    for (const k of m.allMembers.get(root) ?? []) {
+      const info = m.terminals.get(k)!;
+      if (info.device.id !== owner && info.terminal.role === 'input') fed.add(info.device.id);
+    }
+    const loads = [...fed].map((id) => ({ id, current: loadCurrentOf(m, m.devices.get(id)!) ?? 0 })).filter((x) => x.current > 0);
+    // 容量を分け合う内部電源のレール（装着したユニットの消費）
+    const railName = specs.find((s) => s.busRail)?.busRail;
+    const rail = railName ? m.bus.groups.get(owner)?.rails.find((r) => r.rail === railName) : undefined;
+    // レールだけで超えている場合は bus-overload で指摘済み
+    if (rail && rail.load > rail.supply + 1e-9) continue;
+    const railLoad = rail?.unitLoad ?? 0;
+    const total = loads.reduce((s, x) => s + x.current, 0) + railLoad;
+    if (total <= capacity + 1e-9) continue;
+    const parts = [...loads.map((x) => `${x.id} ${amp(x.current)}`), ...(railLoad > 0 ? [`装着したユニット ${amp(railLoad)}`] : [])];
+    push({
+      severity: 'warning',
+      rule: 'supply-overload',
+      message: `${terminalName(m, keys[0])}: この電源から受電している機器の消費電流の合計 ${amp(total)}（${parts.join('、')}）が容量 ${amp(capacity)} を超えています${
+        railLoad > 0 ? `（増設ユニットへの内部電源 ${railName} と容量を共用）` : ''
+      }`,
+      devices: [owner, ...loads.map((x) => x.id)],
+      wires: [],
+      key: `supply-overload:${owner}:${keys[0]}`,
+    });
+  }
 }
 
 const amp = (n: number) => `${Math.round(n * 1000) / 1000}A`;
