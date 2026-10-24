@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.16 装着したユニットの電源と番号など）
+最終更新: 2026-10-24（v0.6.17 R-unit のモーター電源の電路など）
 
 ## 現在地
 
+- v0.6.17（#8 完了）: 端子の `busNet`（親と装着ユニットの同名の端子を常時導通）。R-unit の MP+ → MPO（`role: 'load'`）
 - v0.6.16（#8 の一部）: `bus.feeds`（親の消費に装着ユニットを加える）、電源の容量チェック `supply-overload`、`SupplySpec.busRail`（FX5U のサービス電源と共用）、
   `io.reserve`（KV-XH04ML）、`numbering.relative`（KV-EC01 の先頭番号の手入力）。レールの電位（IAI RCON の MPO）は残り
 - v0.6.15（#7）: `InternalLink.safetyContact`（機器の外のもので開く b 接点。安全入力のループで機器自身の経路でも数え、短絡の状態検査では閉じたまま）。

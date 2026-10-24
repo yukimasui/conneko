@@ -64,8 +64,9 @@ const terminals: TerminalDef[] = [
       x: n2(CUT.x + CUT.dx + 4),
       y: n2(CUT.y + i * CUT.dy),
       side: 'right',
-      role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 6 },
+      // ゲートウェイユニットの MP+ から連結（バス）で来る電路
+      role: 'load',
+      busNet: 'MP',
       optional: true,
     },
   ]),

@@ -353,6 +353,25 @@ describe('R-unit（RCON・RSEL・REC）の連結', () => {
   });
 });
 
+describe('R-unit のモーター電源（MP）の電路（busNet）', () => {
+  const dev = (id: string, type: string, slot?: number) => ({ id, type, x: 0, y: 0, ...(slot ? { mount: { device: 'GW1', slot } } : {}) });
+  /** ゲートウェイの MP+ に電源をつなぎ（mpWired）、ドライバーの MPO_Ⅰ と MPI_Ⅰ を短絡する */
+  const d = (mounted: boolean, mpWired: boolean): Diagram => ({
+    devices: [dev('PSU1', 'generic.psu.dc24v'), dev('GW1', 'iai.rcon-gw'), dev('D1', 'iai.rcon-pc', mounted ? 1 : undefined)],
+    wires: [...(mpWired ? [w('PSU1.+V1', 'GW1.MP+'), w('PSU1.-V1', 'GW1.MP0V')] : []), w('D1.MPO1', 'D1.MPI1')],
+  });
+  const mpiIssues = (x: Diagram) => checkDiagram(x, lookup).filter((i) => i.devices.includes('D1') && i.rule !== 'unconnected' && /MPI/.test(i.message));
+
+  it('ゲートウェイに装着したドライバーの MPO にはゲートウェイの MP+ の電源が来る（MPI に電源が来る）', () => {
+    expect(mpiIssues(d(true, true))).toEqual([]);
+  });
+
+  it('ゲートウェイの MP+ に電源をつないでいない、または装着していないと、MPI に電源が来ない', () => {
+    expect(mpiIssues(d(true, false)).map((i) => i.rule)).toContain('no-power');
+    expect(mpiIssues(d(false, true)).map((i) => i.rule)).toContain('no-power');
+  });
+});
+
 describe('IAI のケーブル・コネクター', () => {
   it('CB-PAC-PIO は PCON-CB の PIO コネクターにつながり、ピン 5A（CN#9）と芯線 5A が導通する', () => {
     const pcon = resolveDevice(def('iai.pcon-cb'));

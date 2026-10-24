@@ -244,8 +244,9 @@ export function rconDriverTerminals(s: Rcon24Spec, axes: number, motorKind = s.m
         x: n2(c.x + c.dx + 4),
         y: n2(c.y + i * c.dy),
         side: 'right',
-        role: 'supply',
-        supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 6 },
+        // ゲートウェイユニットの MP+ から連結（バス）で来る電路。ゲートウェイに装着していなければ電源は来ない
+        role: 'load',
+        busNet: 'MP',
         optional: true,
       },
     );
