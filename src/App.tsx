@@ -22,7 +22,7 @@ import { DEFAULT_WIRE } from './data/wires';
 import { linkShape, withLinkParam } from './devices/link';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
-import { deviceModel, deviceSize } from './devices/types';
+import { deviceModel, deviceSize, fixUnavailableParams } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
@@ -765,8 +765,9 @@ function Editor() {
       setNodes((ns) =>
         ns.map((n) => {
           if (n.id !== id) return n;
-          // リンクは向きとつなぐ側が食い違わないよう、もう一方も合わせる
-          const params = getDeviceDefinition(n.data.deviceType)?.netLabel ? withLinkParam(n.data.params, key, value) : { ...n.data.params, [key]: value };
+          // リンクは向きとつなぐ側が食い違わないよう、もう一方も合わせる。ほかの機器は、選べなくなったパラメータを選べる値に直す
+          const def = getDeviceDefinition(n.data.deviceType);
+          const params = def?.netLabel ? withLinkParam(n.data.params, key, value) : def ? fixUnavailableParams(def, { ...n.data.params, [key]: value }) : { ...n.data.params, [key]: value };
           return { ...n, data: { ...n.data, params } };
         }),
       );

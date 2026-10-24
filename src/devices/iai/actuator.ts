@@ -21,7 +21,7 @@
  * - 200V AC サーボ（RCS4 など）: モーター 'IAI-SCON-MOT'（SCON-CB）・'IAI-XSEL-MOT'（XSEL-RA/SA・P/Q）が適応コントローラー T2、
  *   'IAI-SCON2-MOT'（SCON2・RCON-SC）・'IAI-XSEL2-MOT'（XSEL2）が T4。エンコーダーは 'IAI-SCON-PG'・'IAI-XSEL-PG'（T2/T4 共通の CB-X1-PA）
  */
-import type { ConnectorSpec, ParamDef, PinDef } from '../types';
+import type { ConnectorSpec, ParamDef, ParamValues, PinDef } from '../types';
 import { DC24_MINUS, DC24_PLUS, iaiLogo, n2, text } from './parts';
 
 /* ------------------------------------------------------------------ */
@@ -31,16 +31,29 @@ import { DC24_MINUS, DC24_PLUS, iaiLogo, n2, text } from './parts';
 /**
  * RCP6 の適応コントローラーのパラメーター。型式の「適応コントローラー」記号は、標準モーター（35P/42P/56P）が
  * P3（PCON・MSEL）/ P5（RCON・RSEL）、高推力モーター（56SP/60P）が P4（PCON-CFB/CGFB・MSEL-PCF/PGF）/ P6（RCON-PCF・RSEL）。
+ * 値は PCON 系（'pcon'）か RCON 系（'rcon'）で、選択肢の表示はタイプ（isHigh で高推力か）に合わせる
  */
-export const RCP6_CTRL_PARAM: ParamDef = {
-  key: 'ctrl',
-  label: '適応コントローラー',
-  options: [
-    { value: 'pcon', label: 'P3: PCON・MSEL（高推力タイプは P4: PCON-CFB・MSEL-PCF）' },
-    { value: 'rcon', label: 'P5: RCON・RSEL（高推力タイプは P6: RCON-PCF）' },
-  ],
-  default: 'pcon',
-};
+export function rcp6CtrlParam(isHigh: (p: ParamValues) => boolean): ParamDef {
+  return {
+    key: 'ctrl',
+    label: '適応コントローラー',
+    options: [
+      { value: 'pcon', label: 'P3 / P4: PCON・MSEL（高推力タイプは PCON-CFB・MSEL-PCF）' },
+      { value: 'rcon', label: 'P5 / P6: RCON・RSEL（高推力タイプは RCON-PCF）' },
+    ],
+    optionsFor: (p) =>
+      isHigh(p)
+        ? [
+            { value: 'pcon', label: 'P4: PCON-CFB/CGFB・MSEL-PCF/PGF' },
+            { value: 'rcon', label: 'P6: RCON-PCF・RSEL' },
+          ]
+        : [
+            { value: 'pcon', label: 'P3: PCON-CB/CGB・PCON-CYB・MSEL・MCON' },
+            { value: 'rcon', label: 'P5: RCON・RSEL' },
+          ],
+    default: 'pcon',
+  };
+}
 
 /** RCP6 のモーター・エンコーダーコネクターの種類と、型式の適応コントローラー記号 */
 export function rcp6Connector(ctrl: string, high: boolean): { spec: ConnectorSpec; code: string; cable: string } {

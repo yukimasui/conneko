@@ -14,7 +14,7 @@ import { checkPneumatic } from './pneumatic';
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
-import { resolveNum, type Conductor, type PowerSystem } from '../devices/types';
+import { paramLabel, paramOptions, resolveNum, unavailableParams, type Conductor, type PowerSystem } from '../devices/types';
 import {
   buildModel,
   classifySupplies,
@@ -55,6 +55,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   for (const p of m.bus.problems) push({ ...p, wires: [], key: `${p.rule}:${p.devices.join(',')}` });
 
   checkUnconnected(m, push);
+  checkParams(m, push);
   const conflictRoots = checkSupplyConflicts(m, push);
   checkInputs(m, push);
   checkDistinctGroups(m, push);
@@ -82,6 +83,23 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
 
   const order: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
   return issues.sort((a, b) => order[a.severity] - order[b.severity]);
+}
+
+/** ほかのパラメータの値では選べない値になっているパラメータ（JSON を手で書いた・AI が書いた場合など） */
+function checkParams(m: Model, push: Push) {
+  for (const { device, def } of m.devices.values()) {
+    for (const { param, value } of unavailableParams(def, device.params)) {
+      const choices = paramOptions(def, param, device.params).map((o) => o.label ?? String(o.value));
+      push({
+        severity: 'warning',
+        rule: 'param-unavailable',
+        message: `${device.id}: ${param.label}「${paramLabel(def, param.key, value)}」は、ほかのパラメータの値では選べません（選べるのは ${choices.join('、')}）`,
+        devices: [device.id],
+        wires: [],
+        key: `param-unavailable:${device.id}:${param.key}`,
+      });
+    }
+  }
 }
 
 /** 未接続の端子 */

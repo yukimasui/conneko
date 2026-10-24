@@ -158,7 +158,7 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     const spec = [
       ...(def.params ?? [])
         .filter((p) => !NOT_SPEC.has(p.key) && (p.relevant?.(paramsWithDefaults(def, params)) ?? true))
-        .map((p) => `${p.specLabel?.(paramsWithDefaults(def, params)) ?? p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`),
+        .map((p) => `${p.specLabel?.(paramsWithDefaults(def, params)) ?? p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default, params)}`),
       ...(serial ? [`SI ユニット ${serial.unitModel(paramsWithDefaults(def, params))}`] : []),
     ].join('、');
     const k = `${def.type}|${model}|${spec}`;
