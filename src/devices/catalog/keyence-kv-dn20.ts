@@ -49,6 +49,8 @@ const terminals: TerminalDef[] = [
     const base = { id, label: LABELS[id], x: block.pos[id].x, y: block.pos[id].y, side: 'right' as const };
     if (id === 'V+') return { ...base, role: 'input', accepts: { system: 'DC', minVoltage: 11, maxVoltage: 25, conductors: ['+'] }, optional: true };
     if (id === 'V-') return { ...base, role: 'input', accepts: { system: 'DC', minVoltage: 11, maxVoltage: 25, conductors: ['-'] }, optional: true };
+    // CAN_H・CAN_L は DeviceNet のポートとして、つないだ相手の通信方式を確かめる
+    if (id === 'CAN_H' || id === 'CAN_L') return { ...base, role: 'signal', optional: true, port: 'DeviceNet', protocols: ['devicenet'] };
     return { ...base, role: 'signal', optional: true };
   }),
   { id: 'FG', label: 'FG', x: FG.x, y: FG.y, side: 'bottom', role: 'ground', optional: true },

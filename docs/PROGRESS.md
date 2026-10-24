@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.9 出力のグループの電流上限など）
+最終更新: 2026-10-24（v0.6.10 ネジ端子の通信の通信方式など）
 
 ## 現在地
 
+- v0.6.10（#3）: `TerminalDef.port` / `protocols`（ネジ端子の通信線）、チェック `checkPortProtocols`。IAI の DV・CC、KV-DN20 に反映
 - v0.6.9（#2）: `CommonLimit.outputs`（出力点のグループの上限）。MSEL の 8 点ごと 400mA、KEYENCE のアンプの出力の合計（`outputTotal`）
 - v0.6.8（#1）: `NumOrParam` にパラメータから求める関数を追加、装着したユニットの並べ方に `deviceSize` を使う、MCON の電流を軸数から
   - #1 の残り（機器データ）: SCON-CB の 400〜750W 用の幅、XSEL の 5〜8 軸、ファイルを分けている機器の統合

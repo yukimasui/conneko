@@ -142,8 +142,10 @@ const PROTOCOL_NAMES: Record<string, string> = {
   'rs-232c': 'RS-232C',
   'rs-485': 'RS-485',
   usb: 'USB',
+  devicenet: 'DeviceNet',
+  'cc-link': 'CC-Link',
 };
-const protocolNames = (ps: string[]) => ps.map((p) => PROTOCOL_NAMES[p] ?? p).join('・');
+export const protocolNames = (ps: string[]) => ps.map((p) => PROTOCOL_NAMES[p] ?? p).join('・');
 
 export function supplyLabel(s: Supply): string {
   if (s.conductor === 'PE') return CONDUCTOR_NAMES.PE;

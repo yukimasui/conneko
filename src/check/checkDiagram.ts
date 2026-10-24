@@ -20,6 +20,7 @@ import {
   classifySupplies,
   CONDUCTOR_NAMES,
   key,
+  protocolNames,
   supplyLabel,
   terminalName,
   type CheckIssue,
@@ -56,6 +57,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
 
   checkUnconnected(m, push);
   checkParams(m, push);
+  checkPortProtocols(m, push);
   const conflictRoots = checkSupplyConflicts(m, push);
   checkInputs(m, push);
   checkDistinctGroups(m, push);
@@ -98,6 +100,40 @@ function checkParams(m: Model, push: Push) {
         wires: [],
         key: `param-unavailable:${device.id}:${param.key}`,
       });
+    }
+  }
+}
+
+/**
+ * ネジ端子でつなぐ通信（DeviceNet・CC-Link など）: 電線・端子台でつながった通信線の端子どうしで、機器のポートの通信方式に共通のものがあるか。
+ * 同じポート（機器・port）の組は 1 回だけ指摘する
+ */
+function checkPortProtocols(m: Model, push: Push) {
+  for (const members of m.fixedMembers.values()) {
+    const ports = new Map<string, { device: string; port: string; protocols: string[]; label: string }>();
+    for (const k of members) {
+      const info = m.terminals.get(k);
+      const t = info?.terminal;
+      if (!info || !t?.port || !t.protocols?.length) continue;
+      const pk = `${info.device.id}:${t.port}`;
+      if (!ports.has(pk)) ports.set(pk, { device: info.device.id, port: t.port, protocols: t.protocols, label: t.label ?? t.id });
+    }
+    const list = [...ports.entries()];
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const [ka, a] = list[i];
+        const [kb, b] = list[j];
+        if (a.device === b.device || a.protocols.some((p) => b.protocols.includes(p))) continue;
+        const [x, y] = ka < kb ? [ka, kb] : [kb, ka];
+        push({
+          severity: 'warning',
+          rule: 'protocol-mismatch',
+          message: `${a.device} の ${a.port}（${protocolNames(a.protocols)}）と ${b.device} の ${b.port}（${protocolNames(b.protocols)}）の通信線がつながっていますが、共通の通信方式がありません`,
+          devices: [a.device, b.device],
+          wires: [],
+          key: `protocol-port:${x}:${y}`,
+        });
+      }
     }
   }
 }

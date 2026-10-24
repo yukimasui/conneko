@@ -482,3 +482,24 @@ describe('アクチュエーター（ロボシリンダー・エレシリンダ�
     expect(connectorsMate(acr, resolveDevice(def('iai.cb-ec-pwbio')).terminal('CN')!.connector!)).toBe(false);
   });
 });
+
+describe('ネジ端子でつなぐ通信の通信方式（#3）', () => {
+  const net = (io: string, to: Record<string, string>): Diagram => ({
+    devices: [
+      { id: 'C1', type: 'iai.pcon-ca', x: 0, y: 0, params: { io } },
+      { id: 'DN1', type: 'keyence.kv-dn20', x: 0, y: 0 },
+    ],
+    wires: Object.entries(to).map(([a, b], i) => ({ ...w(`C1.${a}`, `DN1.${b}`), id: `N${i}` })),
+  });
+
+  it('DeviceNet どうしならつないでも指摘しない', () => {
+    expect(rulesOf(net('DV', { CAN_H: 'CAN_H', CAN_L: 'CAN_L' }))).not.toContain('protocol-mismatch');
+  });
+
+  it('CC-Link の通信線を DeviceNet のユニットにつなぐと、ポートの組ごとに 1 回警告する', () => {
+    const issues = checkDiagram(net('CC', { DA: 'CAN_H', DB: 'CAN_L' }), lookup).filter((i) => i.rule === 'protocol-mismatch');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain('CC-Link');
+    expect(issues[0].message).toContain('DeviceNet');
+  });
+});

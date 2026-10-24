@@ -247,6 +247,8 @@ pins: (p) => Array.from({ length: 16 }, (_, i) => ({ id: `CN1#${i + 1}`, label: 
 - 外部から電源を供給するピン（出力ユニットの +V / COM など）は `role: 'input'` と `accepts` を指定すると、極性・電圧がチェックされる。
 - 種類の違うコネクタでも変換ケーブルがあるものは `mates` に相手の kind を書く（三菱 FCN40 → `mates: ['MIL40']`）。ピンは同じ番号どうしが導通する。
 - 通信ポートは `protocols`（例: `['ethernet', 'ethernet-ip']`、`['ethercat']`）を書くと、共通のプロトコルがない相手とつないだときに警告する。
+- DeviceNet・CC-Link のようにネジ端子でつなぐ通信は、通信線の端子（CAN_H・CAN_L、DA・DB・DG など）に `port`（同じポートの端子をまとめる名前）と
+  `protocols`（`['devicenet']`・`['cc-link']`）を書く。電線・端子台でつながった相手の機器のポートと共通の通信方式がなければ警告する。
 - つながないと機器が働かないコネクタ（アクチュエーターのモーター・エンコーダー、1 軸コントローラーの MOT / PG など）は `required: true` を書くと、
   ケーブルがつながっていないときに警告する（`connector-unconnected`）。書かないコネクタは未接続でも指摘しない。
 - 機器の正面に差すコネクタ（MIL・RJ-45 など）は `facing: 'front'` と `length`（side 方向のプラグの長さ）を書くと、
