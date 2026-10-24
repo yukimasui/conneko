@@ -202,7 +202,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
         key: `${com}-${b}-${a}`,
         kind: 'contact',
         name: `c 接点 ${com}-${b}/${a}`,
-        symbol: contactSymbolId('C', nc.timed ?? no.timed ?? actuator),
+        symbol: contactSymbolId('C', nc.timed ?? no.timed ?? actuator, !!nc.directOpening),
         pinOf: { [com]: '1', [b]: '2', [a]: '3' },
         attributes: { T1: pinNumber(com), T2: pinNumber(b), T3: pinNumber(a) },
       });
@@ -212,7 +212,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
   for (const l of r.links) {
     if ((l.switch !== 'NO' && l.switch !== 'NC') || !free(l.from) || !free(l.to)) continue;
     const name = `${l.timed === 'on-delay' ? '限時動作 ' : l.timed === 'off-delay' ? '限時復帰 ' : ''}${l.switch === 'NO' ? 'a 接点' : 'b 接点'}${l.positions ? `（位置 ${l.positions.join('・')} で閉）` : ''}`;
-    add(twoPin('contact', contactSymbolId(l.switch, l.timed ?? actuator), name, l.from, l.to));
+    add(twoPin('contact', contactSymbolId(l.switch, l.timed ?? actuator, !!l.directOpening), name, l.from, l.to));
   }
 
   // 5. PLC の出力点・入力点

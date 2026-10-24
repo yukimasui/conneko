@@ -71,6 +71,14 @@ describe('限時接点（timed）', () => {
     expect(librarySymbol('contact-no-on-delay')!.description).toBe('a 接点（限時動作）');
   });
 
+  it('直接開路動作（⊕）の接点は、印つきの記号（末尾 -do）になる', () => {
+    expect(librarySymbol('contact-nc-emergency-do')!.description).toBe('b 接点（非常停止・直接開路動作）');
+    expect(LIBRARY_SYMBOL_IDS).toContain('contact-nc-limit-do');
+    const es = deviceElements(def('idec.xw1e-bv402mr')).filter((e) => e.kind === 'contact');
+    expect(es.length).toBeGreaterThan(0);
+    expect(es.every((e) => e.symbol.endsWith('-do'))).toBe(true);
+  });
+
   it('ブザー HW1Z は展開図でブザーの記号になる', () => {
     expect(deviceElements(def('idec.hw1z-2pq4b')).map((e) => e.symbol)).toEqual(['buzzer']);
   });

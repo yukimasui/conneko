@@ -70,7 +70,7 @@ describe('展開図の組み立て', () => {
     const b = build(circuit(placed));
     const sheet = b.doc.sheets[0];
     expect(sheet.inserts.map((i) => `${i.element} ${i.symbol}`)).toEqual([
-      'ES1:21-22 contact-nc-emergency',
+      'ES1:21-22 contact-nc-emergency-do',
       'MC1:A1-A2 coil',
       'MC1:13-14 contact-no',
       'PL1:X1-X2 lamp',
@@ -79,7 +79,7 @@ describe('展開図の組み立て', () => {
     expect(coil.attributes).toMatchObject({ TAG: 'MC1', T1: 'A1', T2: 'A2', XREF: 'a:2' });
     expect(sheet.inserts.find((i) => i.element === 'MC1:13-14')!.attributes).toMatchObject({ XREF: '1' });
     // 記号の定義は使ったものだけ
-    expect(Object.keys(b.doc.symbols).sort()).toEqual(['coil', 'contact-nc-emergency', 'contact-no', 'lamp']);
+    expect(Object.keys(b.doc.symbols).sort()).toEqual(['coil', 'contact-nc-emergency-do', 'contact-no', 'lamp']);
     expect(b.rows.get('PL1:X1-X2')).toBe(2);
   });
 
