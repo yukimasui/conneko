@@ -8,6 +8,26 @@ import { renderSheetSvg } from './sheetSvg';
 
 const lookup = getDeviceDefinition;
 
+describe('部品表の仕様', () => {
+  it('オートスイッチ「なし」のシリンダは、スイッチの個数・リード線の長さを仕様に書かない（#35）', () => {
+    const rows = bomRows(
+      {
+        devices: [
+          { id: 'CY1', type: 'smc.cm2', x: 0, y: 0, params: { bore: 25, stroke: 100, switch: 'none' } },
+          { id: 'CY2', type: 'smc.cm2', x: 0, y: 0, params: { bore: 25, stroke: 100, switch: 'M9N' } },
+        ],
+        wires: [],
+      },
+      getDeviceDefinition,
+    );
+    const none = rows.find((r) => r.ids.includes('CY1'))!;
+    const sw = rows.find((r) => r.ids.includes('CY2'))!;
+    expect(none.spec).not.toMatch(/スイッチの個数|リード線/);
+    expect(sw.spec).toMatch(/スイッチの個数/);
+    expect(sw.spec).toMatch(/リード線/);
+  });
+});
+
 describe('部品表・線番表・I/O 表', () => {
   it('部品表は同じ型式・仕様をまとめて数え、リンクは入れない', () => {
     const rows = bomRows(sampleDiagram, lookup);

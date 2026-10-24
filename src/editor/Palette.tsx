@@ -1,31 +1,12 @@
 import { useMemo, useState } from 'react';
-import { deviceFamilies, type DeviceFamily } from '../devices/families';
+import { deviceFamilies } from '../devices/families';
 import { deviceDefinitions, getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import type { DeviceCategory, DeviceDefinition } from '../devices/types';
+import { CATEGORY_NAMES, GENERIC_MAKER, hiddenGuide, makerOf, searchEntries, type Entry } from './paletteSearch';
 
 export const DEVICE_DRAG_TYPE = 'application/x-conneko-device';
 
-const CATEGORY_NAMES: Record<DeviceCategory, string> = {
-  link: 'リンク（シート間の接続）',
-  'power-source': '電源',
-  breaker: 'ブレーカー',
-  contactor: '開閉器',
-  'power-supply': '電源ユニット',
-  terminal: '端子台',
-  load: '負荷',
-  control: '操作・表示',
-  plc: 'PLC',
-  sensor: 'センサー',
-  safety: '安全機器',
-  network: 'ネットワーク機器',
-  'air-supply': 'エア源・3 点セット',
-  valve: '電磁弁・バルブ',
-  actuator: 'シリンダ・アクチュエータ',
-  'air-fitting': '継手・速度制御・エア周辺',
-};
-
 const CATEGORY_ORDER = Object.keys(CATEGORY_NAMES) as DeviceCategory[];
-const GENERIC_MAKER = '汎用';
 const RECENT_LIMIT = 6;
 const STORAGE_KEY = 'conneko.palette';
 
@@ -54,67 +35,15 @@ function save(v: Stored) {
   }
 }
 
-const makerOf = (d: DeviceDefinition) => d.maker ?? GENERIC_MAKER;
-
-/**
- * 検索の表記ゆれをそろえる: 全角・半角（NFKC）、大文字・小文字、空白、長音（シリンダー / シリンダ）、漢数字の「三」（三点セット）
- */
-const norm = (t: string) => t.normalize('NFKC').toLowerCase().replace(/[\sー・]/g, '').replace(/三点/g, '3点');
-
-/** 現場の通称 → 機器の名前に出てくる言葉（どれかに合えば一致） */
-const SYNONYMS: Record<string, string[]> = {
-  スピコン: ['スピードコントローラ'],
-  エアシリ: ['シリンダ'],
-  frl: ['3点セット', 'フィルタ', 'レギュレータ'],
-  ソレノイドバルブ: ['電磁弁'],
-  ソレノイド: ['電磁弁'],
-  マニホ: ['マニホールド'],
-  サイレンサー: ['サイレンサ'],
-  レギュ: ['レギュレータ'],
-  チャック: ['エアチャック'],
-  継手: ['継手', 'ユニオン', 'レデューサ'],
-  ティー: ['ユニオンティ'],
-  ワンタッチ継手: ['ワンタッチ管継手'],
-};
-
-/** 検索語にどれだけ合うか（0 は不一致）。ファミリーの名前・別名と、機器の名称・型式・メーカー・説明・type を対象にする */
-function score(d: DeviceDefinition, f: DeviceFamily, words: string[]): number {
-  // 定格電流などのパラメータの選択肢（例: '30A'）でも探せるようにする
-  const options = (d.params ?? []).flatMap((p) => p.options.map((o) => `${o.label ?? ''} ${o.value}${p.unit ?? ''}`)).join(' ');
-  const fields = [`${f.name} ${f.keywords.join(' ')}`, d.name, d.model, makerOf(d), d.type, d.description ?? '', CATEGORY_NAMES[d.category], options].map(norm);
-  const category = norm(CATEGORY_NAMES[d.category]);
-  let total = 0;
-  for (const raw of words) {
-    const w = norm(raw);
-    if (!w) continue;
-    const alts = [w, ...(SYNONYMS[w] ?? []).map(norm)];
-    const hit = fields.findIndex((f) => alts.some((a) => f.includes(a)));
-    if (hit < 0) return 0;
-    // 分類の名前にも合う機器（「シリンダ」で引いたエアシリンダなど）を先に出す
-    total += 10 - hit + (alts.some((a) => category.includes(a)) ? 5 : 0);
-  }
-  return total;
-}
-
 function Thumb({ def }: { def: DeviceDefinition }) {
   const svg = useMemo(() => instantiateSvg(def, `thumb-${def.type}`), [def]);
   return <svg className="palette__thumb" viewBox={`0 0 ${def.width} ${def.height}`} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-/** パレットの 1 行（ファミリー）。機種が 1 つならそのまま置き、複数なら「機種を選ぶ」ダイアログを開く */
-interface Entry {
-  family: DeviceFamily;
-  /** 絞り込み（メーカー）に合う機種 */
-  members: DeviceDefinition[];
-  /** 置くときの機種（最後に選んだもの・検索で合ったもの・既定） */
-  def: DeviceDefinition;
-  /** 型式で検索に合った機種（行に型式を出す） */
-  hit?: DeviceDefinition;
-}
-
 function Item({ entry, onUse }: { entry: Entry; onUse: (e: Entry, how: 'click' | 'drag') => void }) {
   const { family, members, def, hit } = entry;
   const makers = [...new Set(members.map(makerOf))];
+  const guide = hiddenGuide(family);
   return (
     <button
       type="button"
@@ -127,15 +56,17 @@ function Item({ entry, onUse }: { entry: Entry; onUse: (e: Entry, how: 'click' |
       }}
       onClick={() => onUse(entry, 'click')}
       title={
-        members.length > 1
+        (members.length > 1
           ? `${family.name}（${members.length} 機種: ${makers.join('・')}）\nクリックで機種を選んで置く。ドラッグで ${def.model} を置く`
           : [def.name, `${def.maker ? def.maker + ' ' : ''}${def.model}`, def.description].filter(Boolean).join('\n')
+        ) + (guide ? `\n\n${guide}` : '')
       }
     >
       <Thumb def={def} />
       <span className="palette__text">
         <span className="palette__name">{family.name}</span>
         <span className="palette__model">
+          {guide && <span className="palette__guide">装着用</span>}
           {hit ? (
             <>
               {hit.maker && <span className="palette__maker">{hit.maker}</span>}
@@ -188,6 +119,9 @@ export function Palette({ onAdd, onPick }: PaletteProps) {
 
   const use = (e: Entry, how: 'click' | 'drag') => {
     if (how === 'drag') return remember(e.def.type);
+    // 親のエディタから足すほうがよい機器は、案内してから置く
+    const guide = hiddenGuide(e.family);
+    if (guide && !window.confirm(`${guide}\n\nこのまま単独で置きますか？`)) return;
     if (e.members.length < 2) {
       remember(e.def.type);
       onAdd(e.def.type);
@@ -222,20 +156,7 @@ export function Palette({ onAdd, onPick }: PaletteProps) {
     return [{ family, members, def }];
   });
 
-  const results = words.length
-    ? entries
-        .map((e) => {
-          const scored = e.members.map((d) => ({ d, s: score(d, e.family, words) })).sort((a, b) => b.s - a.s);
-          const best = scored[0];
-          // ファミリーの名前・別名だけでは合わず、型式などで合った機種は、その機種を置く
-          const byFamily = words.every((w) => norm(`${e.family.name} ${e.family.keywords.join(' ')}`).includes(norm(w)));
-          const hit = !byFamily && best.s > 0 && e.members.length > 1 ? best.d : undefined;
-          return { e: { ...e, def: hit ?? e.def, hit }, s: best.s + (byFamily ? 20 : 0) };
-        })
-        .filter((x) => x.s > 0)
-        .sort((a, b) => b.s - a.s)
-        .map((x) => x.e)
-    : [];
+  const results = words.length ? searchEntries(entries, words) : [];
 
   const groups = CATEGORY_ORDER.map((cat) => ({
     cat,

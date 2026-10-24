@@ -4,7 +4,7 @@ import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { familyOf } from '../devices/families';
-import { deviceModel, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
+import { deviceModel, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
@@ -327,7 +327,7 @@ export function Inspector(props: Props) {
                 )}
               </div>
             )}
-            {def.params?.map((p) =>
+            {def.params?.filter((p) => p.relevant?.(paramsWithDefaults(def, node.data.params)) ?? true).map((p) =>
               p.input === 'text' ? (
                 <label key={p.key} className="field">
                   <span>{p.label}</span>

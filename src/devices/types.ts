@@ -442,6 +442,11 @@ export interface ParamDef {
   input?: 'select' | 'text';
   options: ParamOption[];
   default: number | string;
+  /**
+   * このパラメータが意味を持つか（例: オートスイッチ「なし」のときのスイッチの個数・リード線の長さは意味を持たない）。
+   * false のときはプロパティに出さず、部品表の仕様にも書かない。引数は既定値を補完済みのパラメータ。省略時は常に意味を持つ
+   */
+  relevant?: (params: ParamValues) => boolean;
 }
 
 export type DeviceCategory =
