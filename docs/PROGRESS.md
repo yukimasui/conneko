@@ -1,9 +1,11 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.15 安全回路のチェックの改善など）
+最終更新: 2026-10-24（v0.6.16 装着したユニットの電源と番号など）
 
 ## 現在地
 
+- v0.6.16（#8 の一部）: `bus.feeds`（親の消費に装着ユニットを加える）、電源の容量チェック `supply-overload`、`SupplySpec.busRail`（FX5U のサービス電源と共用）、
+  `io.reserve`（KV-XH04ML）、`numbering.relative`（KV-EC01 の先頭番号の手入力）。レールの電位（IAI RCON の MPO）は残り
 - v0.6.15（#7）: `InternalLink.safetyContact`（機器の外のもので開く b 接点。安全入力のループで機器自身の経路でも数え、短絡の状態検査では閉じたまま）。
   IAI のティーチングボックスの非常停止・イネーブル接点に適用。安全出力の接点（`function: 'safety-contact'`）は `estop-not-nc` の対象外
 - v0.6.14（#6）: `internalLoads` と `InternalLink.actor`、短絡の状態検査を負荷ごとに。汎用のリレーターミナル 8 点。

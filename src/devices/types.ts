@@ -55,6 +55,11 @@ export interface SupplySpec {
    * - test: テスト出力（テストパルス。安全入力へ接点を通して戻す）
    */
   kind?: 'power' | 'ossd' | 'test';
+  /**
+   * この電源出力と容量（limitCurrent）を分け合う、機器の内部電源（bus.supply）のレール名。
+   * FX5U の DC24V サービス電源のように、端子から取り出す電流と装着したユニットの消費を合わせて容量と比べる
+   */
+  busRail?: string;
 }
 
 /** 受電できる電源の条件（role: 'input' の端子に指定） */
@@ -441,6 +446,11 @@ export interface BusSpec {
       start?: { input?: number; output?: number };
       /** 空きスロットが占有する点数（iQ-R の初期設定は 16）。省略時は空きスロットを詰めて数える */
       emptySlot?: number;
+      /**
+       * 番号が親の設定で決まり、ここでは連結順の相対番号を付ける場合 true（KV-EC01 の PDO 割付など）。
+       * 装着したユニットの先頭番号（params の ioIn / ioOut）を手で指定でき、そのユニットから後ろは指定した番号から続けて数える
+       */
+      relative?: boolean;
     };
     /**
      * 装着したユニットのエアのポートを、親のポートにつなぐ通路（マニホールドの SUP・EXH の通路）。
@@ -467,8 +477,16 @@ export interface BusSpec {
   supply?: Record<string, NumOrParam>;
   /** バスから消費する内部電源の電流[A]（例: { '5V': 0.12 }） */
   load?: Record<string, NumOrParam>;
-  /** 入出力の点数と番号の表し方。装着すると params の ioIn / ioOut（先頭番号の点数）が自動で決まる */
-  io?: { inputs?: number; outputs?: number; format: IoFormat };
+  /**
+   * 親の電源端子からそのまま供給する内部電源のレール名（KEYENCE KV の DC24V など）。
+   * 装着したユニットのこのレールの消費電流を、親の消費電流（loadCurrent）に加えて上流の保護と比べる
+   */
+  feeds?: string[];
+  /**
+   * 入出力の点数と番号の表し方。装着すると params の ioIn / ioOut（先頭番号の点数）が自動で決まる。
+   * reserve は入出力ではなく番号を占有するだけの点数（KV-XH04ML のように内部リレーを占有するユニット）。入力の後ろに数える
+   */
+  io?: { inputs?: number; outputs?: number; reserve?: number; format: IoFormat };
 }
 
 /** 通信タイプのマニホールドの SI ユニットの出力（BusSpec.host.serial） */

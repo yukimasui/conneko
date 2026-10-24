@@ -135,7 +135,8 @@ function deviceSection(d: DiagramDevice, def: DeviceDefinition, params: ParamVal
   if (def.bus?.io) {
     const io = def.bus.io;
     const head = (dir: 'in' | 'out', n: number, count?: number) => (count ? `${dir === 'in' ? '入力' : '出力'} ${ioName(io.format, dir, n)}〜${ioName(io.format, dir, n + count - 1)}` : '');
-    lines.push(`  入出力番号: ${[head('in', Number(r.params.ioIn ?? 0), io.inputs), head('out', Number(r.params.ioOut ?? 0), io.outputs)].filter(Boolean).join('、')}`);
+    const reserve = io.reserve ? `占有 ${ioName(io.format, 'in', Number(r.params.ioIn ?? 0) + (io.inputs ?? 0))}〜${ioName(io.format, 'in', Number(r.params.ioIn ?? 0) + (io.inputs ?? 0) + io.reserve - 1)}（入出力ではない）` : '';
+    lines.push(`  入出力番号: ${[head('in', Number(r.params.ioIn ?? 0), io.inputs), head('out', Number(r.params.ioOut ?? 0), io.outputs), reserve].filter(Boolean).join('、')}`);
   }
   lines.push('  端子:');
   lines.push(...r.terminals.map((t) => terminalLine(t, r.accepts.get(t.id) ?? [], r.air.get(t.id))));

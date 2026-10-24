@@ -258,7 +258,7 @@ export const KV_NANO_BUS = 'kv-nano';
 export const KV_RAIL = 'DC24V';
 
 /** 拡張ユニットの bus（mA は内部消費電流[mA]、io は占有する入出力点数） */
-export const kvUnitBus = (mA: number, io?: { inputs?: number; outputs?: number }, kind = KV_BUS): BusSpec => ({
+export const kvUnitBus = (mA: number, io?: { inputs?: number; outputs?: number; reserve?: number }, kind = KV_BUS): BusSpec => ({
   kind,
   load: { [KV_RAIL]: +(mA / 1000).toFixed(4) },
   ...(io ? { io: { ...io, format: 'kv' as const } } : {}),

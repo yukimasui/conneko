@@ -8,7 +8,7 @@
 import { cablePin, cableSpecsFor, type CableSpec } from '../data/cables';
 import { connectorsMate, resolveDevice, type ResolvedAccept, type ResolvedDevice } from '../devices/resolve';
 import { resolveNum, type Conductor, type ConnectorSpec, type DeviceDefinition, type InternalLink, type PowerSystem, type TerminalDef } from '../devices/types';
-import { computeBus, effectiveParams, type BusLayout } from '../model/bus';
+import { computeBus, effectiveParams, fedUnitLoad, type BusLayout } from '../model/bus';
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -466,6 +466,17 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     bus,
   };
   return model;
+}
+
+/**
+ * 機器の消費電流[A]（loadCurrent）。親の電源端子から内部電源を供給する機器（bus.feeds）は、装着したユニットの消費を加える。
+ * loadCurrent も装着したユニットの消費もなければ undefined
+ */
+export function loadCurrentOf(m: Model, d: DeviceInfo): number | undefined {
+  const own = resolveNum(d.def.loadCurrent, d.def, d.device.params);
+  const units = fedUnitLoad(m.bus, d.device.id, d.def);
+  if (own === undefined && units <= 0) return undefined;
+  return Math.round(((own ?? 0) + units) * 10000) / 10000;
 }
 
 /** fixed のグループに電線が 1 本でもつながっているか */
