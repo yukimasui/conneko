@@ -114,15 +114,26 @@ const ACTUATOR_NAMES: Record<ContactActuator, string> = {
   'off-delay': '限時復帰',
 };
 
-function contact(kind: 'NO' | 'NC', actuator?: ContactActuator): SymbolDef {
+/**
+ * 直接開路動作の印（IEC 60617 の「強制開離」。丸の中に開く向きの矢印）。操作部と接点をつなぐ破線の途中に描く
+ */
+function directOpeningPrimitives(bladeY: number, top: number): Primitive[] {
+  const cy = (bladeY + top) / 2 + 0.3;
+  return [
+    { kind: 'circle', center: [LINK_X - 1.6, cy], r: 1.1 },
+    line([LINK_X - 1.6, cy + 0.7], [LINK_X - 1.6, cy - 0.7]),
+    line([LINK_X - 2.1, cy - 0.15], [LINK_X - 1.6, cy - 0.7], [LINK_X - 1.1, cy - 0.15]),
+  ];
+}
+
+function contact(kind: 'NO' | 'NC', actuator?: ContactActuator, directOpening = false): SymbolDef {
   const primitives = kind === 'NO' ? makeContactPole(0) : breakContactPole(0);
-  if (actuator) {
-    const bladeY = kind === 'NO' ? MAKE_BLADE_AT_LINK : BREAK_BLADE_AT_LINK;
-    const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
-    primitives.push(dashed([LINK_X, bladeY], [LINK_X, top]), ...actuatorPrimitives(actuator));
-  }
+  const bladeY = kind === 'NO' ? MAKE_BLADE_AT_LINK : BREAK_BLADE_AT_LINK;
+  const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
+  if (actuator) primitives.push(dashed([LINK_X, bladeY], [LINK_X, top]), ...actuatorPrimitives(actuator));
+  if (directOpening) primitives.push(...directOpeningPrimitives(bladeY, top));
   return {
-    description: `${kind === 'NO' ? 'a 接点' : 'b 接点'}${actuator ? `（${ACTUATOR_NAMES[actuator]}）` : ''}`,
+    description: `${kind === 'NO' ? 'a 接点' : 'b 接点'}${actuator || directOpening ? `（${[actuator && ACTUATOR_NAMES[actuator], directOpening && '直接開路動作'].filter(Boolean).join('・')}）` : ''}`,
     primitives,
     pins: { 1: [0, 0], 2: [LEN, 0] },
     attributes: [
@@ -138,15 +149,14 @@ function contact(kind: 'NO' | 'NC', actuator?: ContactActuator): SymbolDef {
  * c 接点（切換接点）。端子 1 が共通（左）、端子 2 が b 接点側（右）、端子 3 が a 接点側（右上 5mm）。
  * 可動部は b 接点側に当たった状態で描く。
  */
-function changeover(actuator?: ContactActuator): SymbolDef {
+function changeover(actuator?: ContactActuator, directOpening = false): SymbolDef {
   const primitives = breakContactPole(0);
   primitives.push(line([FIXED_AT, 5], [LEN, 5]), line([FIXED_AT, 5], [FIXED_AT, 3.8]));
-  if (actuator) {
-    const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
-    primitives.push(dashed([LINK_X, BREAK_BLADE_AT_LINK], [LINK_X, top]), ...actuatorPrimitives(actuator));
-  }
+  const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
+  if (actuator) primitives.push(dashed([LINK_X, BREAK_BLADE_AT_LINK], [LINK_X, top]), ...actuatorPrimitives(actuator));
+  if (directOpening) primitives.push(...directOpeningPrimitives(BREAK_BLADE_AT_LINK, top));
   return {
-    description: `c 接点${actuator ? `（${ACTUATOR_NAMES[actuator]}）` : ''}`,
+    description: `c 接点${actuator || directOpening ? `（${[actuator && ACTUATOR_NAMES[actuator], directOpening && '直接開路動作'].filter(Boolean).join('・')}）` : ''}`,
     primitives,
     pins: { 1: [0, 0], 2: [LEN, 0], 3: [LEN, 5] },
     attributes: [
@@ -487,6 +497,8 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   'contact-nc',
   'contact-c',
   ...ACTUATORS.flatMap((a) => [`contact-no-${a}`, `contact-nc-${a}`, `contact-c-${a}`]),
+  // 直接開路動作の印つき（非常停止・リミットスイッチ・押しボタン・引き操作の b 接点・c 接点、イネーブルスイッチの a 接点）
+  ...(['pushbutton', 'emergency', 'pull', 'limit'] as const).flatMap((a) => [`contact-nc-${a}-do`, `contact-c-${a}-do`, `contact-no-${a}-do`]),
   'coil',
   'lamp',
   'buzzer',
@@ -503,9 +515,9 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   'plc-out',
 ];
 
-/** 接点の記号 ID（C は c 接点） */
-export function contactSymbolId(kind: 'NO' | 'NC' | 'C', actuator?: ContactActuator): string {
-  return `contact-${kind.toLowerCase()}${actuator ? `-${actuator}` : ''}`;
+/** 接点の記号 ID（C は c 接点）。directOpening で直接開路動作の印をつける（末尾 -do） */
+export function contactSymbolId(kind: 'NO' | 'NC' | 'C', actuator?: ContactActuator, directOpening = false): string {
+  return `contact-${kind.toLowerCase()}${actuator ? `-${actuator}` : ''}${directOpening ? '-do' : ''}`;
 }
 
 const cache = new Map<string, SymbolDef>();
@@ -520,12 +532,13 @@ export function librarySymbol(id: string): SymbolDef | undefined {
 }
 
 function buildSymbol(id: string): SymbolDef | undefined {
-  const c = /^contact-(no|nc|c)(?:-([a-z-]+))?$/.exec(id);
+  const c = /^contact-(no|nc|c)(?:-([a-z-]+?))?(-do)?$/.exec(id);
   if (c) {
     const actuator = c[2] as ContactActuator | undefined;
     if (actuator && !ACTUATORS.includes(actuator)) return undefined;
-    if (c[1] === 'c') return changeover(actuator);
-    return contact(c[1] === 'no' ? 'NO' : 'NC', actuator);
+    const direct = !!c[3];
+    if (c[1] === 'c') return changeover(actuator, direct);
+    return contact(c[1] === 'no' ? 'NO' : 'NC', actuator, direct);
   }
   const p = /^(breaker|elb|contactor|thermal)-([1-4])p(-v)?$/.exec(id);
   if (p) {

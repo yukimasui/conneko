@@ -75,8 +75,8 @@ describe('代表的な機器の切り出し', () => {
   it('照光式の非常停止: 非常停止の b 接点と表示灯', () => {
     expect(summary(elementsOf('idec.xw1e-lv402q4mr'))).toEqual([
       'X1-X2 lamp lamp',
-      '21-22 contact contact-nc-emergency',
-      '41-42 contact contact-nc-emergency',
+      '21-22 contact contact-nc-emergency-do',
+      '41-42 contact contact-nc-emergency-do',
     ]);
   });
 
