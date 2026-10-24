@@ -223,13 +223,14 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     g.ids.push(w.id);
     groups.set(k, g);
   }
-  // チューブ: 種類・外径・色ごとに 1 巻（20m 巻）。長さは図面にないので、図面上の本数を仕様に書く
+  // チューブ: 種類・外径・色ごとに 1 巻（図面の設定の巻の長さ。省略時は 20m 巻）。長さは図面にないので、図面上の本数を仕様に書く
+  const roll = d.settings?.tubeRoll ?? 20;
   // ねじのポートには、チューブの外径に合うワンタッチ管継手（ハーフユニオン）を付ける。おねじを直接ねじ込んだ接続（直結）は数えない
   const tubeCount = new Map<string, number>();
   for (const w of d.wires) {
     if (!isTube(w) || isDirectTube(d, w, lookup)) continue;
     const od = w.tubeOD ?? 6;
-    const model = `${tubeModel(w.wireType, od, w.color)}-20`;
+    const model = `${tubeModel(w.wireType, od, w.color)}-${roll}`;
     const k = `tube|${model}`;
     const g = groups.get(k) ?? {
       category: 'air-fitting' as DeviceCategory,
@@ -242,7 +243,7 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
       estimated: false,
     };
     tubeCount.set(k, (tubeCount.get(k) ?? 0) + 1);
-    g.spec = `外径 φ${od}・${getTubeColor(w.color)?.name ?? w.color}、20m 巻（図面上 ${tubeCount.get(k)} 本。長さは現物合わせ）`;
+    g.spec = `外径 φ${od}・${getTubeColor(w.color)?.name ?? w.color}、${roll}m 巻（図面上 ${tubeCount.get(k)} 本。長さは現物合わせ）`;
     g.ids.push(w.id);
     groups.set(k, g);
     for (const r of [w.from, w.to]) {

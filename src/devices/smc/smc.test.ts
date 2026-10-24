@@ -30,7 +30,8 @@ const tube = (from: string, to: string, od = 8): DiagramWire => {
 };
 const dev = (id: string, type: string, params?: ParamValues) => ({ id, type, x: 0, y: 0, ...(params ? { params } : {}) });
 const pressures = (d: Diagram) => airPressures(buildModel(d, lookup, () => {}));
-const air = (d: Diagram) => checkDiagram(d, lookup).filter((i) => i.rule.startsWith('air') || i.rule.startsWith('tube'));
+// 開放排気の注意（air-exhaust-open）は、排気を省いた小さな回路で出るので、専用のテスト以外では見ない
+const air = (d: Diagram) => checkDiagram(d, lookup).filter((i) => (i.rule.startsWith('air') && i.rule !== 'air-exhaust-open') || i.rule.startsWith('tube'));
 const rules = (d: Diagram) => air(d).map((i) => `${i.rule}:${i.devices.join(',')}`);
 
 const smc = deviceDefinitions.filter((d) => d.type.startsWith('smc.') && (d.category === 'air-supply' || d.category === 'air-fitting'));

@@ -160,6 +160,26 @@ export function checkPneumatic(m: Model, push: Push) {
     push({ severity: 'warning', rule: 'air-unconnected', message: `${p.device}: ポート ${p.label} が未接続です（チューブをつなぎます）`, devices: [p.device], wires: [], key: `air-unconnected:${k}` });
   }
 
+  // 開放排気: 電磁弁・マニホールドなどの排気ポートに、サイレンサも排気の配管もつないでいない
+  // （任意のポート・内蔵サイレンサの排気・サイレンサ自身・エアを 1 本もつないでいない機器は除く）
+  const openExhaust = new Map<string, string[]>();
+  const used = new Set([...ports].filter(([k]) => m.tubesAt.has(k)).map(([, p]) => p.device));
+  for (const [k, p] of ports) {
+    if (p.spec.kind !== 'exhaust' || p.hidden || p.optional || p.link || m.tubesAt.has(k) || joined.has(k) || !used.has(p.device)) continue;
+    if (m.devices.get(p.device)?.r.pneumatic?.symbol === 'silencer') continue;
+    openExhaust.set(p.device, [...(openExhaust.get(p.device) ?? []), p.label]);
+  }
+  for (const [device, labels] of openExhaust) {
+    push({
+      severity: 'info',
+      rule: 'air-exhaust-open',
+      message: `${device}: 排気ポート ${labels.join('・')} が開放です（サイレンサを付けるか、集合排気の配管にします。開放のままだと排気音が大きく、ごみが入ります）`,
+      devices: [device],
+      wires: [],
+      key: `air-exhaust-open:${device}`,
+    });
+  }
+
   // 画面に出さないポート（マニホールドの中でつながるもの）が、どの親にもつながっていない
   const unjoined = new Map<string, string[]>();
   for (const [k, p] of ports) if (p.hidden && !joined.has(k)) unjoined.set(p.device, [...(unjoined.get(p.device) ?? []), p.label]);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDeviceDefinition } from '../devices/registry';
-import type { DeviceDefinition, TerminalDef } from '../devices/types';
+import { deviceModel, type DeviceDefinition, type TerminalDef } from '../devices/types';
+import { resolveDevice } from '../devices/resolve';
 import { airCandidates, normalizeTubes } from '../model/air';
 import { applyMateCandidate } from '../model/mates';
 import { deviceDefinitions } from '../devices/registry';
@@ -66,7 +67,8 @@ function circuit(): Diagram {
     wires: [tube('AIR1.OUT', 'FR1.IN', 8), tube('FR1.OUT', 'SOL1.P', 8), tube('SOL1.A', 'CY1.H'), tube('SOL1.B', 'CY1.R')],
   };
 }
-const air = (d: Diagram) => checkDiagram(d, lookup).filter((i) => i.rule.startsWith('air') || i.rule.startsWith('tube'));
+// 開放排気の注意（air-exhaust-open）は、排気を省いた小さな回路で出るので、専用のテスト以外では見ない
+const air = (d: Diagram) => checkDiagram(d, lookup).filter((i) => (i.rule.startsWith('air') && i.rule !== 'air-exhaust-open') || i.rule.startsWith('tube'));
 
 describe('エア回路のチェック', () => {
   it('圧力はエア源からレギュレータで下がって、電磁弁を通ってシリンダまで届く', () => {
@@ -293,7 +295,7 @@ describe('装着した機器のポートを親のポートにつなぐ通路（b
   });
 
   it('通路でつながったポートは未接続にしない。装着していなければ指摘する', () => {
-    const rulesOf = (d: Diagram) => checkDiagram(d, lk).filter((i) => i.rule.startsWith('air')).map((i) => `${i.rule}:${i.devices[0]}`);
+    const rulesOf = (d: Diagram) => checkDiagram(d, lk).filter((i) => i.rule.startsWith('air') && i.rule !== 'air-exhaust-open').map((i) => `${i.rule}:${i.devices[0]}`);
     expect(rulesOf(diagram(true))).toEqual(['air-unconnected:CY1']);
     expect(rulesOf(diagram(false))).toEqual(expect.arrayContaining(['air-not-mounted:U1', 'air-no-supply:CY1']));
   });
@@ -355,5 +357,41 @@ describe('ねじと直結', () => {
       'CY1: ポート H（M5）に φ12 のワンタッチ管継手は付きません（M5 に付くのは φ3.2・φ4・φ6）',
       'CY1: ポート R（M5）に φ12 のワンタッチ管継手は付きません（M5 に付くのは φ3.2・φ4・φ6）',
     ]);
+  });
+});
+
+describe('開放排気・圧力計なし・ワンタッチ管継手形サイレンサ（#33）', () => {
+  const exhaustOpen = (d: Diagram) => checkDiagram(d, lookup).filter((i) => i.rule === 'air-exhaust-open');
+
+  it('電磁弁の排気ポートに何もつながなければ、開放排気の注意（info）を 1 件にまとめて出す', () => {
+    const issues = exhaustOpen(circuit());
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('info');
+    expect(issues[0].message).toMatch(/^SOL1: 排気ポート .*・.* が開放です/);
+  });
+
+  it('排気ポートにサイレンサを付ければ注意しない。エアをつないでいない機器も対象外', () => {
+    const exh = resolveDevice(getDeviceDefinition('smc.sy3120-5lz')!).terminals.filter((t) => t.air?.kind === 'exhaust');
+    const d = circuit();
+    exh.forEach((t, i) => {
+      d.devices.push({ id: `SL${i + 1}`, type: 'smc.an', x: 0, y: 0, params: { thread: 'M5' } });
+      d.wires.push(tube(`SL${i + 1}.IN`, `SOL1.${t.id}`));
+    });
+    expect(exhaustOpen(d)).toEqual([]);
+    expect(exhaustOpen({ devices: [{ id: 'SOL9', type: 'smc.sy3120-5lz', x: 0, y: 0 }], wires: [] })).toEqual([]);
+  });
+
+  it('レギュレータの圧力計「なし」は型式に記号を付けず、空圧回路図の圧力計も描かない', () => {
+    const aw = getDeviceDefinition('smc.aw')!;
+    expect(deviceModel(aw, { gauge: '' })).toBe('AW20-02-B');
+    expect(deviceModel(aw, { gauge: 'G' })).toBe('AW20-02G-B');
+    expect(resolveDevice(aw, { gauge: '' }).pneumatic?.gauge).toBeFalsy();
+    expect(resolveDevice(aw, { gauge: 'G' }).pneumatic?.gauge).toBe(true);
+  });
+
+  it('ワンタッチ管継手形サイレンサは、差込み側の外径で型式が決まる', () => {
+    const an = getDeviceDefinition('smc.an-c')!;
+    expect(deviceModel(an, { tubeOD: 8 })).toBe('AN15-C08');
+    expect(deviceModel(an, { tubeOD: 12 })).toBe('AN30-C12');
   });
 });

@@ -70,6 +70,13 @@ export function PrintDialog({ sheets, schematicSheets = [], last, settings, onSe
             {text('title', '図面名', '例: 第2ライン コンベア制御盤')}
             {text('author', '作成', '例: 山田')}
             {text('revision', '版', '例: A')}
+            <label className="field">
+              <span>部品表のチューブ</span>
+              <select value={settings.tubeRoll ?? 20} onChange={(e) => onSettings({ tubeRoll: Number(e.target.value) === 100 ? 100 : undefined })}>
+                <option value={20}>20m 巻</option>
+                <option value={100}>100m 巻</option>
+              </select>
+            </label>
           </section>
           <section>
             <h3>用紙（横向き。概念図と一覧）</h3>
