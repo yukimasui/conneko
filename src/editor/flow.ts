@@ -25,6 +25,8 @@ export interface WireEdgeData extends Record<string, unknown> {
   wireType: string;
   /** エアのチューブの外径[mm]（DiagramWire.tubeOD） */
   tubeOD?: number;
+  /** 変換ケーブルの種類（DiagramWire.cable） */
+  cable?: string;
   bend?: number;
   /** 手で編集した経路（DiagramWire.route） */
   route?: { x: number; y: number }[];
@@ -65,6 +67,7 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
         sizeSq: w.sizeSq,
         wireType: w.wireType,
         ...(w.tubeOD ? { tubeOD: w.tubeOD } : {}),
+        ...(w.cable ? { cable: w.cable } : {}),
         ...(w.wireNo ? { wireNo: w.wireNo } : {}),
         ...(w.bend ? { bend: w.bend } : {}),
         ...(w.route ? { route: w.route } : {}),
@@ -97,6 +100,7 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sh
       sizeSq: e.data?.sizeSq ?? 2,
       wireType: e.data?.wireType ?? 'KIV',
       ...(e.data?.tubeOD ? { tubeOD: e.data.tubeOD } : {}),
+      ...(e.data?.cable ? { cable: e.data.cable } : {}),
       ...(e.data?.wireNo ? { wireNo: e.data.wireNo } : {}),
       ...(e.data?.bend ? { bend: e.data.bend } : {}),
       ...(e.data?.route ? { route: e.data.route } : {}),

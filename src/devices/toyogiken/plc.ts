@@ -44,14 +44,15 @@ export function buildMelsecBlock(s: PlcBlockSpec): DeviceDefinition {
   const cable =
     s.connector === 'FCN'
       ? 'I/O ユニットとは FCN⇔FCN ケーブル（東洋技研 KB40N-4F4F など）でつなぐ。'
-      : 'I/O ユニット（FCN 40 ピン）とは FCN⇔MIL ケーブル（東洋技研 KB40N-4F1H など）でつなぐ。' +
-        'ピン ID は三菱電機の I/O ユニット（RX41C4 など）の CN1 と同じ規則（三菱の B20 = ピン 1、A20 = ピン 2、…、A01 = ピン 40）で、' +
-        'conneko の FCN40−MIL40 のケーブルで同じ信号どうしがつながる。' +
-        '※東洋技研の結線図では、FCN⇔MIL ケーブルを通した MIL コネクタのピン番号は三菱の B_k = 2k、A_k = 2k−1（B20 = MIL ピン 40）。';
+      : 'I/O ユニット（FCN 40 ピン）とは FCN⇔MIL ケーブル（東洋技研 KB40N-4F1H）でつなぐ。' +
+        'コネクタのピン ID は MIL の物理的なピン番号で、東洋技研の結線図どおり三菱の B_k = MIL ピン 2k、A_k = MIL ピン 2k−1（B20 = MIL ピン 40）。' +
+        'ケーブルの種類を選んでいなければ KB40N-4F1H とみなす（ほかの結線のケーブルはプロパティで選ぶ）。';
   return buildConnectorBlock({
     ...s,
     name: 'PLC用コネクタ端子台（三菱電機）',
     pinLabel: s.connector === 'FCN' ? fcnPinLabel : melsecMilPinLabel,
+    // MIL 40 極の品は、記名板の約束（三菱の FCN のピン番号の規則）から MIL の物理的なピン番号へ（KB40N-4F1H の結線）
+    ...(s.connector === 'MIL' ? { pinMap: (n: number) => 41 - n, defaultCable: 'toyogiken.kb40n-4f1h' } : {}),
     description:
       `${s.description} 記名板は三菱電機の 32 点ユニットのピン配置どおり（00〜0F = B20〜B05、10〜1F = A20〜A05、B01・B02 = 出力ユニットの +V（入力ユニットの COM）、A01・A02 = 出力ユニットの 0V（COM））。` +
       `00〜1F の印字はユニット内の番号で、実際の入出力番号はユニットの先頭番号を足したもの（先頭 X20 のユニットなら 00 → X20）。` +

@@ -67,6 +67,11 @@ export interface DiagramWire {
   wireType: string;
   /** エアのチューブの外径[mm]（チューブのときだけ。color はチューブの色ID、sizeSq は使わない） */
   tubeOD?: number;
+  /**
+   * 変換ケーブルの種類（src/data/cables.ts の ID。ケーブルのときだけ）。両端のピンの対応が製品で違うケーブルで選ぶ。
+   * 省略時は、コネクタの defaultCable、なければ同じ番号のピンどうしがつながる
+   */
+  cable?: string;
   /** 配線の曲がり位置の調整量[px]。自動配置からのずれ */
   bend?: number;
   /**

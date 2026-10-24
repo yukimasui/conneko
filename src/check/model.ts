@@ -5,8 +5,9 @@
  * - fixed: 電線・ケーブル・常時導通の内部経路だけでつながった範囲（ネット）
  * - all: fixed に、開閉する経路（接点・出力）をすべて閉じたものを加えた範囲（動作中の電位）
  */
+import { cablePin, cableSpecsFor, type CableSpec } from '../data/cables';
 import { connectorsMate, resolveDevice, type ResolvedAccept, type ResolvedDevice } from '../devices/resolve';
-import { resolveNum, type Conductor, type DeviceDefinition, type InternalLink, type PowerSystem, type TerminalDef } from '../devices/types';
+import { resolveNum, type Conductor, type ConnectorSpec, type DeviceDefinition, type InternalLink, type PowerSystem, type TerminalDef } from '../devices/types';
 import { computeBus, effectiveParams, type BusLayout } from '../model/bus';
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 
@@ -146,6 +147,12 @@ const PROTOCOL_NAMES: Record<string, string> = {
   'cc-link': 'CC-Link',
 };
 export const protocolNames = (ps: string[]) => ps.map((p) => PROTOCOL_NAMES[p] ?? p).join('・');
+
+/** ケーブルの変換ケーブルの種類（電線の cable、なければどちらかのコネクタの defaultCable。両端の種類に合うものだけ） */
+export function cableSpecOf(w: DiagramWire, a: ConnectorSpec, b: ConnectorSpec): CableSpec | undefined {
+  const ok = cableSpecsFor(a.kind, b.kind);
+  return [w.cable, a.defaultCable, b.defaultCable].map((id) => ok.find((c) => c.id === id)).find(Boolean);
+}
 
 export function supplyLabel(s: Supply): string {
   if (s.conductor === 'PE') return CONDUCTOR_NAMES.PE;
@@ -289,9 +296,11 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     if (a || b) {
       if (a && b && connectorsMate(a, b)) {
         cables.push({ a: key(w.from.device, w.from.terminal), b: key(w.to.device, w.to.terminal), wire: w.id });
-        // ケーブル: 両端の同じ番号のピンどうしが導通する
-        for (let i = 1; i <= Math.min(a.pins, b.pins); i++) {
-          cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${i}`)]);
+        // ケーブル: ふつうは両端の同じ番号のピンどうしが導通する。変換ケーブルの種類（電線の cable、なければコネクタの defaultCable）があれば、その対応で
+        const spec = cableSpecOf(w, a, b);
+        for (let i = 1; i <= a.pins; i++) {
+          const j = cablePin(spec, a.kind, b.kind, i, b.pins);
+          if (j !== undefined) cablePairs.push([key(w.from.device, `${w.from.terminal}#${i}`), key(w.to.device, `${w.to.terminal}#${j}`)]);
         }
         if (a.protocols?.length && b.protocols?.length && !a.protocols.some((p) => b.protocols!.includes(p))) {
           push({

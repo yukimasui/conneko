@@ -296,4 +296,5 @@ export function melsecCRows(): Rows {
 }
 
 /** 三菱電機対応の MIL 40P のピンの表示名（ピン ID は FCN と同じ規則。三菱のピン番号を添える） */
-export const melsecMilPinLabel = (n: number) => `MIL ピン ${n}（三菱の ${fcnPinLabel(n).replace('FCN ', '')} に当たる）`;
+/** 三菱用の MIL 40 極の端子台のピンの表示名（MIL の物理的なピン番号と、KB40N-4F1H でつながる三菱のピン番号） */
+export const melsecMilPinLabel = (n: number) => `MIL ピン ${n}（KB40N-4F1H で三菱の ${fcnPinLabel(41 - n).replace('FCN ', '')} に当たる）`;

@@ -87,9 +87,11 @@ describe('東洋技研 機器定義', () => {
       const melsecEmpty = [36, 34, 35, 33];
       // TB40-M2-X（入力用）は A01・A02（入力ユニットでは空き）もつながない（右端の分岐端子は Service（COM））
       if (d.type.endsWith('tb40-m2-x')) melsecEmpty.push(40, 38);
+      // MIL 40 極の品のピン ID は MIL の物理的な番号（KB40N-4F1H の結線で 41 − FCN のピン番号）
+      const expected = cn.kind === 'MIL40' ? melsecEmpty.map((n) => 41 - n) : melsecEmpty;
       if (unused.length) {
         expect(cn.pins).toBe(40);
-        expect(unused.sort((a, b) => a - b)).toEqual(melsecEmpty.sort((a, b) => a - b));
+        expect(unused.sort((a, b) => a - b)).toEqual(expected.sort((a, b) => a - b));
       }
     }
   });

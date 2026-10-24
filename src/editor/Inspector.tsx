@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../data/tubes';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
+import { cableSpecsFor } from '../data/cables';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { familyOf } from '../devices/families';
@@ -454,7 +455,7 @@ export function Inspector(props: Props) {
           <input value={data.wireNo ?? ''} placeholder="例: R1" onChange={(e) => props.onWireChange(edge.id, { wireNo: e.target.value || undefined })} />
         </label>
         {data.wireType === CABLE_WIRE_TYPE ? (
-          <p className="muted small">コネクタ間のケーブルです。両端の同じ番号のピンどうしが導通します。</p>
+          <CableFields edge={edge} props={props} />
         ) : (
           <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
         )}
@@ -520,6 +521,36 @@ export function Inspector(props: Props) {
 }
 
 /** チューブの種類・外径・色 */
+/** ケーブルの種類（両端のピンの対応が製品で違う変換ケーブルのときだけ選ぶ） */
+function CableFields({ edge, props }: { edge: WireFlowEdge; props: Props }) {
+  const connectorOf = (id: string, terminal: string | null | undefined) => {
+    const n = props.nodes.find((x) => x.id === id);
+    const def = n && getDeviceDefinition(n.data.deviceType);
+    return def && terminal ? resolveDevice(def, props.params.get(id) ?? n.data.params).terminal(terminal)?.connector : undefined;
+  };
+  const a = connectorOf(edge.source, edge.sourceHandle);
+  const b = connectorOf(edge.target, edge.targetHandle);
+  const specs = a && b ? cableSpecsFor(a.kind, b.kind) : [];
+  if (!a || !b || !specs.length) return <p className="muted small">コネクタ間のケーブルです。両端の同じ番号のピンどうしが導通します。</p>;
+  const fallback = specs.find((c) => c.id === a.defaultCable || c.id === b.defaultCable);
+  return (
+    <>
+      <label className="field">
+        <span>ケーブルの種類</span>
+        <select value={edge.data?.cable ?? ''} onChange={(e) => props.onWireChange(edge.id, { cable: e.target.value || undefined })}>
+          <option value="">{fallback ? `既定（${fallback.maker} ${fallback.model}）` : '既定（同じ番号のピンどうし）'}</option>
+          {specs.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.maker} {c.model}：{c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted small">変換ケーブルは製品によってピンの対応が違います。使うケーブルを選ぶと、その対応で導通を確かめます。部品表にも載ります。</p>
+    </>
+  );
+}
+
 function TubeFields({ value, onChange }: { value: Pick<WireEdgeData, 'wireType' | 'tubeOD' | 'color'>; onChange: (patch: Partial<WireEdgeData>) => void }) {
   const od = value.tubeOD ?? 6;
   return (
