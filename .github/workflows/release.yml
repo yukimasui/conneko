@@ -1,0 +1,68 @@
+# main にマージされたら、package.json のバージョンのリリースを作る。
+# - タグ v<バージョン> がまだなければ、テストとビルドをして、単一 HTML（conneko-v<バージョン>.html）を添付したリリースを作る
+# - タグがすでにあれば何もしない（バージョンを上げていないマージではリリースしない）
+# - リリースノートは docs/releases/v<バージョン>.md。なければ GitHub が PR の一覧から作る
+name: リリース
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: バージョンとタグがあるかを調べる
+        id: version
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$tag はリリース済みのため、何もしません"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.exists == 'false'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存パッケージを入れる
+        if: steps.version.outputs.exists == 'false'
+        run: npm ci
+
+      - name: テスト
+        if: steps.version.outputs.exists == 'false'
+        run: npm test
+
+      - name: ビルド
+        if: steps.version.outputs.exists == 'false'
+        run: npm run build
+
+      - name: リリースを作る
+        if: steps.version.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          file="conneko-$TAG.html"
+          cp dist/index.html "$file"
+          notes="docs/releases/$TAG.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" "$file" --title "$TAG" --target "$GITHUB_SHA" --notes-file "$notes"
+          else
+            gh release create "$TAG" "$file" --title "$TAG" --target "$GITHUB_SHA" --generate-notes
+          fi
