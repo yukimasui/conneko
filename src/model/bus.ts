@@ -9,7 +9,7 @@
  * - 内部電源の収支やスロット数などの指摘
  * を求める。
  */
-import { paramsWithDefaults, resolveNum, type DeviceDefinition, type ParamValues } from '../devices/types';
+import { deviceSize, paramsWithDefaults, resolveNum, type DeviceDefinition, type ParamValues } from '../devices/types';
 import type { DiagramDevice } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -308,7 +308,8 @@ export function mountedPositions(devices: DiagramDevice[], lookup: DefLookup): M
   for (const g of layout.groups.values()) {
     const hostDef = lookup(g.host.type);
     if (!hostDef) continue;
-    const origin = hostDef.bus?.host?.origin ?? { x: hostDef.width, y: 0 };
+    // 大きさはパラメータで変わる機器（size）もあるので、装着で決まるパラメータも含めて求める
+    const origin = hostDef.bus?.host?.origin ?? { x: deviceSize(hostDef, effectiveParams(g.host, layout)).width, y: 0 };
     const slotX = hostDef.bus?.host?.slotX;
     let x = g.host.x + origin.x;
     for (const m of g.members) {
@@ -316,7 +317,8 @@ export function mountedPositions(devices: DiagramDevice[], lookup: DefLookup): M
       const fixed = slotX?.[m.mount!.slot - 1];
       if (fixed !== undefined) x = g.host.x + origin.x + fixed;
       out.set(m.id, { x, y: g.host.y + origin.y });
-      x += lookup(m.type)?.width ?? 0;
+      const def = lookup(m.type);
+      x += def ? deviceSize(def, effectiveParams(m, layout)).width : 0;
     }
   }
   return out;

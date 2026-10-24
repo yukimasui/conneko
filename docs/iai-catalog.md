@@ -216,6 +216,8 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 
 1. **幅・高さ・`loadCurrent`・`bus.load` をパラメーターの関数で書けない**。SCON-CB の容量による幅の違い、XSEL の 5〜8 軸仕様、軸数に比例する消費電流が表せない。
    提案: `width` / `height` / `loadCurrent` / `bus.load` も `ParamDependent<number>` を受け付ける（`resolveDevice` で解決）。
+   → v0.6.8 で対応（#1）。大きさは `size`、`loadCurrent`・`bus.load` などは `NumOrParam` の関数で書ける。MCON のモーター電源の電流は
+   接続軸数から求める（既定）。SCON-CB の 400〜750W 用の幅・XSEL の 5〜8 軸はまだ。
 2. **個別の端子の組を 1 つの通信ポートとして扱えない**。DeviceNet・CC-Link の差込みプラグは端子なので `protocols` を持てず、通信方式の不一致を検出できない。
    提案: `TerminalDef` に `protocols?: string[]` と `port?: string`（同じポートの端子の組）を足し、ポート単位で protocol-mismatch を調べる。
 3. **機器自身の内部経路が安全チェーンで飛ばされる**。TB の非常停止接点（b 接点）を `switch: 'NC'` の内部経路にすると安全チェーンの探索で無視されるため、常に閉の導通にした。

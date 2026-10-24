@@ -17,8 +17,11 @@ export type PowerSystem = 'AC' | 'DC';
  */
 export type Conductor = 'R' | 'S' | 'T' | 'L' | 'N' | '+' | '-' | 'PE';
 
-/** 数値を直接書くか、機器パラメータ（params）のキーを参照する */
-export type NumOrParam = number | { param: string };
+/**
+ * 数値を直接書くか、機器パラメータ（params）のキーを参照するか、パラメータから求める関数にする
+ * （関数の引数は既定値を補完済みのパラメータ。軸数・容量・極数で変わる消費電流など）
+ */
+export type NumOrParam = number | { param: string } | ((params: ParamValues) => number);
 
 /** 端子から電線が出ていく向き */
 export type TerminalSide = 'top' | 'bottom' | 'left' | 'right';
@@ -716,6 +719,10 @@ export function resolveNum(
 ): number | undefined {
   if (v === undefined) return undefined;
   if (typeof v === 'number') return v;
+  if (typeof v === 'function') {
+    const n = v(paramsWithDefaults(def, params));
+    return Number.isFinite(n) ? n : undefined;
+  }
   const raw = params?.[v.param] ?? def.params?.find((p) => p.key === v.param)?.default;
   const n = typeof raw === 'number' ? raw : Number(raw);
   return Number.isFinite(n) ? n : undefined;
