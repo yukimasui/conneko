@@ -33,7 +33,7 @@ import { pneumaticLayout, type PneumaticGroup } from './sheets/pneumatic';
 import { rackHosts, rackPages } from './sheets/rack';
 import { ioSystem } from '../model/io';
 import { terminalPages } from './sheets/terminal';
-import { bentRailRoute, bentRoute, junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, wireNoAt, type PinAt, type Segment } from './wiring';
+import { bentRailRoute, bentRoute, junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, tapRoute, trunks, wireNoAt, type PinAt, type Segment, type Trunk } from './wiring';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -380,13 +380,50 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     }
 
     // 網ごとの線
+    // 主回路（母線のないシート）: 上から下へまっすぐ降りる幹線を先にすべて引き、分岐はそこへ T 字に着ける
+    const mainSheet = !rails.some((r) => r.root);
+    const trunkLines = new Map<string, { list: Trunk[]; lines: Point[][] }>();
+    if (mainSheet) {
+      for (const [root, pins] of byNet) {
+        const list = trunks(pins).filter((t) => !bendOf(wireEdgeKey(pins[t.upper].ref, pins[t.lower].ref)));
+        if (!list.length) continue;
+        const lines = list.map((t) => {
+          const pl: Point[] = [pins[t.upper].pos, pins[t.lower].pos];
+          draw(pl, root, wireEdgeKey(pins[t.upper].ref, pins[t.lower].ref));
+          return pl;
+        });
+        trunkLines.set(root, { list, lines });
+      }
+    }
+
     for (const [root, pins] of byNet) {
       if (rails.some((r) => r.root === root)) continue;
-      const polylines: Point[][] = [];
-      for (const [i, j] of spanningTree(pins)) {
-        const edge = wireEdgeKey(pins[i].ref, pins[j].ref);
+      const trunk = trunkLines.get(root);
+      const polylines: Point[][] = [...(trunk?.lines ?? [])];
+      // 幹線へ T 字に着けた端子は、ほかの端子とはつながない（手で曲がり位置を決めた線は今までどおり端子どうし）
+      const tapped = new Set<number>();
+      if (trunk) {
+        const inTrunk = new Set(trunk.list.flatMap((t) => [t.upper, t.lower]));
+        pins.forEach((p, i) => {
+          if (inTrunk.has(i)) return;
+          const tap = tapRoute(p, trunk.list, root, obstacles, segments);
+          if (!tap) return;
+          const edge = wireEdgeKey(p.ref, pins[tap.trunk.upper].ref);
+          const bend = bendOf(edge);
+          const pl = bend ? bentRoute(p, pins[tap.trunk.upper], bend) : tap.points;
+          draw(pl, root, edge);
+          polylines.push(pl);
+          tapped.add(i);
+        });
+      }
+      const restIndex = pins.flatMap((_, i) => (tapped.has(i) ? [] : [i]));
+      const rest = restIndex.map((i) => pins[i]);
+      // 幹線で結んだ組はつながっているものとして、残りの端子をつなぐ
+      const linked = (trunk?.list ?? []).map((t): [number, number] => [restIndex.indexOf(t.upper), restIndex.indexOf(t.lower)]);
+      for (const [i, j] of spanningTree(rest, linked)) {
+        const edge = wireEdgeKey(rest[i].ref, rest[j].ref);
         const bend = bendOf(edge);
-        const pl = bend ? bentRoute(pins[i], pins[j], bend) : route(pins[i], pins[j], root, obstacles, segments);
+        const pl = bend ? bentRoute(rest[i], rest[j], bend) : route(rest[i], rest[j], root, obstacles, segments);
         draw(pl, root, edge);
         polylines.push(pl);
       }
