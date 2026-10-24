@@ -449,6 +449,12 @@ export interface ParamDef {
   relevant?: (params: ParamValues) => boolean;
   /** 部品表の仕様に書くときの名前（パラメータで意味が変わるもの。例: スピコンを直付けしたときのチューブ外径）。省略時は label */
   specLabel?: (params: ParamValues) => string;
+  /**
+   * ほかのパラメータの値で変わる選択肢（例: RCP6 の高推力タイプでは適応コントローラーが P4 / P6）。引数は既定値を補完済みのパラメータ。
+   * 返す値は options の値の一部にする（表示名は変えてよい）。options は全部の値の一覧として、検索・型式の検査などに使う。
+   * いまの値が返した選択肢にないときは、プロパティで変えたときに選べる最初の値に直し、チェックで指摘する（param-unavailable）
+   */
+  optionsFor?: (params: ParamValues) => ParamOption[];
 }
 
 export type DeviceCategory =
@@ -739,9 +745,42 @@ export function paramsWithDefaults(def: DeviceDefinition, params: ParamValues | 
   return { ...out, ...params };
 }
 
-/** パラメータの選択肢の表示名（label がなければ値＋単位） */
-export function paramLabel(def: DeviceDefinition, key: string, value: number | string): string {
+/** パラメータの選択肢の表示名（label がなければ値＋単位）。params を渡すと、ほかのパラメータで変わる表示名（optionsFor）を使う */
+export function paramLabel(def: DeviceDefinition, key: string, value: number | string, params?: ParamValues): string {
   const p = def.params?.find((x) => x.key === key);
-  const opt = p?.options.find((o) => o.value === value);
+  const list = p && params ? paramOptions(def, p, params) : p?.options;
+  const opt = list?.find((o) => o.value === value) ?? p?.options.find((o) => o.value === value);
   return opt?.label ?? `${value}${p?.unit ?? ''}`;
+}
+
+/** いまのパラメータで選べる選択肢（optionsFor があればそれ、なければ options） */
+export function paramOptions(def: DeviceDefinition, p: ParamDef, params: ParamValues | undefined): ParamOption[] {
+  return p.optionsFor ? p.optionsFor(paramsWithDefaults(def, params)) : p.options;
+}
+
+/** いまのパラメータで選べない値になっているパラメータ（選択式だけ） */
+export function unavailableParams(def: DeviceDefinition, params: ParamValues | undefined): { param: ParamDef; value: number | string }[] {
+  const full = paramsWithDefaults(def, params);
+  return (def.params ?? [])
+    .filter((p) => p.input !== 'text' && p.optionsFor)
+    .filter((p) => !paramOptions(def, p, full).some((o) => o.value === full[p.key]))
+    .map((p) => ({ param: p, value: full[p.key] }));
+}
+
+/**
+ * 選べない値になったパラメータを、選べる値に直す（既定値が選べれば既定値、なければ最初の値）。
+ * ほかのパラメータを変えて選択肢が変わったときに使う。直すものがなければ params をそのまま返す
+ */
+export function fixUnavailableParams(def: DeviceDefinition, params: ParamValues | undefined): ParamValues | undefined {
+  let out = params;
+  for (let i = 0; i < 4; i++) {
+    const bad = unavailableParams(def, out);
+    if (!bad.length) return out;
+    for (const { param } of bad) {
+      const opts = paramOptions(def, param, out);
+      const next = opts.find((o) => o.value === param.default) ?? opts[0];
+      if (next) out = { ...out, [param.key]: next.value };
+    }
+  }
+  return out;
 }

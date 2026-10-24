@@ -1,4 +1,4 @@
-import { actuatorDefs, BRAKE_PARAM, endReceptacle, RCP6_CTRL_PARAM, rcp6Connector, rodSvg } from '../iai/actuator';
+import { actuatorDefs, BRAKE_PARAM, endReceptacle, rcp6Connector, rcp6CtrlParam, rodSvg } from '../iai/actuator';
 import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 
 /**
@@ -69,7 +69,7 @@ const def: DeviceDefinition = {
       options: TYPES.map((t) => ({ value: t.value, label: `${t.value}（本体幅 ${t.bodyMm}mm、${t.motor}${t.high ? ' 高推力' : ''} パルスモーター）` })),
       default: 'RA6C',
     },
-    RCP6_CTRL_PARAM,
+    rcp6CtrlParam((p) => typeOf(p).high),
     BRAKE_PARAM,
   ],
   description:

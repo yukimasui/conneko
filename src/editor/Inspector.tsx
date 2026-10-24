@@ -4,7 +4,7 @@ import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { familyOf } from '../devices/families';
-import { deviceModel, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
+import { deviceModel, paramOptions, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
@@ -344,11 +344,11 @@ export function Inspector(props: Props) {
                 <select
                   value={String(node.data.params?.[p.key] ?? p.default)}
                   onChange={(e) => {
-                    const opt = p.options.find((o) => String(o.value) === e.target.value);
+                    const opt = paramOptions(def, p, node.data.params).find((o) => String(o.value) === e.target.value);
                     if (opt) props.onParamChange(node.id, p.key, opt.value);
                   }}
                 >
-                  {p.options.map((o) => (
+                  {paramOptions(def, p, node.data.params).map((o) => (
                     <option key={String(o.value)} value={String(o.value)}>
                       {o.label ?? `${o.value}${p.unit ?? ''}`}
                     </option>
