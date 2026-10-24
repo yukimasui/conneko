@@ -257,6 +257,12 @@ export interface TerminalDef extends TerminalBase {
   /** 電線が出ていく向き */
   side: TerminalSide;
   connector?: ConnectorSpec;
+  /**
+   * ネジ端子でつなぐ通信（DeviceNet・CC-Link など）の通信線の端子: 同じポートに属する端子をまとめる名前（例: 'NET1'）と通信方式。
+   * 電線（と端子台）でつながった相手の機器の通信線の端子と、共通の通信方式がなければ警告する（protocol-mismatch）
+   */
+  port?: string;
+  protocols?: string[];
 }
 
 /**

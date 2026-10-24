@@ -174,10 +174,13 @@ export function fieldbusBlock(
         const desc = ['赤 V+（通信電源 DC24V）', '白 CAN_H', '裸線 DRAIN（シールド）', '水色 CAN_L', '黒 V−（通信電源 0V）'][i];
         if (id === 'V+') terminals.push({ ...base, label: desc, role: 'input', accepts: DNET_PLUS });
         else if (id === 'V-') terminals.push({ ...base, label: desc, role: 'input', accepts: DNET_MINUS });
-        else terminals.push({ ...base, label: desc, role: 'signal', note: 'DeviceNet 通信線' });
+        else if (id === 'SHIELD') terminals.push({ ...base, label: desc, role: 'signal', note: 'DeviceNet 通信線' });
+        else terminals.push({ ...base, label: desc, role: 'signal', note: 'DeviceNet 通信線', port: 'DeviceNet', protocols: ['devicenet'] });
       } else {
         const desc = ['FG（フレームグラウンド）', 'SLD（シールド）', 'DG（デジタルグラウンド）', 'DB（通信線）', 'DA（通信線）'][i];
-        terminals.push({ ...base, label: desc, role: id === 'CC-FG' ? 'ground' : 'signal', note: 'CC-Link 通信線（CC-Link 専用ケーブル）' });
+        // 通信線（DA・DB・DG）は CC-Link のポートとして、つないだ相手の通信方式を確かめる
+        const line = id === 'DA' || id === 'DB' || id === 'DG';
+        terminals.push({ ...base, label: desc, role: id === 'CC-FG' ? 'ground' : 'signal', note: 'CC-Link 通信線（CC-Link 専用ケーブル）', ...(line ? { port: 'CC-Link', protocols: ['cc-link'] } : {}) });
       }
     });
   } else if (io === 'PR') {
