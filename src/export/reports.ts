@@ -10,7 +10,8 @@ import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
 import { resolveDevice } from '../devices/resolve';
 import { deviceAccessories, deviceModel, paramLabel, paramsWithDefaults, type DeviceCategory, type DeviceDefinition } from '../devices/types';
-import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
+import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type DiagramWire, type TerminalRef } from '../model/diagram';
+import { terminationName, terminationShort } from '../data/terminations';
 import { computeBus, effectiveParams } from '../model/bus';
 import { compareAddress, ioHosts, ioSystem } from '../model/io';
 import { AIR_LINK_TYPE, LINK_TYPE } from '../model/ops';
@@ -20,6 +21,10 @@ type DefLookup = (type: string) => DeviceDefinition | undefined;
 const collator = new Intl.Collator('ja', { numeric: true });
 
 /* ---------------- 線番表（接続リスト） ---------------- */
+
+/** 電線の両端の端末処理（'フェルール / 丸形'。決めていない側は '−'。どちらもなければ空） */
+const terminationText = (w: DiagramWire) =>
+  w.fromTermination || w.toTermination ? `${terminationShort(w.fromTermination) || '−'} / ${terminationShort(w.toTermination) || '−'}` : '';
 
 export interface WireRow {
   id: string;
@@ -37,6 +42,8 @@ export interface WireRow {
   colorHex?: string;
   /** ネットにある I/O コメント */
   note: string;
+  /** 端末処理（接続元 / 接続先。どちらも決めていなければ空） */
+  termination: string;
 }
 
 export interface LinkPlaces {
@@ -89,10 +96,11 @@ export function wireRows(d: Diagram, lookup: DefLookup): { rows: WireRow[]; link
           ? '直結（ねじ込み）'
           : tube
           ? `チューブ ${tubeModel(w.wireType, w.tubeOD ?? 6, w.color)}（φ${w.tubeOD ?? '?'} ${tubeColor?.name ?? w.color}）`
-          : `${w.wireType} ${w.sizeSq}sq ${color?.name ?? w.color}`,
+          : `${w.wireType} ${w.sizeSq}sq ${color?.name ?? w.color}${terminationText(w) ? `（${terminationText(w)}）` : ''}`,
       wireType: cable ? 'ケーブル' : direct ? '直結' : tube ? 'チューブ' : w.wireType,
       ...(cable ? {} : tube ? { colorName: tubeColor?.name ?? w.color, colorHex: tubeColor?.hex } : { sizeSq: w.sizeSq, colorName: color?.name ?? w.color, colorHex: color?.hex }),
       note: cable || tube ? '' : commentOf(w.from),
+      termination: cable || tube ? '' : terminationText(w),
     };
   });
   rows.sort((a, b) => a.sheetIndex - b.sheetIndex || collator.compare(a.wireNo || '~', b.wireNo || '~') || collator.compare(a.id, b.id));
@@ -184,6 +192,18 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
       ag.qty += a.qty ?? 1;
       ag.ids.push(a.terminal ? `${x.id}.${a.terminal}` : x.id);
       groups.set(ak, ag);
+    }
+  }
+  // 端末処理の部品（フェルール・圧着端子）: 種類と電線の太さごとに数える（ねじの大きさは図面にないので、仕様に書かない）
+  for (const w of d.wires) {
+    if (w.wireType === CABLE_WIRE_TYPE || isTube(w)) continue;
+    for (const t of [w.fromTermination, w.toTermination]) {
+      if (!t || t === 'bare') continue;
+      const k = `termination|${t}|${w.sizeSq}`;
+      const g = groups.get(k) ?? { category: 'terminal' as DeviceCategory, maker: '汎用', model: `${terminationShort(t)} ${w.sizeSq}sq 用`, name: terminationName(t), spec: `電線 ${w.sizeSq}sq 用`, qty: 0, ids: [], estimated: false };
+      g.qty++;
+      if (!g.ids.includes(w.id)) g.ids.push(w.id);
+      groups.set(k, g);
     }
   }
   // 変換ケーブル: 種類（電線の cable、なければコネクタの defaultCable）が決まっているケーブルを 1 本ずつ数える
@@ -330,8 +350,8 @@ export function bomCsv(d: Diagram, lookup: DefLookup): string {
 
 export function wireCsv(d: Diagram, lookup: DefLookup): string {
   return toCsv(
-    ['シート', '線番', '接続元', '接続先', '種類', '太さ(sq)', '色', 'コメント'],
-    wireRows(d, lookup).rows.map((r) => [r.sheetName, r.wireNo, r.from, r.to, r.wireType, r.sizeSq, r.colorName, r.note]),
+    ['シート', '線番', '接続元', '接続先', '種類', '太さ(sq)', '色', '端末処理（接続元 / 接続先）', 'コメント'],
+    wireRows(d, lookup).rows.map((r) => [r.sheetName, r.wireNo, r.from, r.to, r.wireType, r.sizeSq, r.colorName, r.termination, r.note]),
   );
 }
 

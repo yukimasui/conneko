@@ -14,6 +14,7 @@ import { checkPneumatic } from './pneumatic';
 import { allowableCurrent, CIRCUIT_COLOR_RULES, getWireColor, type CircuitKind } from '../data/wires';
 import type { Diagram } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
+import { terminationName } from '../data/terminations';
 import { paramLabel, paramOptions, resolveNum, unavailableParams, type Conductor, type PowerSystem } from '../devices/types';
 import {
   buildModel,
@@ -64,6 +65,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkSwitchStates(m, push, conflictRoots);
   const protection = computeProtection(m);
   checkWireCurrents(m, push, protection);
+  checkWireTerminals(m, push, protection);
   checkLoadProtection(m, push, protection);
   checkOutputCurrents(m, push);
   checkSignals(m, push);
@@ -334,6 +336,58 @@ function checkWireCurrents(m: Model, push: Push, protection: Map<string, number>
     } else if (allowable < prot) {
       push({ severity: 'warning', rule: 'wire-too-thin', message: `電線 ${w.id}${w.wireNo ? `（${w.wireNo}）` : ''}: ${w.wireType} ${w.sizeSq}sq の許容電流 ${allowable}A が保護電流 ${prot}A を下回っています（太い電線にするか、保護機器の定格を下げてください）`, devices: [], wires: [w.id], key: `wire-too-thin:${w.id}` });
     }
+  }
+}
+
+/** 端子が受け入れる電線（端末処理・太さ）と、中継端子の定格電流 */
+function checkWireTerminals(m: Model, push: Push, protection: Map<string, number>) {
+  for (const w of m.wires) {
+    for (const [r, term] of [
+      [w.from, w.fromTermination],
+      [w.to, w.toTermination],
+    ] as const) {
+      const k = key(r.device, r.terminal);
+      const info = m.terminals.get(k);
+      const spec = info?.terminal.wire;
+      if (!info || !spec) continue;
+      const where = `${r.device} の端子 ${info.terminal.label ?? info.terminal.id}`;
+      if (term && spec.methods && !spec.methods.includes(term)) {
+        push({
+          severity: 'warning',
+          rule: 'termination-mismatch',
+          message: `電線 ${w.id}: ${where} は${terminationName(term)}を使えません（使えるのは ${spec.methods.map(terminationName).join('・')}）`,
+          devices: [r.device],
+          wires: [w.id],
+          key: `termination-mismatch:${w.id}:${k}`,
+        });
+      }
+      if ((spec.minSq !== undefined && w.sizeSq < spec.minSq - 1e-9) || (spec.maxSq !== undefined && w.sizeSq > spec.maxSq + 1e-9)) {
+        const range = spec.minSq !== undefined && spec.maxSq !== undefined ? `${spec.minSq}〜${spec.maxSq}sq` : spec.maxSq !== undefined ? `${spec.maxSq}sq 以下` : `${spec.minSq}sq 以上`;
+        push({
+          severity: 'warning',
+          rule: 'wire-size-terminal',
+          message: `電線 ${w.id}: ${w.sizeSq}sq は ${where} の適合電線（${range}）に合いません`,
+          devices: [r.device],
+          wires: [w.id],
+          key: `wire-size-terminal:${w.id}:${k}`,
+        });
+      }
+    }
+  }
+  // 中継端子（端子台など）の定格電流と、上流の保護電流
+  for (const [k, info] of m.terminals) {
+    const rated = info.terminal.ratedCurrent;
+    const prot = protection.get(k);
+    if (rated === undefined || prot === undefined || !Number.isFinite(prot) || prot <= rated + 1e-9) continue;
+    if (!m.wiresAt.has(k)) continue;
+    push({
+      severity: 'warning',
+      rule: 'terminal-overcurrent',
+      message: `${info.device.id} の端子 ${info.terminal.label ?? info.terminal.id}: 上流の保護電流 ${prot}A が端子の定格電流 ${rated}A を超えています`,
+      devices: [info.device.id],
+      wires: (m.wiresAt.get(k) ?? []).map((w) => w.id),
+      key: `terminal-overcurrent:${k}`,
+    });
   }
 }
 

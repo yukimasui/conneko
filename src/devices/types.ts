@@ -226,6 +226,18 @@ export type TerminalFunction =
   | 'unlock-solenoid'
   | 'lock-solenoid';
 
+/** 電線の端末処理（src/data/terminations.ts） */
+export type Termination = 'ferrule' | 'ring' | 'fork' | 'bare';
+
+/** 端子が受け入れる電線（端末処理の方式と太さ） */
+export interface WireAcceptSpec {
+  /** 使える端末処理（省略時は問わない） */
+  methods?: Termination[];
+  /** 適合電線の太さ[mm²] */
+  minSq?: number;
+  maxSq?: number;
+}
+
 /** 端子とコネクタのピンに共通の項目 */
 interface TerminalBase {
   /** 端子の印字（表示用。省略時は id） */
@@ -251,6 +263,10 @@ interface TerminalBase {
   channel?: 1 | 2;
   /** true の場合、未接続でも警告しない（予備端子・補助接点など） */
   optional?: boolean;
+  /** 受け入れる電線（端末処理・太さ）。端子台・機器のネジ端子など。書くと、合わない電線を警告する */
+  wire?: WireAcceptSpec;
+  /** 端子の定格電流[A]（中継端子・端子台）。上流の保護電流がこれを超えると警告する */
+  ratedCurrent?: number;
 }
 
 export interface TerminalDef extends TerminalBase {

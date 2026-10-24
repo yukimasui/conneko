@@ -6,7 +6,7 @@
  */
 import { DEFAULT_TUBE, isTubeType } from '../data/tubes';
 import { DEFAULT_WIRE } from '../data/wires';
-import type { ParamValues, TerminalSide } from '../devices/types';
+import type { ParamValues, Termination, TerminalSide } from '../devices/types';
 import { parseSchematic, serializeSchematic, type Schematic } from '../schematic/model';
 
 export const DIAGRAM_FORMAT = 'conneko-diagram';
@@ -72,6 +72,9 @@ export interface DiagramWire {
    * 省略時は、コネクタの defaultCable、なければ同じ番号のピンどうしがつながる
    */
   cable?: string;
+  /** 電線の端末処理（from 側・to 側。src/data/terminations.ts の ID）。端子の wire.methods と合わなければ警告する */
+  fromTermination?: Termination;
+  toTermination?: Termination;
   /** 配線の曲がり位置の調整量[px]。自動配置からのずれ */
   bend?: number;
   /**
@@ -155,6 +158,9 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
       sizeSq: w.sizeSq,
       wireType: w.wireType,
       ...(w.tubeOD ? { tubeOD: w.tubeOD } : {}),
+      ...(w.cable ? { cable: w.cable } : {}),
+      ...(w.fromTermination ? { fromTermination: w.fromTermination } : {}),
+      ...(w.toTermination ? { toTermination: w.toTermination } : {}),
       ...(w.bend ? { bend: Math.round(w.bend) } : {}),
       ...(w.route ? { route: w.route.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })) } : {}),
       ...(w.fromSide ? { fromSide: w.fromSide } : {}),
@@ -166,6 +172,7 @@ export function toDiagramFile(diagram: Diagram, title?: string): DiagramFile {
 
 export class DiagramParseError extends Error {}
 
+const isTermination = (v: unknown): v is Termination => v === 'ferrule' || v === 'ring' || v === 'fork' || v === 'bare';
 const isSide = (v: unknown): v is TerminalSide => v === 'top' || v === 'bottom' || v === 'left' || v === 'right';
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -245,6 +252,9 @@ export function parseDiagram(input: string | unknown): Diagram {
       // 外径だけ書いたチューブは、ポリウレタンチューブとする
       wireType: typeof w.wireType === 'string' ? w.wireType : typeof w.tubeOD === 'number' ? DEFAULT_TUBE.wireType : DEFAULT_WIRE.wireType,
       ...(typeof w.tubeOD === 'number' && w.tubeOD > 0 ? { tubeOD: w.tubeOD } : {}),
+      ...(typeof w.cable === 'string' && w.cable ? { cable: w.cable } : {}),
+      ...(isTermination(w.fromTermination) ? { fromTermination: w.fromTermination } : {}),
+      ...(isTermination(w.toTermination) ? { toTermination: w.toTermination } : {}),
       ...(typeof w.bend === 'number' ? { bend: w.bend } : {}),
       ...(isSide(w.fromSide) ? { fromSide: w.fromSide } : {}),
       ...(isSide(w.toSide) ? { toSide: w.toSide } : {}),

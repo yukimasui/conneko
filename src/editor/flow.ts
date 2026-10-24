@@ -2,7 +2,7 @@
  * React Flow のノード/エッジと図面データ（Diagram）の相互変換。
  */
 import type { Edge, Node } from '@xyflow/react';
-import type { ParamValues, TerminalSide } from '../devices/types';
+import type { ParamValues, Termination, TerminalSide } from '../devices/types';
 import { sheetOf, type Diagram, type Mount } from '../model/diagram';
 
 export interface DeviceNodeData extends Record<string, unknown> {
@@ -27,6 +27,9 @@ export interface WireEdgeData extends Record<string, unknown> {
   tubeOD?: number;
   /** 変換ケーブルの種類（DiagramWire.cable） */
   cable?: string;
+  /** 端末処理（DiagramWire.fromTermination / toTermination。source が from） */
+  fromTermination?: Termination;
+  toTermination?: Termination;
   bend?: number;
   /** 手で編集した経路（DiagramWire.route） */
   route?: { x: number; y: number }[];
@@ -68,6 +71,8 @@ export function diagramToFlow(diagram: Diagram): { nodes: DeviceFlowNode[]; edge
         wireType: w.wireType,
         ...(w.tubeOD ? { tubeOD: w.tubeOD } : {}),
         ...(w.cable ? { cable: w.cable } : {}),
+        ...(w.fromTermination ? { fromTermination: w.fromTermination } : {}),
+        ...(w.toTermination ? { toTermination: w.toTermination } : {}),
         ...(w.wireNo ? { wireNo: w.wireNo } : {}),
         ...(w.bend ? { bend: w.bend } : {}),
         ...(w.route ? { route: w.route } : {}),
@@ -101,6 +106,8 @@ export function flowToDiagram(nodes: DeviceFlowNode[], edges: WireFlowEdge[], sh
       wireType: e.data?.wireType ?? 'KIV',
       ...(e.data?.tubeOD ? { tubeOD: e.data.tubeOD } : {}),
       ...(e.data?.cable ? { cable: e.data.cable } : {}),
+      ...(e.data?.fromTermination ? { fromTermination: e.data.fromTermination } : {}),
+      ...(e.data?.toTermination ? { toTermination: e.data.toTermination } : {}),
       ...(e.data?.wireNo ? { wireNo: e.data.wireNo } : {}),
       ...(e.data?.bend ? { bend: e.data.bend } : {}),
       ...(e.data?.route ? { route: e.data.route } : {}),

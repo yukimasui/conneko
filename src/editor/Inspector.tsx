@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { isTubeType, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, tubeModel } from '../data/tubes';
 import { WIRE_COLORS, WIRE_TYPES } from '../data/wires';
 import { cableSpecsFor } from '../data/cables';
+import { TERMINATIONS } from '../data/terminations';
 import { getDeviceDefinition } from '../devices/registry';
 import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { familyOf } from '../devices/families';
-import { deviceModel, paramOptions, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating } from '../devices/types';
+import { deviceModel, paramOptions, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating, type Termination } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
 import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
@@ -384,7 +385,7 @@ export function Inspector(props: Props) {
                         <td>
                           {f.hint && <strong>{f.hint}</strong>}
                           {f.note && f.note !== f.hint && <div className="muted">{f.note}</div>}
-                          <div className="muted">{[f.kind, f.power].filter(Boolean).join('・')}</div>
+                          <div className="muted">{[f.kind, f.power, f.wire].filter(Boolean).join('・')}</div>
                           {hasMateCandidates(t.connector) && !connected.has(t.id) && (
                             <button type="button" className="small" onClick={(e) => props.onPickMate(node.id, t.id, e.currentTarget.getBoundingClientRect())}>
                               つなぐ機器を選ぶ…
@@ -458,6 +459,33 @@ export function Inspector(props: Props) {
           <CableFields edge={edge} props={props} />
         ) : (
           <WireFields value={data} onChange={(patch) => props.onWireChange(edge.id, patch)} />
+        )}
+        {data.wireType !== CABLE_WIRE_TYPE && (
+          <div className="field">
+            <span>端末処理</span>
+            <div className="side-row">
+              {(
+                [
+                  ['fromTermination', edge.source, edge.sourceHandle],
+                  ['toTermination', edge.target, edge.targetHandle],
+                ] as const
+              ).map(([key, dev, term]) => (
+                <label key={key} className="side-pick">
+                  <span className="muted small">
+                    {dev}.{term}
+                  </span>
+                  <select value={data[key] ?? ''} onChange={(e) => props.onWireChange(edge.id, { [key]: (e.target.value || undefined) as Termination | undefined })}>
+                    <option value="">未指定</option>
+                    {TERMINATIONS.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
         )}
         {data.wireType !== CABLE_WIRE_TYPE && (
           <div className="field">
