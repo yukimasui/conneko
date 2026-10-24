@@ -31,7 +31,7 @@ function mateText(c: MateCandidate, from: string) {
   const tags = [
     ...(c.pairs.length > 1 ? [`ケーブル ${c.pairs.length} 本`] : []),
     ...(c.sourceChange ? [`${from.split('.')[0]} の${c.sourceChange.label}`] : []),
-    ...(c.needsMount ? ['装着が必要'] : []),
+    ...(c.needsMount ? [c.host ? `${c.host} に装着` : c.hostType ? `${getDeviceDefinition(c.hostType)?.model ?? c.hostType} も置いて装着` : '装着が必要'] : []),
   ];
   return { name, detail, tags };
 }

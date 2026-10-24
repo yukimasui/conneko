@@ -272,7 +272,8 @@ describe('空圧回路図の文字の重なり（#34）', () => {
     const page = samplePage();
     const frame = page.polylines.find((p) => p.dashed && p.closed && page.texts.some((t) => t.text.startsWith('SOL1') && inside(t.at, p.points)))!;
     expect(frame).toBeTruthy();
-    for (const t of page.texts.filter((x) => /^SOL|^SY\d/.test(x.text))) expect(inside(t.at, frame.points), t.text).toBe(true);
+    // MF1 の弁（SOL1・SOL2、SY3140・SY3240）の名前と型式
+    for (const t of page.texts.filter((x) => /^SOL[12]|^SY3[12]40/.test(x.text))) expect(inside(t.at, frame.points), t.text).toBe(true);
   });
 
   it('図面枠に区分け（列番号・行記号）を付ける', () => {

@@ -12,9 +12,11 @@
  * LAN ポート（RJ45）は相手が多すぎるため対象外（従来どおりネットワークの候補を出す）。
  */
 import { connectorsMate, isLanPort, resolveDevice } from '../devices/resolve';
-import { paramLabel, paramsWithDefaults, type ConnectorSpec, type DeviceDefinition, type ParamValues, type TerminalDef } from '../devices/types';
+import { deviceSize, paramLabel, paramsWithDefaults, type ConnectorSpec, type DeviceDefinition, type ParamValues, type TerminalDef } from '../devices/types';
 import { paramVariants } from '../devices/validate';
 import { tubeAttrs } from './air';
+import { busAccepts } from './bus';
+import { mountUnit } from './plc';
 import { CABLE_WIRE_TYPE, isTube, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -31,6 +33,26 @@ export interface MateCandidate {
   pairs: { from: string; to: string }[];
   /** ベースユニット・ゲートウェイなどへの装着が必要な機器（置いただけでは装着の警告が出る） */
   needsMount?: boolean;
+  /**
+   * 装着が必要な機器を置くときの装着先。図面にある親（同じシートで空きのあるもの）ならその ID（host）、
+   * なければ一緒に置く親の機種（hostType）
+   */
+  host?: string;
+  hostType?: string;
+}
+
+/**
+ * 装着が必要な機器 unit の装着先: 同じシートにある、装着できて空きのある親。なければ一緒に置く親の機種（汎用 → メーカー → 型式の順の最初）
+ */
+export function mountTargetFor(d: Diagram, sheet: string, unit: DeviceDefinition, defs: DeviceDefinition[], lookup: DefLookup): { host?: string; hostType?: string } {
+  for (const x of d.devices) {
+    const def = lookup(x.type);
+    if (!def || x.mount || sheetOf(d, x) !== sheet || !busAccepts(def, unit)) continue;
+    const used = d.devices.filter((u) => u.mount?.device === x.id).length;
+    if (def.bus!.host!.slots === undefined || used < def.bus!.host!.slots) return { host: x.id };
+  }
+  const type = defs.filter((x) => busAccepts(x, unit) && !x.bus!.host!.slotX).sort(byMakerModel)[0]?.type;
+  return type ? { hostType: type } : {};
 }
 
 /** 候補を出すコネクタか（LAN ポートは除く。RJ-45 とつなぐ M12 D コードの通信ポートも LAN ポートとして扱う） */
@@ -154,7 +176,7 @@ export function mateCandidates(d: Diagram, from: TerminalRef, defs: DeviceDefini
           ...(Object.keys(q).length ? { params: q } : {}),
           pairs: pairsBetween(srcTerminals, from.terminal, terminals, hit.id, srcBusy, none),
           ...(v.change ? { sourceChange: v.change } : {}),
-          ...(def.bus && !def.bus.host ? { needsMount: true } : {}),
+          ...(def.bus && !def.bus.host ? { needsMount: true, ...mountTargetFor(d, sheet, def, defs, lookup) } : {}),
         };
         break;
       }
@@ -192,6 +214,16 @@ export function applyMateCandidate(d: Diagram, from: TerminalRef, c: MateCandida
       ...(src.sheet ? { sheet: src.sheet } : {}),
     };
     devices = [...devices, placed];
+    // 装着が必要な機器は、図面にある親か、一緒に置く親（ゲートウェイなど）に装着する。
+    // 新しい親は、装着したこの機器がいまの位置のまま見えるように置く（親の右隣から並べる）
+    const hostDef = c.hostType ? lookup(c.hostType) : undefined;
+    let hostId = c.host && devices.some((x) => x.id === c.host) ? c.host : undefined;
+    if (!hostId && hostDef) {
+      hostId = nextDeviceId(hostDef.labelPrefix, devices.map((x) => x.id));
+      const origin = hostDef.bus?.host?.origin ?? { x: deviceSize(hostDef, undefined).width, y: 0 };
+      devices = [...devices, { id: hostId, type: hostDef.type, x: placed.x - origin.x, y: placed.y - origin.y, ...(src.sheet ? { sheet: src.sheet } : {}) }];
+    }
+    if (hostId) devices = mountUnit({ ...d, devices }, hostId, target, lookup).devices;
   }
   const used = d.wires.map((w) => w.id);
   // エアのポートどうしはチューブでつなぐ

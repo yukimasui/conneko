@@ -26,8 +26,9 @@ describe('mateCandidates', () => {
     const rcon = c.find((x) => x.type === 'iai.rcon-pc')!;
     expect(rcon.sourceChange).toMatchObject({ key: 'ctrl', value: 'rcon' });
     expect(rcon.sourceChange!.label).toContain('P5');
-    // ゲートウェイへの装着が必要
+    // ゲートウェイへの装着が必要。図面にゲートウェイがなければ一緒に置く
     expect(rcon.needsMount).toBe(true);
+    expect(getDeviceDefinition(rcon.hostType!)?.bus?.host).toBeTruthy();
     const firstChanged = c.findIndex((x) => x.sourceChange);
     expect(c.slice(firstChanged).every((x) => x.sourceChange)).toBe(true);
   });
@@ -104,5 +105,21 @@ describe('applyMateCandidate', () => {
       ['MOT', 'MOT', 'CBL-AX1'],
       ['PG', 'PG', 'CBL-AX1-2'],
     ]);
+  });
+
+  it('装着が必要な機器を選ぶと、ゲートウェイも置いて装着する。図面に空きのあるゲートウェイがあればそこに装着する', () => {
+    const d = diagram([dev('AX1', 'iai.rcp6-sa')]);
+    const rcon = candidates(d, 'AX1', 'MPG').find((x) => x.type === 'iai.rcon-pc')!;
+    const r = applyMateCandidate(d, { device: 'AX1', terminal: 'MPG' }, rcon, { x: 400, y: 200 }, getDeviceDefinition);
+    const placed = r.diagram.devices.find((x) => x.id === r.device)!;
+    const gw = r.diagram.devices.find((x) => x.type === rcon.hostType)!;
+    expect(placed.mount).toEqual({ device: gw.id, slot: 1 });
+    // 2 台目は同じゲートウェイに装着する
+    const d2: Diagram = { ...r.diagram, devices: [...r.diagram.devices, dev('AX2', 'iai.rcp6-sa')] };
+    const rcon2 = candidates(d2, 'AX2', 'MPG').find((x) => x.type === 'iai.rcon-pc' && !x.device)!;
+    expect(rcon2.host).toBe(gw.id);
+    const r2 = applyMateCandidate(d2, { device: 'AX2', terminal: 'MPG' }, rcon2, { x: 600, y: 200 }, getDeviceDefinition);
+    expect(r2.diagram.devices.filter((x) => x.type === rcon.hostType)).toHaveLength(1);
+    expect(r2.diagram.devices.find((x) => x.id === r2.device)!.mount).toEqual({ device: gw.id, slot: 2 });
   });
 });
