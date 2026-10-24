@@ -76,7 +76,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     { id: 'CP', label: 'CP（+24V）', note: '制御電源 +24V 入力（連結した全ユニットの制御電源・ブレーキ電源）', ...at(cp.pos.CP), role: 'input', accepts: DC24_PLUS },
     { id: 'GND0', label: '0V', note: '制御電源 0V', ...at(cp.pos.GND0), role: 'input', accepts: DC24_MINUS },
     { id: 'FG', label: 'FG', note: 'フレームグラウンド', ...at(cp.pos.FG), role: 'ground' },
-    { id: 'MP+', label: '24V（MP）', note: 'モーター電源 +24V 入力（連結した 24V ドライバーユニット・エレシリンダーへ。最大 30A）', ...at(mp.pos['MP+']), role: 'input', accepts: DC24_PLUS },
+    { id: 'MP+', label: '24V（MP）', note: 'モーター電源 +24V 入力（連結した 24V ドライバーユニット・エレシリンダーへ。最大 30A）', ...at(mp.pos['MP+']), role: 'input', accepts: DC24_PLUS, busNet: 'MP' },
     { id: 'MP0V', label: '0V（MP）', note: 'モーター電源 0V', ...at(mp.pos.MP0V), role: 'input', accepts: DC24_MINUS },
     sys('STOPOUT', sysL.pos.STOPOUT, { note: '停止用 24V 出力', role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.1, kind: 'test' } }),
     sys('STOPIN', sysL.pos.STOPIN, { note: '停止入力（STOPOUT から停止接点 1・2 と非常停止スイッチを通して戻す）', role: 'signal', function: 'safety-input' }),

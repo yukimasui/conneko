@@ -272,6 +272,11 @@ interface TerminalBase {
   wire?: WireAcceptSpec;
   /** 端子の定格電流[A]（中継端子・端子台）。上流の保護電流がこれを超えると警告する */
   ratedCurrent?: number;
+  /**
+   * 装着（バス）でつながる機器の中の電路の名前。親と装着したユニットのうち、同じ名前の端子どうしを常時導通とみなす
+   * （IAI R-unit のモーター電源 MP を、ゲートウェイユニットの MP+ から連結した各ドライバーの MPO へ渡すなど）
+   */
+  busNet?: string;
 }
 
 export interface TerminalDef extends TerminalBase {

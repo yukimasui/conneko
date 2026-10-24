@@ -86,7 +86,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
     { id: 'CP', label: 'CP', note: '制御電源 +24V 入力（連結した全ユニットの制御電源・ブレーキ電源。DC24V ±10%）', ...at(cp.pos.CP), role: 'input', accepts: DC24_PLUS },
     { id: 'GND0', label: 'GND', note: '制御電源 0V', ...at(cp.pos.GND0), role: 'input', accepts: DC24_MINUS },
     { id: 'FG', label: 'FG', note: 'フレームグラウンド', ...at(cp.pos.FG), role: 'ground' },
-    { id: 'MP+', label: '24V（MP）', note: 'モーター電源 +24V 入力（連結した 24V ドライバーユニット・EC 接続ユニットへ供給。システム全体で最大 37.5A）', ...at(mp.pos['MP+']), role: 'input', accepts: DC24_PLUS },
+    { id: 'MP+', label: '24V（MP）', note: 'モーター電源 +24V 入力（連結した 24V ドライバーユニット・EC 接続ユニットへ供給。システム全体で最大 37.5A）', ...at(mp.pos['MP+']), role: 'input', accepts: DC24_PLUS, busNet: 'MP' },
     { id: 'MP0V', label: '0V（MP）', note: 'モーター電源 0V', ...at(mp.pos.MP0V), role: 'input', accepts: DC24_MINUS },
     { id: 'S2', label: 'S2（1）', note: 'ティーチングボックス用 STOP スイッチ接点入力（出荷時は STOP+ と短絡）', ...at(sysR.pos.S2), role: 'signal', optional: true },
     { id: 'S1', label: 'S1（2）', note: 'ティーチングボックス用 STOP スイッチ接点出力（出荷時は STOP− と短絡）', ...at(sysR.pos.S1), role: 'signal', optional: true },

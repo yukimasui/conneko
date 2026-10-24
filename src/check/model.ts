@@ -355,6 +355,19 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     }
   }
 
+  // 装着（バス）でつながる電路: 親と装着したユニットの、同じ busNet の端子どうしを常時導通とみなす
+  for (const g of bus.groups.values()) {
+    const nets = new Map<string, string[]>();
+    for (const d of [g.host, ...g.members]) {
+      const info = devices.get(d.id);
+      if (!info) continue;
+      for (const t of [...info.r.terminals, ...info.r.pins]) {
+        if (t.busNet) nets.set(t.busNet, [...(nets.get(t.busNet) ?? []), key(d.id, t.id)]);
+      }
+    }
+    for (const keys of nets.values()) for (let i = 1; i < keys.length; i++) fixedLinks.push([keys[0], keys[i]]);
+  }
+
   // リンク: 名前が同じリンクの端子どうしを常時導通とみなす（リンクの種類ごとに別の名前の空間）
   const cabled = new Set(cables.flatMap((c) => [c.a, c.b]));
   const linkNets = new Map<string, { name: string; kind: string; keys: string[] }>();
