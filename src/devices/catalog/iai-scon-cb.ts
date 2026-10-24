@@ -293,8 +293,8 @@ const pins = (p: ParamValues): PinDef[] => {
 const links = (p: ParamValues): InternalLink[] => {
   const io = ioOf(p);
   const ls: InternalLink[] = [
-    // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ DP-5）。TB 接続時は TB の停止スイッチ（b 接点）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
-    { from: 'S1', to: 'S2' },
+    // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ DP-5）。TB 接続時は TB の停止スイッチ（b 接点）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+    { from: 'S1', to: 'S2', switch: 'NC', safetyContact: true },
     { from: 'PE', to: 'FG' },
     // ブレーキ電源（BK+・PWR−）からエンコーダーコネクターのブレーキ開放出力（PG の 21 BK+・20 BK−）へ。ブレーキ解除中（運転中）は導通しているものとして扱う
     { from: 'BK+', to: 'PG#21', directed: true },

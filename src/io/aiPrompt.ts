@@ -107,7 +107,7 @@ function terminalLine(t: TerminalDef, accepts: ResolvedAccept[], air?: ResolvedA
 
 function linkText(l: InternalLink): string {
   const arrow = l.directed || l.switch === 'output' ? '→' : '↔';
-  const tags = [l.switch && SWITCH_TEXT[l.switch], l.directOpening && '直接開路', l.linked === 'mirror' && 'ミラー接点', l.linked === 'force-guided' && '強制ガイド'].filter(Boolean);
+  const tags = [l.switch && SWITCH_TEXT[l.switch], l.directOpening && '直接開路', l.safetyContact && '機器の外で開く安全接点', l.linked === 'mirror' && 'ミラー接点', l.linked === 'force-guided' && '強制ガイド'].filter(Boolean);
   return `${l.from}${arrow}${l.to}${tags.length ? `(${tags.join('・')})` : ''}`;
 }
 

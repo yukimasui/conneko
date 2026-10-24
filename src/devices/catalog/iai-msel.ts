@@ -211,13 +211,13 @@ const links = (p: ParamValues): InternalLink[] => {
   const ext = extOf(p);
   const g = isG(p);
   return [
-    // ティーチングボックスの非常停止・イネーブル接点（PC タイプは TB 未接続時に内部で 1+/1- を短絡。PG タイプは TB またはダミープラグ）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
-    { from: 'EMGS1+', to: 'EMGS1-' },
-    { from: 'ENBS1+', to: 'ENBS1-' },
+    // ティーチングボックスの非常停止・イネーブル接点（PC タイプは TB 未接続時に内部で 1+/1- を短絡。PG タイプは TB またはダミープラグ）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+    { from: 'EMGS1+', to: 'EMGS1-', switch: 'NC', safetyContact: true },
+    { from: 'ENBS1+', to: 'ENBS1-', switch: 'NC', safetyContact: true },
     ...(g
       ? [
-          { from: 'EMGS2+', to: 'EMGS2-' },
-          { from: 'ENBS2+', to: 'ENBS2-' },
+          { from: 'EMGS2+', to: 'EMGS2-', switch: 'NC' as const, safetyContact: true },
+          { from: 'ENBS2+', to: 'ENBS2-', switch: 'NC' as const, safetyContact: true },
         ]
       : []),
     ...pioLinks(selPio40('I/O1', 0, 300), stdPolarity(p), 0.1),

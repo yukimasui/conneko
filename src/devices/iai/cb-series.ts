@@ -235,8 +235,8 @@ export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
     const ls: InternalLink[] = [
       // 制御電源の 24V から MPO へ内部でつながる（MPI-MPO を短絡するとモーター電源が入る）
       { from: '24V', to: 'MPO', directed: true },
-      // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ）。TB 接続時は TB の停止スイッチ（b 接点）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
-      { from: 'S1', to: 'S2' },
+      // ティーチングボックス未接続時は内部で S1-S2 を短絡（CGB はダミープラグ）。TB 接続時は TB の停止スイッチ（b 接点）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+      { from: 'S1', to: 'S2', switch: 'NC', safetyContact: true },
     ];
     if (isPio(io)) ls.push(...pioLinks(positionerPio40('PIO', patternOf(p), s.out15), polarityOf(io)));
     return ls;
