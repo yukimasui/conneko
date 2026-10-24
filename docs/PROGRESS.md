@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.21 IDEC RU4S-D24 の追加など）
+最終更新: 2026-10-24（v0.6.22 展開図の文字の向き・I/O 図の相手など）
 
 ## 現在地
 
+- v0.6.22（#21 の一部）: 180°/270° の記号の属性の文字を読める向きに（`upsideDown` / `upside_down`）。I/O 図の 2 つ目からの相手を「ほかに …」で添える
 - v0.6.21（#11 の一部）: `idec.ru4s-d24`（SY4S-05 の端子の位置は推定）
 - v0.6.20（#10 の一部）: `SignalSpec.ref`（アナログの基準端子）と `analog-return`。KV-AM40V・KV-TP40・IL-1000・FR-E820 に設定
 - v0.6.19（#10 の一部）: 接点の `ratedCurrent` と `contact-overload`、`cContact` の定格。`SignalSpec` の `leakCurrent`・`residualVoltage`・`onVoltage`・`offCurrent`・`twoWire` と

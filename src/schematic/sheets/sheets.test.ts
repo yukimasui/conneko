@@ -27,6 +27,22 @@ describe('内容を自動で作るシート', () => {
     expect(outPage.inserts.some((i) => i.symbol === 'lamp' && i.attributes?.TAG === 'PL2')).toBe(true);
   });
 
+  it('I/O 図: 1 つの点に相手の機器が複数あるときは、1 つ目を記号で描き、残りの名前を添える', () => {
+    const diagram = {
+      ...sampleDiagram,
+      devices: [...sampleDiagram.devices, { id: 'PL3', type: 'generic.pilot-lamp.dc24v', x: 480, y: 140, sheet: 'S4' }],
+      wires: [
+        ...sampleDiagram.wires,
+        { id: 'WPL3a', from: { device: 'PSU1', terminal: '+V1' }, to: { device: 'PL3', terminal: 'X1' }, wireNo: 'P24', color: 'blue', sizeSq: 0.75, wireType: 'KIV' },
+        { id: 'WPL3b', from: { device: 'TB4', terminal: '1' }, to: { device: 'PL3', terminal: 'X2' }, wireNo: 'R200', color: 'blue', sizeSq: 0.75, wireType: 'KIV' },
+      ],
+      schematic: { sheets: [...sampleDiagram.schematic!.sheets, { id: 'IO', name: 'I/O 図', kind: 'io' as const, rails: { supply: 'PSU1.+V1', common: 'PSU1.-V1' }, items: [] }] },
+    };
+    const doc = buildSchematic(diagram, getDeviceDefinition).doc;
+    const texts = textsOf(doc, 'IO');
+    expect(texts).toContain('ほかに PL3');
+  });
+
   it('ユニット構成図: 位置の順のユニット、入出力番号の範囲、内部電源の収支', () => {
     const texts = textsOf(build([{ id: 'R', name: 'ユニット構成', kind: 'rack', items: [] }]), 'R');
     expect(texts).toEqual(expect.arrayContaining(['PLC1', 'IN1', 'OUT1', 'R000〜R115（32 点）', 'R200〜R315（32 点）']));

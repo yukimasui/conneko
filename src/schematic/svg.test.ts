@@ -1,0 +1,27 @@
+/**
+ * 展開図の SVG の描き方（記号を回したときの属性の文字の向き）。
+ */
+import { describe, expect, it } from 'vitest';
+import type { SymbolDef } from './format';
+import { symbolSvg, upsideDown } from './svg';
+
+const def: SymbolDef = {
+  description: 't',
+  primitives: [],
+  pins: {},
+  attributes: [{ tag: 'TAG', at: [5, 0], height: 2.5, align: 'left' }],
+};
+
+describe('記号を回したときの属性の文字', () => {
+  it('180°・270° は逆さ・上から読む向きになるので、読める向きに直す', () => {
+    expect([0, 90, 180, 270, -90].map((r) => upsideDown(r))).toEqual([false, false, true, true, true]);
+  });
+
+  it('逆さになる文字は 180° 回し、左寄せを右寄せにして記号の外側へ伸ばす', () => {
+    expect(symbolSvg(def, { TAG: 'PL1' }, '#000', 0)).toMatch(/text-anchor="start"/);
+    const flipped = symbolSvg(def, { TAG: 'PL1' }, '#000', 180);
+    expect(flipped).toMatch(/rotate\(-180\)/);
+    expect(flipped).toMatch(/text-anchor="end"/);
+    expect(symbolSvg(def, { TAG: 'PL1' }, '#000', 90)).not.toMatch(/rotate/);
+  });
+});

@@ -99,6 +99,24 @@ class ConvertTest(unittest.TestCase):
         with self.assertRaises(conneko_dxf.SchematicError):
             conneko_dxf.convert(bad, self.dir / "bad.dxf")
 
+    def test_逆さになる属性の文字は読める向きにする(self) -> None:
+        sch = copy.deepcopy(self.schematic)
+        sheet = sch["sheets"][0]
+        ins = next(i for i in sheet["inserts"] if (i.get("attributes") or {}).get("TAG"))
+        sheet["inserts"] = [{**ins, "rotation": r, "attributes": {"TAG": f"R{r}"}} for r in (0, 90, 180, 270)]
+        out = self.dir / "rot.dxf"
+        conneko_dxf.convert(sch, out, split=False)
+        doc = ezdxf.readfile(out)
+        rot = {a.dxf.text: a.dxf.rotation % 360 for i in doc.modelspace().query("INSERT") for a in i.attribs if a.dxf.tag == "TAG"}
+        # 0° と 90° はそのまま、180° は 0°、270° は 90° の向きになる
+        self.assertAlmostEqual(rot["R0"], 0)
+        self.assertAlmostEqual(rot["R90"], 90)
+        self.assertAlmostEqual(rot["R180"], 0)
+        self.assertAlmostEqual(rot["R270"], 90)
+
+    def test_upside_down(self) -> None:
+        self.assertEqual([conneko_dxf.upside_down(r) for r in (0, 90, 180, 270, -90, 360)], [False, False, True, True, True, False])
+
 
 if __name__ == "__main__":
     unittest.main()
