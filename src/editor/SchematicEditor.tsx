@@ -10,8 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DiagramSettings } from '../model/diagram';
 import type { Point, SymbolDef } from '../schematic/format';
 import { autoLayout, nextPosition } from '../schematic/autoLayout';
-import { canBeVertical, canFlip, itemSymbol, type ElementEntry, type SchematicBuild } from '../schematic/layout';
-import { paperOf, snap, type Rotation, type Schematic, type SchematicItem, type WireBend } from '../schematic/model';
+import { canBeVertical, canFlip, itemSymbol, ROW_PITCH, snapToRow, type ElementEntry, type SchematicBuild } from '../schematic/layout';
+import { paperOf, snap, type Rotation, type Schematic, type SchematicItem, type SchematicSheet, type WireBend } from '../schematic/model';
 import type { PneumaticGroup } from '../schematic/sheets/pneumatic';
 import { NewSheetDialog, SheetSettings } from './SchematicSheetPanel';
 import { placedBounds, symbolBounds } from '../schematic/place';
@@ -54,6 +54,14 @@ function SymbolPreview({ def }: { def: SymbolDef }) {
   );
 }
 
+/** 母線のある制御回路のシートか（記号の上下の位置を行番号の段にそろえる） */
+const rowSnapped = (sh: SchematicSheet) => !sh.kind && !!sh.rails?.supply;
+
+/** 記号を置く位置を格子にそろえる。制御回路のシートでは、上下はいちばん近い段にそろえる */
+export function snapItem(s: Schematic, sh: SchematicSheet, x: number, y: number): { x: number; y: number } {
+  return { x: snap(x), y: rowSnapped(sh) ? snapToRow(y, paperOf(s, sh).height) : snap(y) };
+}
+
 /** 要素を、指定のシートの位置に置く（ほかのシートに置いてあれば移す） */
 function placeElement(s: Schematic, sheetId: string, element: string, at: { x: number; y: number }, rotation?: Rotation): Schematic {
   return {
@@ -62,18 +70,18 @@ function placeElement(s: Schematic, sheetId: string, element: string, at: { x: n
       const rest = sh.items.filter((i) => i.element !== element);
       if (sh.id !== sheetId) return rest.length === sh.items.length ? sh : { ...sh, items: rest };
       const prev = sh.items.find((i) => i.element === element);
-      const item: SchematicItem = { element, x: snap(at.x), y: snap(at.y), ...((rotation ?? prev?.rotation) ? { rotation: rotation ?? prev?.rotation } : {}) };
+      const item: SchematicItem = { element, ...snapItem(s, sh, at.x, at.y), ...((rotation ?? prev?.rotation) ? { rotation: rotation ?? prev?.rotation } : {}) };
       return { ...sh, items: [...rest, item] };
     }),
   };
 }
 
-function updateItem(s: Schematic, element: string, patch: (it: SchematicItem) => SchematicItem | null): Schematic {
+function updateItem(s: Schematic, element: string, patch: (it: SchematicItem, sh: SchematicSheet) => SchematicItem | null): Schematic {
   return {
     ...s,
     sheets: s.sheets.map((sh) => {
       if (!sh.items.some((i) => i.element === element)) return sh;
-      return { ...sh, items: sh.items.flatMap((i) => (i.element === element ? (patch(i) ?? []) : [i])) };
+      return { ...sh, items: sh.items.flatMap((i) => (i.element === element ? (patch(i, sh) ?? []) : [i])) };
     }),
   };
 }
@@ -191,7 +199,9 @@ export function SchematicEditor(props: Props) {
         e.preventDefault();
         return;
       }
-      const move = (dx: number, dy: number) => onChange((s) => updateItem(s, selected, (i) => ({ ...i, x: snap(i.x + dx), y: snap(i.y + dy) })));
+      // 制御回路のシートでは、上下の矢印で 1 段ずつ動かす
+      const move = (dx: number, dy: number) =>
+        onChange((s) => updateItem(s, selected, (i, sh) => ({ ...i, ...snapItem(s, sh, i.x + dx, i.y + (rowSnapped(sh) ? Math.sign(dy) * ROW_PITCH : dy)) })));
       if (e.key === 'r' || e.key === 'R') turn(selected, e.shiftKey ? -90 : 90);
       else if (e.key === 'f' || e.key === 'F') flip(selected);
       else if (e.key === 'v' || e.key === 'V') toggleVertical(selected);
@@ -262,7 +272,7 @@ export function SchematicEditor(props: Props) {
             onMove={(element, x, y) =>
               pneumatic
                 ? onChange((s) => movePneumatic(s, current.id, element, { x, y }))
-                : onChange((s) => updateItem(s, element, (i) => ({ ...i, x: snap(x), y: snap(y) })))
+                : onChange((s) => updateItem(s, element, (i, sh) => ({ ...i, ...snapItem(s, sh, x, y) })))
             }
           />
         )}
