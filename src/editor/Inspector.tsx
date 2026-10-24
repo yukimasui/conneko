@@ -213,7 +213,7 @@ function IoHeadField({ node, def, params, props }: { node: DeviceFlowNode; def: 
   const auto = !!node.data.mount && !host?.bus?.host?.numbering?.relative;
   return (
     <div className="field">
-      <span>先頭番号{auto ? '（装着位置から自動）' : node.data.mount ? '（親の設定で決まる番号。装着位置からの相対番号を変えられます）' : ''}</span>
+      <span>先頭番号{auto ? '（装着位置から自動）' : node.data.mount ? '（番号は親の設定で決まるので、手で指定できます）' : ''}</span>
       {rows.map((r) => {
         const head = Number(params[r.key] ?? 0) + r.offset;
         const range = `${ioName(io.format, r.dir, head)}〜${ioName(io.format, r.dir, head + r.count - 1)}`;
