@@ -17,6 +17,7 @@ export default buildXcTerminal({
   poles: 34,
   lengthMm: 124.5,
   numbering: 'keyence',
+  estimated: '端子台の印字（奥段 1〜17・手前段 18〜34）とコネクタのピンの対応は推定（公開資料で確認できなかった）',
   description:
     'KEYENCE の MIL 34極 → ネジ端子 変換端子台（M3、定格 AC/DC125V 1A/pin、AWG22〜16）。KV-C32XC / KV-C64XC / KV-C32TD など MIL 34極の I/O ユニットと 34極ケーブル（XC-H34 など）でつなぐ。端子番号は奥段 1〜17・手前段 18〜34 で、I/O ユニットの KEYENCE ピン番号（No.1〜34）と同じ番号の端子に出る想定（端子 k ↔ コネクタの MIL 標準ピン 2k−1 / 2(k−17)。実物の印字は未確認）。',
 });

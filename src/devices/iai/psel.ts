@@ -32,6 +32,9 @@ export interface PselSpec {
   actuators: string;
 }
 
+/** PSEL / ASEL に共通の推定の値 */
+const ESTIMATED = 'PIO（34 極）のコネクターの形式は推定（資料で確認できず、付属ケーブル CB-DS-PIO とだけつながる専用の種類にした）';
+
 const W = 43 * MM;
 const H = 159 * MM;
 const X = (mm: number) => n2(mm * MM);
@@ -174,6 +177,7 @@ export function buildPsel(spec: PselSpec): DeviceDefinition {
     maker: 'IAI',
     category: 'plc',
     description: spec.description,
+    estimated: ESTIMATED,
     labelPrefix: spec.series,
     width: W,
     height: H,

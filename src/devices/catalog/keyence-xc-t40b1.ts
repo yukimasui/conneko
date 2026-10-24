@@ -17,6 +17,7 @@ export default buildXcTerminal({
   poles: 40,
   lengthMm: 145.5,
   numbering: 'std',
+  estimated: '端子台の印字（奥段 奇数・手前段 偶数）とコネクタのピンの対応は推定（公開資料で確認できなかった）',
   description:
     'KEYENCE の MIL 40極 → ネジ端子 変換端子台（M3、定格 AC/DC125V 1A/pin、AWG22〜16）。KV-SIR32XT / KV-SH04PL / KV-SSC02 など MIL 40極のユニットと 40極ケーブル（XC-H40 など）でつなぐ。端子 n はコネクタの MIL 標準ピン n と導通（奥段が奇数、手前段が偶数と想定。実物の印字は未確認）。',
 });

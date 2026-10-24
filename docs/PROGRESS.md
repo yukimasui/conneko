@@ -1,9 +1,11 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.17 R-unit のモーター電源の電路など）
+最終更新: 2026-10-24（v0.6.18 推定の値の表示の付け漏れなど）
 
 ## 現在地
 
+- v0.6.18（#9）: 推定の付け漏れ（KV-8000/KV-X の自動割付け、XC-T34B1/T40B1、PSEL/ASEL、RCON-NP、WS0-XTIO）に `estimated`。
+  docs の「推定」の行と機器定義の突き合わせテスト（`src/devices/estimates.test.ts`）。KV の自動割付けの実機確認は未実施
 - v0.6.17（#8 完了）: 端子の `busNet`（親と装着ユニットの同名の端子を常時導通）。R-unit の MP+ → MPO（`role: 'load'`）
 - v0.6.16（#8 の一部）: `bus.feeds`（親の消費に装着ユニットを加える）、電源の容量チェック `supply-overload`、`SupplySpec.busRail`（FX5U のサービス電源と共用）、
   `io.reserve`（KV-XH04ML）、`numbering.relative`（KV-EC01 の先頭番号の手入力）。レールの電位（IAI RCON の MPO）は残り
