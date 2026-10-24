@@ -33,7 +33,7 @@
  */
 import type { ConnectorSpec, DeviceDefinition, ParamValues, PinDef, TerminalDef } from '../types';
 import { text } from '../generic/parts';
-import { fittingDown, fittingFace, SY_FUNCTIONS, syAirLinks, syDefs, syPneumatic, type SyFunction } from './sy-common';
+import { fittingDown, fittingFace, SY_COIL_CURRENT, SY_FUNCTIONS, syAirLinks, syDefs, syPneumatic, type SyFunction } from './sy-common';
 import { BASE_TOP, baseSegment, blankSvg, END_BOTTOM, END_TOP, H, manifoldParams, SY_SIZES, type SySize } from './sy-manifold';
 
 /** 通信方式（型式の SI ユニットの記号の 1 文字目） */
@@ -259,7 +259,8 @@ export function buildSs5y10s(size: SySize, type: string): DeviceDefinition {
         y: CN.in.y,
         side: 'left',
         role: 'connector',
-        connector: busConnector(proto.protocols),
+        // 上位からの通信がなければ弁は動かないので、つなぎ忘れを警告する
+        connector: { ...busConnector(proto.protocols), required: true },
       },
       {
         id: 'OUT',
@@ -314,6 +315,8 @@ export function buildSs5y10s(size: SySize, type: string): DeviceDefinition {
     svg,
     terminals,
     pins: (p) => powerPins(protocolOf(p).powerPins),
+    // 制御用 100mA ＋ 装着した弁のソレノイドの電流（fromUnits で求める）。電源の保護・電線の太さの確認に使う
+    loadCurrent: { param: 'loadCurrent' },
     params: [
       {
         key: 'protocol',
@@ -355,12 +358,27 @@ export function buildSs5y10s(size: SySize, type: string): DeviceDefinition {
         slots: 24,
         origin: { x: W, y: 0 },
         airGallery: { P: 'P', EA: 'EA', EB: 'EB' },
-        fromUnits: manifoldParams,
+        fromUnits: serialManifoldParams,
         serial: { wiring: { param: 'wiring' }, outputs: outputsOf, unitModel: siUnitModel },
       },
     },
     pneumatic: { symbol: 'manifold', ports: { sup: 'P', exh: 'EA' } },
   };
+}
+
+/** SI ユニットの制御用の消費電流[A]（内部消費電流 100mA 以下） */
+const SI_CONTROL_CURRENT = 0.1;
+
+/**
+ * 装着した連から求めるマニホールドのパラメータ: 連数・A/B の継手の記号（個別配線と同じ）と、
+ * 電源の消費電流（制御用 ＋ 弁のソレノイドの数 × 0.4W / 24V）。ソレノイドは同時に全部が ON になるとみなす
+ */
+export function serialManifoldParams(units: { def: DeviceDefinition; params: ParamValues }[]): ParamValues {
+  const solenoids = units.reduce((n, u) => {
+    const hint = typeof u.def.pneumatic === 'function' ? u.def.pneumatic(u.params) : u.def.pneumatic;
+    return n + Object.values(hint?.valve?.operators ?? {}).filter((o) => o === 'solenoid').length;
+  }, 0);
+  return { ...manifoldParams(units), loadCurrent: Math.round((SI_CONTROL_CURRENT + solenoids * SY_COIL_CURRENT) * 1000) / 1000 };
 }
 
 export interface SyPlugInSpec {
