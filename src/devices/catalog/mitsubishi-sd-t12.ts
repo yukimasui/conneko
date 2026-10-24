@@ -14,8 +14,9 @@ const H = 150;
 
 /** 端子の横位置（左から 13NO, 1/L1, 3/L2, 5/L3, 21NC） */
 const COLS = [12, 28, 44, 60, 76];
-const TOP_Y = 40;
-const BOT_Y = 126;
+/** 上段は上端から 23.7mm、上下の端子の間隔 41.6mm（外形図 L(NA)02030ENG-K。S-T20 と同じ） */
+const TOP_Y = 47.5;
+const BOT_Y = 130.5;
 /** 操作コイル端子（上部ブロック） */
 const COIL_Y = 12;
 const A2_X = 30;
@@ -79,20 +80,20 @@ const svg = `
   <rect x="2" y="24" width="${W - 4}" height="${H - 27}" rx="3" fill="url(#body-{{uid}})" stroke="#9c978a" stroke-width="0.9"/>
 
   <!-- 上段端子 -->
-  <rect x="3" y="28" width="${W - 6}" height="24" rx="1.5" fill="url(#pocket-{{uid}})"/>
-  ${barriers(27, 26)}
+  <rect x="3" y="35.5" width="${W - 6}" height="24" rx="1.5" fill="url(#pocket-{{uid}})"/>
+  ${barriers(34.5, 26)}
   ${COLS.map((x) => screw(x, TOP_Y)).join('')}
-  ${mark(COLS[0], 57, '13NO')}
-  ${mark(COLS[1], 57, '1/L1')}
-  ${mark(COLS[2], 57, '3/L2')}
-  ${mark(COLS[3], 57, '5/L3')}
-  ${mark(COLS[4], 57, '21NC')}
+  ${mark(COLS[0], 64, '13NO')}
+  ${mark(COLS[1], 64, '1/L1')}
+  ${mark(COLS[2], 64, '3/L2')}
+  ${mark(COLS[3], 64, '5/L3')}
+  ${mark(COLS[4], 64, '21NC')}
 
   <!-- 中央: 形名・可動部・ロゴ -->
   <text x="6" y="80" font-family="sans-serif" font-size="8" font-weight="bold" fill="#333">SD-T12</text>
   <text x="6" y="88" font-family="sans-serif" font-size="3.6" fill="#555">DC24V  1a1b</text>
-  <rect x="38.5" y="64" width="11" height="38" rx="1.5" fill="url(#slot-{{uid}})" stroke="#555" stroke-width="0.5"/>
-  <rect x="40.5" y="74" width="7" height="16" rx="1" fill="#1a1a1a" stroke="#4d4d4d" stroke-width="0.6"/>
+  <rect x="38.5" y="70" width="11" height="36" rx="1.5" fill="url(#slot-{{uid}})" stroke="#555" stroke-width="0.5"/>
+  <rect x="40.5" y="80" width="7" height="16" rx="1" fill="#1a1a1a" stroke="#4d4d4d" stroke-width="0.6"/>
   <g transform="translate(58 89)">
     <path d="M3 0 L4.6 2.8 L3 5.6 L1.4 2.8 Z M3 5.6 L0 5.6 L-1.6 8.4 L1.6 8.4 Z M3 5.6 L6 5.6 L7.6 8.4 L4.4 8.4 Z" fill="#d01c1f"/>
   </g>
@@ -100,13 +101,13 @@ const svg = `
   <text x="66" y="96.5" font-family="sans-serif" font-size="2.5" font-weight="bold" fill="#333">ELECTRIC</text>
 
   <!-- 下段端子 -->
-  ${mark(COLS[0], 109, '14NO')}
-  ${mark(COLS[1], 109, '2/T1')}
-  ${mark(COLS[2], 109, '4/T2')}
-  ${mark(COLS[3], 109, '6/T3')}
-  ${mark(COLS[4], 109, '22NC')}
-  <rect x="3" y="114" width="${W - 6}" height="24" rx="1.5" fill="url(#pocket-{{uid}})"/>
-  ${barriers(113, 26)}
+  ${mark(COLS[0], 114, '14NO')}
+  ${mark(COLS[1], 114, '2/T1')}
+  ${mark(COLS[2], 114, '4/T2')}
+  ${mark(COLS[3], 114, '6/T3')}
+  ${mark(COLS[4], 114, '22NC')}
+  <rect x="3" y="118.5" width="${W - 6}" height="24" rx="1.5" fill="url(#pocket-{{uid}})"/>
+  ${barriers(117.5, 26)}
   ${COLS.map((x) => screw(x, BOT_Y)).join('')}
 
   <rect x="8" y="${H - 5}" width="${W - 16}" height="5" rx="1.5" fill="#1d1d1d"/>
