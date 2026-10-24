@@ -43,6 +43,18 @@ describe('内容を自動で作るシート', () => {
     expect(texts).toContain('ほかに PL3');
   });
 
+  it('I/O 図: 入るなら次のユニットの表を同じページに続ける（大きい用紙）。入らなければ次のページから', () => {
+    const big = build([{ id: 'IO', name: 'I/O 図', kind: 'io', paper: 'A0', rails: { supply: 'PSU1.+V1', common: 'PSU1.-V1' }, items: [] }]);
+    const pages = big.sheets.filter((s) => s.source === 'IO');
+    expect(pages).toHaveLength(1);
+    const titles = pages[0].texts.filter((t) => t.layer === 'TAG' && t.height === 3).map((t) => t.text);
+    expect(titles.some((t) => t.includes('IN1'))).toBe(true);
+    expect(titles.some((t) => t.includes('OUT1'))).toBe(true);
+    // A3 では 1 ユニットが 2 ページに分かれ、同じページに別のユニットは入らない
+    const a3 = build([{ id: 'IO', name: 'I/O 図', kind: 'io', rails: { supply: 'PSU1.+V1', common: 'PSU1.-V1' }, items: [] }]).sheets.filter((s) => s.source === 'IO');
+    for (const p of a3) expect(new Set(p.texts.filter((t) => t.layer === 'TAG' && t.height === 3).map((t) => t.text.split('  ')[1])).size).toBe(1);
+  });
+
   it('ユニット構成図: 位置の順のユニット、入出力番号の範囲、内部電源の収支', () => {
     const texts = textsOf(build([{ id: 'R', name: 'ユニット構成', kind: 'rack', items: [] }]), 'R');
     expect(texts).toEqual(expect.arrayContaining(['PLC1', 'IN1', 'OUT1', 'R000〜R115（32 点）', 'R200〜R315（32 点）']));

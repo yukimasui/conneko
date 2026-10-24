@@ -373,6 +373,47 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
     const yOf = (pin: string) => item.y - (def.pins[pin]?.[1] ?? 0);
     return { item, def, yOf };
   };
+  const done = new Set<string>();
+  /** 主回路の機器以外（電源ユニットなど箱になる機器）を、端子 anchor が (x, y) に来るように横向きで置く */
+  const putEntry = (entry: ElementEntry, x: number, y: number, anchor: string) => {
+    const item: SchematicItem = { element: entry.id, x: 0, y: 0 };
+    const def = itemSymbol(entry, item);
+    const p = def.pins[anchor] ?? [0, 0];
+    item.x = snap(x - p[0]);
+    item.y = snap(y + p[1]);
+    items.push(item);
+    done.add(entry.id);
+    placed++;
+    return item;
+  };
+  /** 置いた記号の右端（x） */
+  const rightOf = (item: SchematicItem, def: SymbolDef) => placedBounds(def, [item.x, H - item.y], item.rotation).x2;
+  /**
+   * 横向きに置いた主回路の機器 n の二次側の先（分岐の先）を、右へ続けて置く。
+   * 主回路の子（サーキットプロテクタの先の電動機など）と、二次側から給電される箱（電源ユニットなど）を、
+   * 二次側の端子の高さにそろえて右に並べる（複数あれば下へずらす）
+   */
+  const follow = (n: MainNode, item: SchematicItem, def: SymbolDef, yOf: (pin: string) => number) => {
+    let x = rightOf(item, def) + 15;
+    let y = yOf('2');
+    for (const c of [...n.children].sort((a, b) => b.depth - a.depth)) {
+      if (done.has(c.entry.id)) continue;
+      const r = put(c, false, x, y, '1');
+      done.add(c.entry.id);
+      follow(c, r.item, r.def, r.yOf);
+      y = Math.max(y, r.yOf(String(2 * Math.max(1, c.ins.length) - 1))) + 10;
+    }
+    if (!n.outs.length) return;
+    for (const box of build.elements) {
+      if (box.element.kind !== 'box' || done.has(box.id) || placedIds.has(box.id)) continue;
+      // 二次側の 1 極目の網につながる箱の端子
+      const anchor = Object.keys(box.element.pinOf).find((t) => build.circuitNetOf(box.device, t) === n.outs[0]);
+      if (!anchor) continue;
+      const it = putEntry(box, x, y, box.element.pinOf[anchor]);
+      x = rightOf(it, itemSymbol(box, it)) + 15;
+    }
+  };
+
   // 既に置いた記号の右から始める
   let x0 = MAIN_X;
   for (const it of sheet.items) {
@@ -389,6 +430,7 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
       // 端子 1（一次電源は 1 番目の端子、ほかは 1 極目の一次側）を本線の列にそろえる
       if (!first) y += MAIN_GAP;
       const { def, yOf } = put(node, vertical, x, y, '1');
+      done.add(node.entry.id);
       first = false;
       // 二次側の端子の高さ（なければ記号の下端）
       const outPin = node.entry.element.kind === 'source' ? '1' : node.entry.element.kind === 'motor' ? undefined : '2';
@@ -399,8 +441,12 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
       const branches = sorted.slice(1);
       const width = vertical ? Math.max(...Object.values(def.pins).map((q) => q[0])) - def.pins['1'][0] : 0;
       for (const b of branches) {
+        if (done.has(b.entry.id)) continue;
         y += 7.5;
         const r = put(b, false, x + width + 25, y, '1');
+        done.add(b.entry.id);
+        // 分岐の先（電源ユニット・小さな電動機など）も右へ続けて置く
+        follow(b, r.item, r.def, r.yOf);
         const lastIn = String(2 * (b.ins.length - 1) + 1);
         y = Math.max(y, r.yOf(lastIn)) + 2.5;
       }

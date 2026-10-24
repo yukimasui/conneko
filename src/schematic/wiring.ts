@@ -104,9 +104,18 @@ export const RAIL_DETOURS = [-5, -7.5, 5, 7.5, -10, 10, -12.5, 12.5, -2.5, 2.5];
 export function railRoute(p: PinAt, railX: number, net: string, obstacles: Bounds[], segments: Segment[], detours = RAIL_DETOURS): Point[] {
   const straight: Point[] = [p.pos, [railX, p.pos[1]]];
   const candidates: Point[][] = [straight];
+  // 決まったずらしで足りないとき（背の高い箱が並ぶなど）のために、母線までの間にある記号の上下の縁のすぐ外も候補にする
+  const [x1, x2] = [Math.min(p.pos[0], railX), Math.max(p.pos[0], railX)];
+  const edges = obstacles
+    .filter((r) => r.x2 > x1 && r.x1 < x2)
+    .flatMap((r) => [r.y1 - 2.5 - p.pos[1], r.y2 + 2.5 - p.pos[1]])
+    .map((dy) => Math.round(dy / 2.5) * 2.5)
+    .filter((dy) => dy !== 0 && Math.abs(dy) <= 40)
+    .sort((a, b) => Math.abs(a) - Math.abs(b));
+  const all = [...detours, ...edges.filter((dy) => !detours.includes(dy))];
   for (const len of STUBS) {
     const s: Point = [p.pos[0] + p.dir[0] * len, p.pos[1] + p.dir[1] * len];
-    for (const dy of detours) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
+    for (const dy of all) candidates.push(simplify([p.pos, s, [s[0], s[1] + dy], [railX, s[1] + dy]]));
   }
   let best = straight;
   let bestScore = Infinity;

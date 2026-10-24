@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SymbolDef } from './format';
 import { symbolSvg, upsideDown } from './svg';
-import { wireNoAt } from './wiring';
+import { hits, railRoute, wireNoAt } from './wiring';
 
 const def: SymbolDef = {
   description: 't',
@@ -53,5 +53,15 @@ describe('線番の位置（wireNoAt）', () => {
         ],
       ])?.at,
     ).toEqual([15, 11.8]);
+  });
+});
+
+describe('母線への引き出し（railRoute）', () => {
+  it('決まったずらしでは記号を横切る（背の高い記号）ときも、記号の縁の外を回り込む', () => {
+    // 端子は高さ ±20 の記号の右の縁から右へ出ていて、母線は左
+    const box = { x1: 80, y1: -20, x2: 100, y2: 20 };
+    const pl = railRoute({ pos: [100, 0], dir: [1, 0] }, 0, 'n', [box], []);
+    expect(hits(pl, [box])).toBe(0);
+    expect(pl[pl.length - 1][0]).toBe(0);
   });
 });

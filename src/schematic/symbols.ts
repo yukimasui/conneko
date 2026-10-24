@@ -86,8 +86,8 @@ function actuatorPrimitives(actuator: ContactActuator): Primitive[] {
       // 引き操作: 接点と反対の側へ脚の出た横棒
       return [line([3.5, y + 0.7], [3.5, y], [6.5, y], [6.5, y + 0.7])];
     case 'limit':
-      // 機械的な操作（リミットスイッチ）: 接点の側へ向いた三角
-      return [{ kind: 'line', points: [[4, y + 1], [6, y + 1], [LINK_X, y - 0.5]], closed: true }];
+      // 機械的な操作（リミットスイッチ）: ドグに押されるローラー（丸）
+      return [{ kind: 'circle', center: [LINK_X, y + 0.4], r: 0.9 }];
     case 'thermal':
       // 熱動
       return [line([3, y], [4, y], [4, y + 1.2], [6, y + 1.2], [6, y], [7, y])];
@@ -117,12 +117,14 @@ const ACTUATOR_NAMES: Record<ContactActuator, string> = {
 /**
  * 直接開路動作の印（IEC 60617 の「強制開離」。丸の中に開く向きの矢印）。操作部と接点をつなぐ破線の途中に描く
  */
-function directOpeningPrimitives(bladeY: number, top: number): Primitive[] {
-  const cy = (bladeY + top) / 2 + 0.3;
+function directOpeningPrimitives(top: number): Primitive[] {
+  // 端子番号（T1）に重ならないよう、操作部のすぐ下に置く
+  const cy = top - 1;
+  const cx = LINK_X - 1.5;
   return [
-    { kind: 'circle', center: [LINK_X - 1.6, cy], r: 1.1 },
-    line([LINK_X - 1.6, cy + 0.7], [LINK_X - 1.6, cy - 0.7]),
-    line([LINK_X - 2.1, cy - 0.15], [LINK_X - 1.6, cy - 0.7], [LINK_X - 1.1, cy - 0.15]),
+    { kind: 'circle', center: [cx, cy], r: 0.9 },
+    line([cx, cy + 0.55], [cx, cy - 0.55]),
+    line([cx - 0.4, cy - 0.1], [cx, cy - 0.55], [cx + 0.4, cy - 0.1]),
   ];
 }
 
@@ -131,7 +133,7 @@ function contact(kind: 'NO' | 'NC', actuator?: ContactActuator, directOpening = 
   const bladeY = kind === 'NO' ? MAKE_BLADE_AT_LINK : BREAK_BLADE_AT_LINK;
   const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
   if (actuator) primitives.push(dashed([LINK_X, bladeY], [LINK_X, top]), ...actuatorPrimitives(actuator));
-  if (directOpening) primitives.push(...directOpeningPrimitives(bladeY, top));
+  if (directOpening) primitives.push(...directOpeningPrimitives(top));
   return {
     description: `${kind === 'NO' ? 'a 接点' : 'b 接点'}${actuator || directOpening ? `（${[actuator && ACTUATOR_NAMES[actuator], directOpening && '直接開路動作'].filter(Boolean).join('・')}）` : ''}`,
     primitives,
@@ -154,7 +156,7 @@ function changeover(actuator?: ContactActuator, directOpening = false): SymbolDe
   primitives.push(line([FIXED_AT, 5], [LEN, 5]), line([FIXED_AT, 5], [FIXED_AT, 3.8]));
   const top = actuator === 'limit' ? ACTUATOR_Y - 0.5 : ACTUATOR_Y;
   if (actuator) primitives.push(dashed([LINK_X, BREAK_BLADE_AT_LINK], [LINK_X, top]), ...actuatorPrimitives(actuator));
-  if (directOpening) primitives.push(...directOpeningPrimitives(BREAK_BLADE_AT_LINK, top));
+  if (directOpening) primitives.push(...directOpeningPrimitives(top));
   return {
     description: `c 接点${actuator || directOpening ? `（${[actuator && ACTUATOR_NAMES[actuator], directOpening && '直接開路動作'].filter(Boolean).join('・')}）` : ''}`,
     primitives,
