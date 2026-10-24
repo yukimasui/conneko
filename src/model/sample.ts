@@ -64,6 +64,7 @@ const base: Diagram = {
     { id: 'TB3', type: 'generic.mil-terminal-block.34p', x: 120, y: 690, sheet: 'S3' },
     { id: 'TB4', type: 'generic.mil-terminal-block.34p', x: 420, y: 690, sheet: 'S3' },
     { id: 'HMI1', type: 'keyence.vt5-w07', x: 520, y: 0, sheet: 'S3' },
+    { id: 'SW1', type: 'generic.ethernet-switch.5p', x: 900, y: 420, sheet: 'S3', note: '制御 LAN（PLC・タッチパネル・SI ユニット）' },
     { id: 'PH1', type: 'keyence.pz-g41', x: 120, y: 120, sheet: 'S4', note: 'ワーク検出（コンベア入口）' },
     { id: 'PL2', type: 'generic.pilot-lamp.dc24v', x: 420, y: 140, sheet: 'S4', note: '運転中表示' },
     // エア回路: エア源 → フィルタレギュレータ → 残圧排気弁 → マニホールド（2 連）→ スピードコントローラ → シリンダ・エアチャック
@@ -80,6 +81,12 @@ const base: Diagram = {
     { id: 'SL1', type: 'smc.an', x: 500, y: 900, params: { thread: '01' }, sheet: 'S5' },
     { id: 'SL2', type: 'smc.an', x: 590, y: 900, params: { thread: '01' }, sheet: 'S5' },
     { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },
+    // 通信タイプのマニホールド（SI ユニット EX260 の EtherNet/IP。ソレノイドは SI ユニットの出力番号で動かす）
+    { id: 'J1', type: 'smc.kq2t', x: 560, y: 800, params: { tubeOD: 8 }, sheet: 'S5' },
+    { id: 'MF2', type: 'smc.ss5y3-10s', x: 1330, y: 760, params: { protocol: 'E', points: 'B' }, sheet: 'S5', note: 'ストッパ用（EtherNet/IP）' },
+    { id: 'SOL4', type: 'smc.sy3200-5u1', x: 0, y: 0, mount: { device: 'MF2', slot: 1 }, sheet: 'S5', note: 'ストッパ 上昇 / 下降' },
+    { id: 'CY3', type: 'smc.cq2', x: 1580, y: 1080, sheet: 'S5', note: 'ストッパ' },
+    { id: 'CBL2', type: 'smc.ex500-ap050-s', x: 1250, y: 1010, sheet: 'S5' },
   ],
   wires: [
     // 一次側
@@ -137,7 +144,11 @@ const base: Diagram = {
     // エア配管（チューブ）
     t('AIR1:OUT', 'FR1:IN', 8),
     t('FR1:OUT', 'VHS1:IN', 8),
-    t('VHS1:OUT', 'MF1:P', 8),
+    t('VHS1:OUT', 'J1:A', 8),
+    t('J1:B', 'MF1:P', 8),
+    t('J1:C', 'MF2:P', 8),
+    t('SOL4:A', 'CY3:HEAD', 6),
+    t('SOL4:B', 'CY3:ROD', 6),
     t('SOL1:A', 'SC1:IN', 6),
     t('SC1:OUT', 'CY1:HEAD', 6),
     t('SOL1:B', 'SC2:IN', 6),
@@ -151,12 +162,25 @@ const base: Diagram = {
     // MIL ケーブル・LAN ケーブル
     { id: 'C1', from: { device: 'IN1', terminal: 'CN1' }, to: { device: 'TB3', terminal: 'CN' }, wireNo: 'CBL-IN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
     { id: 'C2', from: { device: 'OUT1', terminal: 'CN1' }, to: { device: 'TB4', terminal: 'CN' }, wireNo: 'CBL-OUT1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
-    { id: 'C3', from: { device: 'PLC1', terminal: 'ETH' }, to: { device: 'HMI1', terminal: 'LAN' }, wireNo: 'LAN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    { id: 'C3', from: { device: 'PLC1', terminal: 'ETH' }, to: { device: 'SW1', terminal: 'P1' }, wireNo: 'LAN1', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    { id: 'C4', from: { device: 'HMI1', terminal: 'LAN' }, to: { device: 'SW1', terminal: 'P2' }, wireNo: 'LAN2', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    // SI ユニットの通信（エア回路のシートの MF2 へ。シートをまたぐのでネットワークリンクに置き換わる）と電源ケーブル
+    { id: 'C5', from: { device: 'SW1', terminal: 'P3' }, to: { device: 'MF2', terminal: 'IN' }, wireNo: '制御LAN', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    { id: 'C6', from: { device: 'CBL2', terminal: 'CN' }, to: { device: 'MF2', terminal: 'PWR' }, wireNo: 'CBL-MF2', color: 'black', sizeSq: 0, wireType: 'CABLE' },
+    // EtherNet/IP の SI ユニットの電源ケーブル: 1 茶 = 制御用 24V、2 白 = 電磁弁用 24V、3 青 = 制御用 0V、4 黒 = 電磁弁用 0V
+    w('PSU1:+V1', 'CBL2:BN', 'P24', 'blue', 0.75),
+    w('PSU1:+V1', 'CBL2:WH', 'P24', 'blue', 0.75),
+    w('PSU1:-V1', 'CBL2:BU', 'N24', 'blue', 0.75),
+    w('PSU1:-V1', 'CBL2:BK', 'N24', 'blue', 0.75),
+    // スイッチングハブの電源
+    w('PLC1:24V+', 'SW1:V1+', 'P24', 'blue', 1.25),
+    w('PLC1:24V-', 'SW1:0V', 'N24', 'blue', 1.25),
     // 接地
     w('PS1:PE', 'M1:E', 'E', 'green', 3.5),
     w('PS1:PE', 'PSU1:PE', 'E', 'green', 2),
     w('PSU1:PE', 'PLC1:FG', 'E', 'green', 2),
     w('PLC1:FG', 'HMI1:FG', 'E', 'green', 2),
+    w('PLC1:FG', 'SW1:FG', 'E', 'green', 2),
   ],
   // 展開図の見本（主回路と、DC24V の表示灯・PLC の出力）
   schematic: {
