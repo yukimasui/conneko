@@ -104,6 +104,9 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
   コモンとは別に、出力点のグループで上限が決まる場合（「8 点で 400mA」「2 出力合計 100mA」）は
   `commonLimits: [{ outputs: ['Y0', 'Y1', …], current: 0.4, label: '出力 Y0〜Y7' }]`（`from` がその出力の負荷電流を合計）。
   NPN / PNP で基準側が変わる機器も、出力の端子で書けば同じ書き方でよい。`commonLimits` はパラメータの関数にもできる。
+- 接点（`switch: 'NO' | 'NC'`）にも `ratedCurrent` を書ける（リレーは抵抗負荷の定格、電磁接触器の主接点は AC-3 の定格電流）。
+  開閉する負荷（`directed` の接点は `to` 側、そうでなければ電源の来ていない側）の `loadCurrent` の合計と比べる（`contact-overload`）。
+  c 接点は `cContact(com, nc, no, ratedCurrent)`（`src/devices/generic/relay-socket.ts`）。
 - 安全用の接点: 直接開路動作（⊕）の b 接点は `directOpening: true`、ミラー接点・強制ガイド接点は `linked: 'mirror' | 'force-guided'`。
   ティーチングボックスの非常停止接点のように、機器の端子の間にあり機器の外のもので開く b 接点は `{ switch: 'NC', safetyContact: true }`。
   機器自身が動作しても切り換わらず（短絡の検査では閉じたまま）、安全入力のループでは機器自身の経路でも接点として数える。
@@ -120,6 +123,9 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 - 検出する誤り: NPN をマイナスコモンへ / PNP をプラスコモンへ、アナログとデジタルの混在、電圧と電流の取り違え、
   無電圧入力に電圧をかける、入力とコモンが同じ極、2線式センサーのもう一端が電源に届いていない、など。
 - NPN/PNP をパラメータで切り換える機器は、`terminals` を関数にして `signal.kind` と出力の `links` を切り換える。
+- 2 線式センサー（`2wire`）には `leakCurrent`（OFF のときの漏れ電流[mA]）・`residualVoltage`（ON のときの残留電圧[V]）、
+  DC 入力には `onVoltage`（最小 ON 電圧[V]）・`offCurrent`（OFF 電流[mA]）を書ける。2 線式センサーを使えない入力は `twoWire: false`。
+  漏れ電流が OFF 電流を超える、電源電圧から残留電圧を引くと最小 ON 電圧を下回る、使えない入力につなぐと `two-wire-input` の注意。
 
 ## 安全機器
 

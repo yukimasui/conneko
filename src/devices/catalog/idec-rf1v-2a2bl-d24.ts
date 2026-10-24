@@ -141,10 +141,10 @@ const def: DeviceDefinition = {
   ],
   // b 接点 3-4・5-6 と a 接点 7-8・9-10 はすべて強制ガイド（a 接点が溶着すると b 接点は開いたままになる）
   links: [
-    { from: '3', to: '4', switch: 'NC', linked: 'force-guided' },
-    { from: '5', to: '6', switch: 'NC', linked: 'force-guided' },
-    { from: '7', to: '8', switch: 'NO', linked: 'force-guided' },
-    { from: '9', to: '10', switch: 'NO', linked: 'force-guided' },
+    { from: '3', to: '4', switch: 'NC', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '5', to: '6', switch: 'NC', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '7', to: '8', switch: 'NO', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '9', to: '10', switch: 'NO', linked: 'force-guided', ratedCurrent: 6 },
   ],
   safety: { standards: ['EN 50205 タイプA'] },
   // コイル 15mA ＋ LED 約 2mA

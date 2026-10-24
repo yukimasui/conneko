@@ -70,6 +70,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkWireTerminals(m, push, protection);
   checkLoadProtection(m, push, protection);
   checkOutputCurrents(m, push);
+  checkContactCurrents(m, push);
   checkSupplyCapacity(m, push);
   checkSignals(m, push);
   checkSafety(m, push);
@@ -480,6 +481,50 @@ function checkSupplyCapacity(m: Model, push: Push) {
 }
 
 const amp = (n: number) => `${Math.round(n * 1000) / 1000}A`;
+
+/** fixed のグループにある機器の受電端子（role: 'input'）の機器と、消費電流の合計 */
+function netLoad(m: Model, k: string): { current: number; devices: string[] } {
+  const ids = new Set<string>();
+  for (const x of m.fixedMembers.get(m.fixed.find(k)) ?? []) {
+    const info = m.terminals.get(x)!;
+    if (info.terminal.role === 'input') ids.add(info.device.id);
+  }
+  let current = 0;
+  for (const id of ids) current += loadCurrentOf(m, m.devices.get(id)!) ?? 0;
+  return { current, devices: [...ids] };
+}
+
+/**
+ * 接点（a 接点・b 接点）1 点の定格電流（link.ratedCurrent）と、接点で開閉する負荷の定格電流の合計を比べる。
+ * 負荷側は、directed の接点なら to、そうでなければ電源の来ていない側（fixed のグループに電源出力がない側）のうち負荷のある側。
+ * どちらとも決められない接点（両側に電源・両側に負荷がある）は確かめない
+ */
+function checkContactCurrents(m: Model, push: Push) {
+  for (const s of m.switchLinks) {
+    if (s.link.switch !== 'NO' && s.link.switch !== 'NC') continue;
+    const d = m.devices.get(s.device)!;
+    const rated = resolveNum(s.link.ratedCurrent, d.def, d.device.params);
+    if (rated === undefined) continue;
+    let side: string | undefined;
+    if (s.link.directed) side = s.b;
+    else {
+      const hasSupply = (k: string) => (m.fixedMembers.get(m.fixed.find(k)) ?? []).some((x) => m.supplies.has(x));
+      const candidates = [s.a, s.b].filter((k) => !hasSupply(k) && netLoad(m, k).current > 0);
+      if (candidates.length === 1) side = candidates[0];
+    }
+    if (!side) continue;
+    const load = netLoad(m, side);
+    if (load.current <= rated + 1e-9) continue;
+    push({
+      severity: 'warning',
+      rule: 'contact-overload',
+      message: `${s.device} の接点 ${s.link.from}-${s.link.to}: 開閉する負荷（${load.devices.join(', ')}）の定格電流の合計 ${amp(load.current)} が接点の定格 ${amp(rated)} を超えています`,
+      devices: [s.device, ...load.devices.filter((x) => x !== s.device)],
+      wires: [],
+      key: `contact-overload:${s.a}:${s.b}`,
+    });
+  }
+}
 
 /** 出力 1 点の定格とコモンあたりの上限 */
 function checkOutputCurrents(m: Model, push: Push) {

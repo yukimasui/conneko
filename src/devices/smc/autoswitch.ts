@@ -126,7 +126,8 @@ export function switchDescription(names: { 1: string; 2: string }): string {
 
 /** スイッチ 1 個分のリード線 */
 function leadsOf(s: SwitchInfo): Lead[] {
-  const signal: SignalSpec = { dir: 'out', kind: s.out };
+  // 2 線式（D-M9B）は内部降下電圧 4V 以下・漏れ電流 0.8mA 以下
+  const signal: SignalSpec = { dir: 'out', kind: s.out, ...(s.out === '2wire' ? { leakCurrent: 0.8, residualVoltage: 4 } : {}) };
   return s.wires === 3
     ? [
         { color: 'BN', label: '+V（DC4.5〜28V）', role: 'plus' },

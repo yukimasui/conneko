@@ -3,7 +3,7 @@
  * 機器はテスト用の最小の定義を使う。
  */
 import { describe, expect, it } from 'vitest';
-import type { AcceptSpec, DeviceDefinition, TerminalDef } from '../devices/types';
+import type { AcceptSpec, DeviceDefinition, SignalSpec, TerminalDef } from '../devices/types';
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 import source3p from '../devices/catalog/power-source-3p200v';
 import link from '../devices/catalog/generic-link';
@@ -364,6 +364,27 @@ describe('信号の種類', () => {
     expect(rulesOf(sameSide)).toContain('two-wire');
     const direct: Diagram = { devices: [dev('PS', 't.psu'), dev('S', 't.2wire')], wires: [w('PS.+V', 'S.BN'), w('PS.-V', 'S.BU')] };
     expect(rulesOf(direct)).toContain('two-wire');
+  });
+
+  it('2線式センサーの漏れ電流・残留電圧と、入力の OFF 電流・最小 ON 電圧・2 線式の可否（two-wire-input）', () => {
+    const sensorDef = (leakCurrent: number, residualVoltage: number): DeviceDefinition => ({
+      ...twoWire,
+      terminals: ['BN', 'BU'].map((id) => t(id, 'signal', { signal: { dir: 'out', kind: '2wire', leakCurrent, residualVoltage } })),
+    });
+    const inputDef = (extra: Partial<SignalSpec>): DeviceDefinition => ({
+      ...plcIn,
+      terminals: [t('X0', 'signal', { signal: { dir: 'in', kind: 'dc', common: 'COM', ...extra }, optional: true }), t('COM', 'input', { accepts: dcBoth })],
+    });
+    const run = (sensor: DeviceDefinition, input: DeviceDefinition) => {
+      const look = (type: string) => (type === 't.2wire' ? sensor : type === 't.in' ? input : lookup(type));
+      const d: Diagram = { devices: [dev('PS', 't.psu'), dev('IN', 't.in'), dev('S', 't.2wire')], wires: [w('PS.+V', 'IN.COM'), w('S.BN', 'IN.X0'), w('PS.-V', 'S.BU')] };
+      return checkDiagram(d, look).filter((i) => i.rule === 'two-wire-input').map((i) => i.message);
+    };
+    // 漏れ電流 1mA ≤ OFF 電流 1.5mA、24V − 4V = 20V ≥ 最小 ON 電圧 19V
+    expect(run(sensorDef(1, 4), inputDef({ offCurrent: 1.5, onVoltage: 19 }))).toEqual([]);
+    expect(run(sensorDef(1, 4), inputDef({ offCurrent: 0.5 })).join()).toMatch(/漏れ電流 1mA が入力 IN.X0 の OFF 電流 0.5mA を超えています/);
+    expect(run(sensorDef(1, 6), inputDef({ onVoltage: 19 })).join()).toMatch(/18V が入力 .* の最小 ON 電圧 19V を下回ります/);
+    expect(run(sensorDef(1, 4), inputDef({ twoWire: false })).join()).toMatch(/2線式センサーを使えない入力です/);
   });
 });
 

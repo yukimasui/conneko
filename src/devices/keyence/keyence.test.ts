@@ -311,6 +311,14 @@ describe('KEYENCE センサー', () => {
     expect(r.links[0]).toMatchObject({ from: 'BN', to: 'BU', switch: 'output' });
   });
 
+  it('EV（2 線式）は漏れ電流・残留電圧を持ち、KV-C64XC の入力は 2 線式センサー不可', () => {
+    expect(resolveDevice(def('keyence.ev')).terminal('BN')?.signal).toMatchObject({ leakCurrent: 1, residualVoltage: 3.6 });
+    const c64 = resolveDevice(def('keyence.kv-c64xc'));
+    const inputs = c64.pins.filter((p) => p.signal?.dir === 'in');
+    expect(inputs).toHaveLength(64);
+    for (const p of inputs) expect(p.signal).toMatchObject({ onVoltage: 19, twoWire: false });
+  });
+
   it('GP-M の出力2 をアナログにすると 4〜20mA 出力になり、出力の経路から外れる', () => {
     const r = resolveDevice(def('keyence.gp-m'), { out2: 'analog' });
     expect(r.terminal('WH')?.signal).toEqual({ dir: 'out', kind: 'analog-i' });

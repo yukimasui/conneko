@@ -30,8 +30,8 @@ const cable = sensorCable({
   vmin: 10.8,
   vmax: 26.4,
   leads: [
-    { color: 'BN', label: '（2線式 +側）', role: 'out', signal: { dir: 'out', kind: '2wire' } },
-    { color: 'BU', label: '（2線式 −側）', role: 'out', signal: { dir: 'out', kind: '2wire' } },
+    { color: 'BN', label: '（2線式 +側）', role: 'out', signal: { dir: 'out', kind: '2wire', leakCurrent: 1, residualVoltage: 3.6 } },
+    { color: 'BU', label: '（2線式 −側）', role: 'out', signal: { dir: 'out', kind: '2wire', leakCurrent: 1, residualVoltage: 3.6 } },
   ],
 });
 
@@ -56,7 +56,7 @@ const def: DeviceDefinition = {
   height: H,
   svg,
   terminals: cable.terminals,
-  // 検出すると茶と青の間が導通する（開閉容量 M8: 80mA、M12〜M30: 200mA。残留電圧 3.6V 以下・もれ電流 1mA 以下は表さない）
+  // 検出すると茶と青の間が導通する（開閉容量 M8: 80mA、M12〜M30: 200mA。残留電圧 3.6V 以下・もれ電流 1mA 以下は signal に書く）
   links: (p) => [{ from: 'BN', to: 'BU', switch: 'output', ratedCurrent: Number(p.size) === 8 ? 0.08 : 0.2 }],
   params: [
     {
