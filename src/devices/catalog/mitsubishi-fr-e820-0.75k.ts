@@ -217,8 +217,8 @@ const terminals: TerminalDef[] = [
       return { id, note: NOTES[id], x: RIGHT_X, y, side: 'right', role: 'input', accepts: { system: 'DC', minVoltage: 0, maxVoltage: 27, conductors: ['-', '+'] }, optional: true };
     }
     if (id === '10') return { id, note: NOTES[id], x: RIGHT_X, y, side: 'right', role: 'supply', supply: { system: 'DC', voltage: 5, conductor: '+', limitCurrent: 0.01 }, optional: true };
-    if (id === '2') return sig(id, RIGHT_X, y, 'right', { signal: { dir: 'in', kind: 'analog-v' } });
-    if (id === '4') return sig(id, RIGHT_X, y, 'right', { signal: { dir: 'in', kind: 'analog-i' } });
+    if (id === '2') return sig(id, RIGHT_X, y, 'right', { signal: { dir: 'in', kind: 'analog-v', ref: '5' } });
+    if (id === '4') return sig(id, RIGHT_X, y, 'right', { signal: { dir: 'in', kind: 'analog-i', ref: '5' } });
     return sig(id, RIGHT_X, y, 'right');
   }),
 ];

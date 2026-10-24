@@ -126,6 +126,8 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 - 2 線式センサー（`2wire`）には `leakCurrent`（OFF のときの漏れ電流[mA]）・`residualVoltage`（ON のときの残留電圧[V]）、
   DC 入力には `onVoltage`（最小 ON 電圧[V]）・`offCurrent`（OFF 電流[mA]）を書ける。2 線式センサーを使えない入力は `twoWire: false`。
   漏れ電流が OFF 電流を超える、電源電圧から残留電圧を引くと最小 ON 電圧を下回る、使えない入力につなぐと `two-wire-input` の注意。
+- アナログの入出力（`analog-v` / `analog-i`）には、信号の基準（−側・GND）の端子を `ref` に書く（例: `{ dir: 'in', kind: 'analog-i', ref: '0-' }`）。
+  入力の基準が未配線、または出力の基準とつながっていないと `analog-return` の注意（電流ループの帰り道がない）。
 
 ## 安全機器
 

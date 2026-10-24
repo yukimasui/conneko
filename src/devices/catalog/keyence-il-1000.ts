@@ -3,7 +3,7 @@ import { ampBody, ampDefs } from '../keyence/amp';
 import { OUTPUT_PARAM, sensorCable, sensorInput, sensorOutputLinks, switchedOut } from '../keyence/sensor-parts';
 
 /** アナログ出力（設定で電圧 ±5V / 1〜5V / 0〜5V または電流 4〜20mA） */
-const analogOut = (p: ParamValues): SignalSpec => ({ dir: 'out', kind: p.analog === 'I' ? 'analog-i' : 'analog-v' });
+const analogOut = (p: ParamValues): SignalSpec => ({ dir: 'out', kind: p.analog === 'I' ? 'analog-i' : 'analog-v', ref: 'SH' });
 
 /**
  * KEYENCE CMOS レーザアプリセンサ IL シリーズ アンプ IL-1000（DIN レール取付・親機）。

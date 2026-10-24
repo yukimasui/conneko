@@ -319,6 +319,29 @@ describe('KEYENCE センサー', () => {
     for (const p of inputs) expect(p.signal).toMatchObject({ onVoltage: 19, twoWire: false });
   });
 
+  it('アナログ出力の基準（GND）を、アナログ入力の基準（−側）へ戻していないと注意（analog-return）', () => {
+    let n = 0;
+    const wire = (a: string, b: string): DiagramWire => {
+      const [fd, ft] = a.split('.');
+      const [td, tt] = b.split('.');
+      return { id: `A${++n}`, from: { device: fd, terminal: ft }, to: { device: td, terminal: tt }, color: 'blue', sizeSq: 0.3, wireType: 'KIV' };
+    };
+    const d = (ref: 'ok' | 'none' | 'other'): Diagram => ({
+      devices: [
+        { id: 'AMP1', type: 'keyence.il-1000', x: 0, y: 0 },
+        { id: 'AD1', type: 'keyence.kv-am40v', x: 0, y: 0 },
+      ],
+      wires: [
+        wire('AMP1.OG', 'AD1.V0+'),
+        ...(ref === 'ok' ? [wire('AMP1.SH', 'AD1.0-')] : ref === 'other' ? [wire('AMP1.SH', 'AD1.1-'), wire('AMP1.BU', 'AD1.0-')] : []),
+      ],
+    });
+    const rules = (x: Diagram) => checkDiagram(x, (t) => getDeviceDefinition(t)).filter((i) => i.rule === 'analog-return').map((i) => i.message);
+    expect(rules(d('ok'))).toEqual([]);
+    expect(rules(d('none')).join()).toMatch(/基準 AD1\.ch0 アナログ入力 GND が未配線です/);
+    expect(rules(d('other')).join()).toMatch(/基準 AD1\.ch0 アナログ入力 GND が、つないだ出力 AMP1\..* の基準 AMP1\..* とつながっていません/);
+  });
+
   it('GP-M の出力2 をアナログにすると 4〜20mA 出力になり、出力の経路から外れる', () => {
     const r = resolveDevice(def('keyence.gp-m'), { out2: 'analog' });
     expect(r.terminal('WH')?.signal).toEqual({ dir: 'out', kind: 'analog-i' });

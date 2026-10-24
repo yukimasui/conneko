@@ -53,6 +53,7 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
       }
     }
     if (t.signal?.common && !ids.has(t.signal.common)) problems.push(`signal.common に存在しない端子: ${t.id} -> ${t.signal.common}`);
+    if (t.signal?.ref && !ids.has(t.signal.ref)) problems.push(`signal.ref に存在しない端子: ${t.id} -> ${t.signal.ref}`);
     if (t.signal && t.role !== 'signal') problems.push(`signal は role: 'signal' の端子に指定する: ${t.id}`);
     for (const v of [t.label, t.note, t.hint]) if (v !== undefined && /undefined|NaN/.test(v)) problems.push(`ラベルが不正: ${t.id} "${v}"`);
     if (t.hint !== undefined && (!t.hint.trim() || t.hint.length > HINT_MAX)) problems.push(`hint は 1〜${HINT_MAX} 文字にする: ${t.id} "${t.hint}"`);

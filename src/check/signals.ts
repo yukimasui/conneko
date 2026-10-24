@@ -6,7 +6,7 @@
  * 入力点のコモン端子に来ている電位（接点・出力を閉じた状態）から判定する。
  */
 import type { SignalKind } from '../devices/types';
-import { key, terminalName, wiresOfNet, type Model, type Push, type TerminalInfo } from './model';
+import { key, netIsWired, terminalName, wiresOfNet, type Model, type Push, type TerminalInfo } from './model';
 
 const KIND_NAMES: Record<SignalKind, string> = {
   npn: 'NPN 出力',
@@ -85,6 +85,26 @@ export function checkSignals(m: Model, push: Push) {
         const k = o.terminal.signal!.kind;
         if (k === s.kind) continue;
         issue('warning', 'signal-kind', `${terminalName(m, o.key)}（${KIND_NAMES[k]}）を ${KIND_NAMES[s.kind]}入力 ${where} につないでいます`, [o]);
+      }
+      // 帰り道: 入力の基準（−側）が、つないだアナログ出力の基準とつながっているか
+      const analogOuts = outs.filter((o) => o.device.id !== inp.device.id && (o.terminal.signal!.kind === 'analog-v' || o.terminal.signal!.kind === 'analog-i'));
+      const inRef = s.ref && m.terminals.has(key(inp.device.id, s.ref)) ? key(inp.device.id, s.ref) : undefined;
+      if (analogOuts.length && inRef) {
+        if (!netIsWired(m, inRef)) {
+          issue('warning', 'analog-return', `アナログ入力 ${where} の基準 ${terminalName(m, inRef)} が未配線です（信号の帰り道がありません。出力の機器の −側・GND へつなぎます）`);
+        } else {
+          for (const o of analogOuts) {
+            const ref = o.terminal.signal!.ref;
+            const outRef = ref && m.terminals.has(key(o.device.id, ref)) ? key(o.device.id, ref) : undefined;
+            if (!outRef || m.all.find(outRef) === m.all.find(inRef)) continue;
+            issue(
+              'warning',
+              'analog-return',
+              `アナログ入力 ${where} の基準 ${terminalName(m, inRef)} が、つないだ出力 ${terminalName(m, o.key)} の基準 ${terminalName(m, outRef)} とつながっていません（信号の帰り道がありません）`,
+              [o],
+            );
+          }
+        }
       }
     } else if (s.kind === 'line-driver') {
       for (const o of outs) {

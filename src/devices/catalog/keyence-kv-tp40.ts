@@ -25,8 +25,8 @@ const points: BlockUnitSpec['points'] = {
 for (const c of CH) {
   points[`${c}A`] = { label: `ch${c} A/−/−（熱電対 −・測温抵抗体 A・電圧/電流 −）`, kind: 'sig', print: `${c} A/-` };
   points[`${c}b`] = { label: `ch${c} b（測温抵抗体 b）`, kind: 'sig', print: `${c} b` };
-  points[`${c}B`] = { label: `ch${c} B/+/V+（熱電対 +・測温抵抗体 B・電圧 +）`, kind: 'sig', print: `${c} B/+`, signal: { dir: 'in', kind: 'analog-v' } };
-  points[`${c}I`] = { label: `ch${c} I+（電流 +）`, kind: 'sig', print: `${c} I+`, signal: { dir: 'in', kind: 'analog-i' } };
+  points[`${c}B`] = { label: `ch${c} B/+/V+（熱電対 +・測温抵抗体 B・電圧 +）`, kind: 'sig', print: `${c} B/+`, signal: { dir: 'in', kind: 'analog-v', ref: `${c}A` } };
+  points[`${c}I`] = { label: `ch${c} I+（電流 +）`, kind: 'sig', print: `${c} I+`, signal: { dir: 'in', kind: 'analog-i', ref: `${c}A` } };
 }
 
 /** 左側の帯（設定つまみ） */
