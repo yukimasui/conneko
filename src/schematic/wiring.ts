@@ -208,7 +208,10 @@ export function spanningTree(pins: PinAt[], linked: [number, number][] = []): [n
   return edges;
 }
 
-/** 主回路の幹線（縦にまっすぐ向かい合う 2 つの端子を結ぶ線。上の端子の y が y2、下の端子の y が y1） */
+/**
+ * 主回路の幹線（縦にまっすぐ向かい合う 2 つの端子を結ぶ線。上の端子の y が y2、下の端子の y が y1）。
+ * 下の端子がない幹線（openTrunk）は lower が -1、y1 が -Infinity で、分岐を着けたいちばん下まで伸ばす
+ */
 export interface Trunk {
   upper: number;
   lower: number;
@@ -238,6 +241,22 @@ export function trunks(pins: PinAt[]): Trunk[] {
   return out;
 }
 
+/** 縦向きの端子から幹線へ引くとき、端子から出す長さの候補（短いほど選びやすい） */
+const TAP_STUBS = [5, 7.5, 10, 12.5, 15, 17.5, 20];
+
+/**
+ * 向かい合う組のない網の幹線: いちばん上の下向きの端子からまっすぐ下ろす（電磁接触器を幹線の横にずらして置いたときなど）。
+ * ほかの端子がなければ undefined
+ */
+export function openTrunk(pins: PinAt[]): Trunk | undefined {
+  let upper = -1;
+  pins.forEach((p, i) => {
+    if (p.dir[1] < 0 && (upper < 0 || p.pos[1] > pins[upper].pos[1])) upper = i;
+  });
+  if (upper < 0 || pins.length < 2) return undefined;
+  return { upper, lower: -1, x: pins[upper].pos[0], y1: -Infinity, y2: pins[upper].pos[1] };
+}
+
 /**
  * 端子から幹線へ T 字に引く線（分岐）。横向きの端子は端子の高さのまま幹線へまっすぐ、縦向きの端子は少し出してから横へ。
  * 幹線の途中（両端の端子から 2.5mm 以上内側）に着き、記号を横切らず、別の網の線と重ならない（交差はよい）ものを選ぶ。
@@ -247,7 +266,7 @@ export function tapRoute(p: PinAt, list: Trunk[], net: string, obstacles: Bounds
   let best: { trunk: Trunk; points: Point[] } | undefined;
   let bestScore = Infinity;
   for (const t of list) {
-    const ys = p.dir[0] !== 0 ? [p.pos[1]] : STUBS.map((len) => p.pos[1] + p.dir[1] * len);
+    const ys = p.dir[0] !== 0 ? [p.pos[1]] : TAP_STUBS.map((len) => p.pos[1] + p.dir[1] * len);
     // 横向きの端子は幹線の方を向いていること
     if (p.dir[0] !== 0 && p.dir[0] * (t.x - p.pos[0]) <= 0) continue;
     for (const y of ys) {
@@ -256,7 +275,8 @@ export function tapRoute(p: PinAt, list: Trunk[], net: string, obstacles: Bounds
       if (hits(points, obstacles)) continue;
       const c = conflicts(points, net, segments);
       if (c >= 10) continue;
-      const score = c + Math.abs(t.x - p.pos[0]) * 0.01 + Math.abs(y - p.pos[1]) * 0.01;
+      const len = Math.abs(y - p.pos[1]);
+      const score = c + len * 0.01 + Math.abs(t.x - p.pos[0]) * 0.0001;
       if (score < bestScore) {
         best = { trunk: t, points };
         bestScore = score;
@@ -290,11 +310,14 @@ export function onSegment(p: Point, a: Point, b: Point): boolean {
   return false;
 }
 
-/** 線番を書く位置（いちばん長い横の区間の中央の上。横の区間がなければ最初の区間の右） */
-export function wireNoAt(polylines: Point[][]): { at: Point; align: 'center' | 'left' } | undefined {
+/**
+ * 線番を書く位置（いちばん長い横の区間の中央の上。横の区間がなければ最初の区間の右）。
+ * avoid（記号の機器名などの文字の範囲）と重なる位置は、ほかに 8mm 以上の空きがあれば避ける
+ */
+export function wireNoAt(polylines: Point[][], avoid: Bounds[] = []): { at: Point; align: 'center' | 'left' } | undefined {
   // 横の区間を、同じ網の線の折れ点・分かれ目（区間の途中に乗る点）で区切り、いちばん長い空きの中央に置く
   const vertices = polylines.flat();
-  let best: { at: Point; len: number } | undefined;
+  const gaps: { at: Point; len: number }[] = [];
   for (const pl of polylines) {
     for (let i = 0; i + 1 < pl.length; i++) {
       const [a, b] = [pl[i], pl[i + 1]];
@@ -302,12 +325,13 @@ export function wireNoAt(polylines: Point[][]): { at: Point; align: 'center' | '
       const [x1, x2] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
       const cuts = vertices.filter((v) => r3(v[1]) === r3(a[1]) && v[0] > x1 + 1e-6 && v[0] < x2 - 1e-6).map((v) => v[0]);
       const xs = [x1, ...[...new Set(cuts)].sort((p, q) => p - q), x2];
-      for (let j = 0; j + 1 < xs.length; j++) {
-        const len = xs[j + 1] - xs[j];
-        if (!best || len > best.len + 1e-6) best = { at: [(xs[j] + xs[j + 1]) / 2, a[1] + 1.8], len };
-      }
+      for (let j = 0; j + 1 < xs.length; j++) gaps.push({ at: [(xs[j] + xs[j + 1]) / 2, a[1] + 1.8], len: xs[j + 1] - xs[j] });
     }
   }
+  // 長い順（同じ長さなら先に引いた線）
+  const order = gaps.map((g, i) => ({ g, i })).sort((p, q) => (Math.abs(q.g.len - p.g.len) > 1e-6 ? q.g.len - p.g.len : p.i - q.i));
+  const clear = (at: Point) => !avoid.some((r) => r.x2 > at[0] - 3 && r.x1 < at[0] + 3 && r.y2 > at[1] - 1.4 && r.y1 < at[1] + 1.4);
+  const best = order.find(({ g }) => g.len >= 8 && clear(g.at))?.g ?? order[0]?.g;
   if (best) return { at: best.at, align: 'center' };
   const pl = polylines.find((x) => x.length >= 2);
   return pl ? { at: [(pl[0][0] + pl[1][0]) / 2 + 1, (pl[0][1] + pl[1][1]) / 2], align: 'left' } : undefined;

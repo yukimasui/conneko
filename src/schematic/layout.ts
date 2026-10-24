@@ -24,7 +24,7 @@ import {
   type SymbolDef,
 } from './format';
 import { paperOf, splitRail, wireEdgeKey, wireEnd, type Rails, type SchematicItem, type WireBend } from './model';
-import { pinDirection, pinPoint, placedBounds } from './place';
+import { pinDirection, pinPoint, placedBounds, placePoint } from './place';
 import { librarySymbol } from './symbols';
 import { bomPages } from './sheets/bom';
 import { coverPageCount, coverPages, type CoverEntry } from './sheets/cover';
@@ -33,7 +33,7 @@ import { pneumaticLayout, type PneumaticGroup } from './sheets/pneumatic';
 import { rackHosts, rackPages } from './sheets/rack';
 import { ioSystem } from '../model/io';
 import { terminalPages } from './sheets/terminal';
-import { bentRailRoute, bentRoute, junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, tapRoute, trunks, wireNoAt, type PinAt, type Segment, type Trunk } from './wiring';
+import { bentRailRoute, bentRoute, conflicts, hits, junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, openTrunk, tapRoute, trunks, wireNoAt, type PinAt, type Segment, type Trunk } from './wiring';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -337,6 +337,18 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       out.polylines.push({ points, layer: 'WIRE', ...(edge ? { edge } : {}) });
       for (let i = 0; i + 1 < points.length; i++) segments.push({ a: points[i], b: points[i + 1], net });
     };
+    // 記号の機器名・接点の所在などの文字の範囲（線番を重ねない）。幅は文字数からのおおよそ
+    const textBoxes = out.inserts.flatMap((ins) =>
+      symbolOfInsert(ins.symbol, byId.get(ins.element!)!).attributes.flatMap((a) => {
+        const text = ins.attributes?.[a.tag];
+        if (!text) return [];
+        const [x, y] = placePoint(a.at, ins.at, ins.rotation);
+        const w = text.length * a.height * 0.8;
+        const align = ins.rotation === 180 ? ({ left: 'right', right: 'left', center: 'center' } as const)[a.align ?? 'center'] : (a.align ?? 'center');
+        const x1 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+        return [{ x1, x2: x1 + w, y1: y - a.height / 2, y2: y + a.height / 2 }];
+      }),
+    );
     const byNet = new Map<string, PlacedPin[]>();
     for (const p of pinsBySheet.get(sh.id) ?? []) byNet.set(p.root, [...(byNet.get(p.root) ?? []), p]);
 
@@ -381,6 +393,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
 
     // 網ごとの線
     // 主回路（母線のないシート）: 上から下へまっすぐ降りる幹線を先にすべて引き、分岐はそこへ T 字に着ける
+    const labels: { root: string; no: string; polylines: Point[][] }[] = [];
     const mainSheet = !rails.some((r) => r.root);
     const trunkLines = new Map<string, { list: Trunk[]; lines: Point[][] }>();
     if (mainSheet) {
@@ -396,30 +409,83 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       }
     }
 
-    for (const [root, pins] of byNet) {
-      if (rails.some((r) => r.root === root)) continue;
-      const trunk = trunkLines.get(root);
-      const polylines: Point[][] = [...(trunk?.lines ?? [])];
-      // 幹線へ T 字に着けた端子は、ほかの端子とはつながない（手で曲がり位置を決めた線は今までどおり端子どうし）
-      const tapped = new Set<number>();
-      if (trunk) {
-        const inTrunk = new Set(trunk.list.flatMap((t) => [t.upper, t.lower]));
+    // 分岐の線を網ごとに決める。網の順で交差の数が変わる（先に決めた網の幹線を後の網が横切る）ので、前から・後ろからの両方で決めて交差の少ない方にする
+    type Tap = { points: Point[]; edge: string; bend?: WireBend; upper: number };
+    type TapPlan = { tapped: Map<number, Tap>; line?: Point[] };
+    const planTaps = (order: string[]) => {
+      const segs = [...segments];
+      const plans = new Map<string, TapPlan>();
+      for (const root of order) {
+        const pins = byNet.get(root)!;
+        const closed = trunkLines.get(root);
+        // 向かい合う組がなければ、いちばん上の下向きの端子から下ろす幹線にする（電磁接触器を横にずらして置いたときなど）
+        const open = closed ? undefined : openTrunk(pins);
+        const list = closed?.list ?? (open ? [open] : []);
+        if (!list.length) continue;
+        const tapped = new Map<number, Tap>();
+        const inTrunk = new Set(list.flatMap((t) => [t.upper, t.lower]));
         pins.forEach((p, i) => {
           if (inTrunk.has(i)) return;
-          const tap = tapRoute(p, trunk.list, root, obstacles, segments);
+          const tap = tapRoute(p, list, root, obstacles, segs);
           if (!tap) return;
           const edge = wireEdgeKey(p.ref, pins[tap.trunk.upper].ref);
-          const bend = bendOf(edge);
-          const pl = bend ? bentRoute(p, pins[tap.trunk.upper], bend) : tap.points;
-          draw(pl, root, edge);
-          polylines.push(pl);
-          tapped.add(i);
+          tapped.set(i, { points: tap.points, edge, bend: bendOf(edge), upper: tap.trunk.upper });
+          for (let k = 0; k + 1 < tap.points.length; k++) segs.push({ a: tap.points[k], b: tap.points[k + 1], net: root });
         });
+        let line: Point[] | undefined;
+        if (open && tapped.size) {
+          // 下ろす幹線は、手で動かしていない分岐のいちばん下まで。途中で記号を横切るなら幹線にしない
+          const ends = [...tapped.values()].filter((t) => !t.bend).map((t) => t.points[t.points.length - 1][1]);
+          line = ends.length ? [pins[open.upper].pos, [open.x, Math.min(...ends)]] : undefined;
+          if (line && hits(line, obstacles)) {
+            tapped.clear();
+            line = undefined;
+          }
+          if (line) segs.push({ a: line[0], b: line[1], net: root });
+        }
+        plans.set(root, { tapped, line });
+      }
+      let crossings = 0;
+      for (const [root, p] of plans) for (const pl of [...(p.line ? [p.line] : []), ...[...p.tapped.values()].map((t) => t.points)]) crossings += conflicts(pl, root, segs);
+      return { plans, crossings };
+    };
+    const mainNets = mainSheet ? [...byNet.keys()] : [];
+    // 幹線の横にずらした記号へ入れ子の L 字で引くには、先に決めた網ほど記号の近くを通るので、
+    // 右へ引く網は幹線の左のものから、左へ引く網は右のものから決める
+    const nestKey = (root: string) => {
+      const pins = byNet.get(root)!;
+      const t = trunkLines.get(root)?.list[0] ?? openTrunk(pins);
+      if (!t) return 0;
+      const side = pins.filter((p, i) => i !== t.upper && i !== t.lower && p.dir[0] === 0 && r3(p.pos[0]) !== r3(t.x));
+      if (!side.length) return 0;
+      const dir = Math.sign(side.reduce((a, p) => a + p.pos[0], 0) / side.length - t.x);
+      return dir * t.x;
+    };
+    const nested = [...mainNets].sort((a, b) => nestKey(a) - nestKey(b));
+    const tapPlans = [nested, mainNets, [...mainNets].reverse()]
+      .map(planTaps)
+      .reduce((best, p) => (p.crossings < best.crossings ? p : best)).plans;
+
+    for (const [root, pins] of byNet) {
+      if (rails.some((r) => r.root === root)) continue;
+      const closed = trunkLines.get(root);
+      const polylines: Point[][] = [...(closed?.lines ?? [])];
+      // 幹線へ T 字に着けた端子は、ほかの端子とはつながない（手で曲がり位置を決めた線は今までどおり端子どうし）
+      const plan = tapPlans.get(root);
+      const tapped = plan?.tapped ?? new Map<number, Tap>();
+      if (plan?.line) {
+        draw(plan.line, root);
+        polylines.push(plan.line);
+      }
+      for (const [i, t] of tapped) {
+        const pl = t.bend ? bentRoute(pins[i], pins[t.upper], t.bend) : t.points;
+        draw(pl, root, t.edge);
+        polylines.push(pl);
       }
       const restIndex = pins.flatMap((_, i) => (tapped.has(i) ? [] : [i]));
       const rest = restIndex.map((i) => pins[i]);
       // 幹線で結んだ組はつながっているものとして、残りの端子をつなぐ
-      const linked = (trunk?.list ?? []).map((t): [number, number] => [restIndex.indexOf(t.upper), restIndex.indexOf(t.lower)]);
+      const linked = (closed?.list ?? []).map((t): [number, number] => [restIndex.indexOf(t.upper), restIndex.indexOf(t.lower)]);
       for (const [i, j] of spanningTree(rest, linked)) {
         const edge = wireEdgeKey(rest[i].ref, rest[j].ref);
         const bend = bendOf(edge);
@@ -441,7 +507,13 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       }
       for (const at of junctions(polylines)) out.dots.push({ at, layer: 'WIRE' });
       const no = wireNoOf(root);
-      const label = no ? wireNoAt(polylines) : undefined;
+      if (no) labels.push({ root, no, polylines });
+    }
+    // 線番はすべての線を引いてから、記号の文字と別の網の横の線に重ならない区間を選んで書く
+    for (const { root, no, polylines } of labels) {
+      const others = segments.filter((g) => g.net !== root && r3(g.a[1]) === r3(g.b[1]));
+      const lines = others.map((g) => ({ x1: Math.min(g.a[0], g.b[0]), x2: Math.max(g.a[0], g.b[0]), y1: g.a[1] - 0.1, y2: g.a[1] + 0.1 }));
+      const label = wireNoAt(polylines, [...textBoxes, ...lines]);
       if (label) out.texts.push({ at: label.at, text: no, height: WIRE_NO_TEXT, align: label.align, layer: 'WIRENO' });
     }
     return out;

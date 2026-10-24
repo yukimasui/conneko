@@ -55,3 +55,45 @@ describe('サンプルの主回路', () => {
     }
   });
 });
+
+describe('電磁接触器を幹線の横にずらしたとき', () => {
+  const base = sampleDiagram.schematic!;
+  const main = base.sheets.find((s) => !s.kind && !s.rails?.supply)!;
+  const shifted = (dx: number) => {
+    const schematic: Schematic = {
+      ...base,
+      sheets: base.sheets.map((sh) => (sh.id !== main.id ? sh : { ...sh, items: sh.items.map((i) => (/^(MC1|THR1|M1)/.test(i.element) ? { ...i, x: i.x + dx } : i)) })),
+    };
+    const doc = buildSchematic({ ...sampleDiagram, schematic }, getDeviceDefinition).doc;
+    return doc.sheets.find((s) => s.id === main.id)!;
+  };
+  /** 縦と横の線分が途中で交わる数 */
+  const crossings = (sheet: ReturnType<typeof shifted>) => {
+    const segs = sheet.polylines.filter((l) => l.layer === 'WIRE').flatMap((l) => l.points.slice(1).map((p, i) => [l.points[i], p] as const));
+    let n = 0;
+    for (const [a, b] of segs) {
+      if (a[0] !== b[0]) continue;
+      for (const [c, d] of segs) {
+        if (c[1] !== d[1]) continue;
+        const x = a[0];
+        const y = c[1];
+        if (x > Math.min(c[0], d[0]) && x < Math.max(c[0], d[0]) && y > Math.min(a[1], b[1]) && y < Math.max(a[1], b[1])) n++;
+      }
+    }
+    return n;
+  };
+
+  it('遮断器から下ろした線を横に曲げて電磁接触器へ入れる（右へずらしても左へずらしても、分岐を横切る交差は増えない）', () => {
+    const aligned = crossings(shifted(0));
+    // 右へずらすと R・S の線が T の幹線を、左へずらすと S・T の線が R の幹線を横切るのはしかたない（それぞれ 3 本まで）
+    expect(crossings(shifted(60))).toBeLessThanOrEqual(aligned + 3);
+    expect(crossings(shifted(-35))).toBeLessThanOrEqual(aligned + 3);
+  });
+
+  it('遮断器の二次側の端子から、まっすぐ下へ線を下ろす', () => {
+    const sheet = shifted(60);
+    const elb = sheet.inserts.find((i) => i.element?.startsWith('ELB1'))!;
+    const downs = sheet.polylines.filter((l) => l.points.length === 2 && l.points[0][0] === l.points[1][0] && l.points[0][1] < elb.at[1] && l.points[0][1] > l.points[1][1] && l.points[0][1] > elb.at[1] - 15);
+    expect(downs.length).toBeGreaterThanOrEqual(3);
+  });
+});
