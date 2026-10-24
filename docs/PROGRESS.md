@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.23 接点の種類（限時・セレクタの位置・SSR・ブザー）など）
+最終更新: 2026-10-24（v0.6.24 概念図の機器名の位置など）
 
 ## 現在地
 
+- v0.6.24（#34 完了）: 機器名のラベルの位置を、線・機器と重ならない候補から選ぶ（`src/editor/labelPlace.ts`、画面とシートの画像で共通）
 - v0.6.23（#22）: `InternalLink` の `timed`・`positions`・`system`、`switch-system`、状態検査のセレクタの位置ごとの単位。記号 `contact-*-selector`・`-on-delay`・`-off-delay`・`buzzer`。
   G3NA の `loadRating` パラメーター
 - v0.6.22（#21 の一部）: 180°/270° の記号の属性の文字を読める向きに（`upsideDown` / `upside_down`）。I/O 図の 2 つ目からの相手を「ほかに …」で添える

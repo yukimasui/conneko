@@ -33,6 +33,8 @@ export interface EditorContextValue {
   params: Map<string, ParamValues | undefined>;
   /** ユニットを装着している親の機器ID */
   hosts: Set<string>;
+  /** 機器ID → 機器名のラベルの左の位置（機器の左端からの px。上から来る線を避けた位置。左端のままの機器は入れない） */
+  labelLefts: Map<string, number>;
   /** リンクの名前 → そのリンクを置いた場所 */
   linkPeers: Map<string, { id: string; sheet: string; sheetName: string }[]>;
   /** 機器へ移動する（シートを切り替えて選択する） */
@@ -51,6 +53,7 @@ export const EditorContext = createContext<EditorContextValue>({
   issues: [],
   params: new Map(),
   hosts: new Set(),
+  labelLefts: new Map(),
   linkPeers: new Map(),
   onJump: () => {},
   showMarkers: true,
