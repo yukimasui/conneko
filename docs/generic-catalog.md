@@ -46,6 +46,8 @@
 | **電磁弁** | | | |
 | `smc.sy3120-5lz` | SY3120-5LZ（2 位置シングル、DC24V、L 形プラグ） | load | SMC SY シリーズ カタログ |
 | `smc.sy3220-5lz` | SY3220-5LZ（2 位置ダブル、DC24V、L 形プラグ） | load | 同上 |
+| **リレーターミナル** | | | |
+| `generic.relay-terminal.8p` | リレーターミナル 8 点 DC24V 1a（汎用、プラスコモン） | control | 汎用品の代表的な仕様（v0.6.14、`internalLoads`） |
 
 色・時間レンジ・サイズのように型式の一部だけが変わるものは params（`color`・`range`・`size`）で選ぶ。
 コイル電圧（DC24V / AC100V）は消費電流と型式の表示が変わるため、別の機器にした。

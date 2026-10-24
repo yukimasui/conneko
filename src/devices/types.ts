@@ -314,9 +314,22 @@ export interface InternalLink {
   linked?: 'force-guided' | 'mirror';
   /** 出力・接点 1 点の定格電流[A]。switch: 'output' の経路では、出力点につないだ負荷の定格電流の合計と比較する */
   ratedCurrent?: NumOrParam;
+  /**
+   * この接点を動かす機器の中の負荷（internalLoads の id）。リレーターミナルのように 1 台に別々に動くコイルがある機器で書く。
+   * 短絡の状態の検査では、機器ごとではなく、この負荷ごとに 1 つずつ動作させる。省略時は機器が動作したときに切り換わる
+   */
+  actor?: string;
 }
 
-/** コモンあたりの電流の上限（出力ユニットの「8A/コモン」など） */
+/** 機器の中の負荷（リレーターミナルのリレーのコイルなど）。接点の InternalLink.actor で、どの負荷が動かすかを書く */
+export interface InternalLoad {
+  id: string;
+  /** 表示名（例: 'リレー 1'） */
+  label?: string;
+  /** コイルの両端の端子 */
+  terminals: [string, string];
+}
+
 /**
  * 出力の電流の上限（合計）。次のどちらかで、合計する出力を決める。
  * - common: コモン端子ごと。switch: 'output' の経路のうち to がこの端子のものを合計する
@@ -567,6 +580,8 @@ export interface DeviceDefinition {
   /** コネクタのピン定義（ピンごとの名称・電気的仕様） */
   pins?: ParamDependent<PinDef[]>;
   links?: ParamDependent<InternalLink[]>;
+  /** 機器の中の負荷（リレーターミナルのコイルなど）。接点は links の actor で結びつける */
+  internalLoads?: ParamDependent<InternalLoad[]>;
   /** 機器の中のエアの通り道 */
   airLinks?: ParamDependent<AirLink[]>;
   params?: ParamDef[];

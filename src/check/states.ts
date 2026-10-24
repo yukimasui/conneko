@@ -55,12 +55,28 @@ export function checkSwitchStates(m: Model, push: Push, conflictRoots: Set<strin
   const nc = m.switchLinks.filter((s) => s.link.switch === 'NC');
   evaluate(nc, null, '通常時（b 接点が閉じた状態）に', []);
 
-  const byDevice = new Map<string, SwitchLink[]>();
-  for (const s of m.switchLinks) byDevice.set(s.device, [...(byDevice.get(s.device) ?? []), s]);
-  for (const [device, links] of byDevice) {
+  // 動作の単位: 機器ごと。機器の中に別々に動く負荷（リレーターミナルのリレーなど。link.actor）があれば、その負荷ごと
+  const byActor = new Map<string, SwitchLink[]>();
+  for (const s of m.switchLinks) {
+    const k = `${s.device}\u0000${s.link.actor ?? ''}`;
+    byActor.set(k, [...(byActor.get(k) ?? []), s]);
+  }
+  for (const [k, links] of byActor) {
+    const [device, actor] = k.split('\u0000');
     const active = links.filter((s) => s.link.switch !== 'NC');
     if (!active.length) continue;
+    // 動作したときに開く b 接点は、同じ単位のものだけ（ほかの単位の b 接点は閉じたまま）
+    const inUnit = (s: SwitchLink) => s.device === device && (s.link.actor ?? '') === actor;
     const what = active.every((s) => s.link.switch === 'output') ? '出力が ON になる' : '動作する';
-    evaluate([...nc.filter((s) => s.device !== device), ...active], active, `${device} が${what}と`, [device]);
+    const who = actor ? `${device} の ${actorLabel(m, device, actor)}` : device;
+    evaluate([...nc.filter((s) => !inUnit(s)), ...active], active, `${who} が${what}と`, [device]);
   }
+}
+
+/** 機器の中の負荷の表示名（internalLoads の label。なければ id） */
+function actorLabel(m: Model, device: string, actor: string): string {
+  const d = m.devices.get(device);
+  if (!d) return actor;
+  const loads = typeof d.def.internalLoads === 'function' ? d.def.internalLoads(d.r.params) : (d.def.internalLoads ?? []);
+  return loads.find((l) => l.id === actor)?.label ?? actor;
 }

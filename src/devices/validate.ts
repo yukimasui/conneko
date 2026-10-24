@@ -64,6 +64,11 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
   for (const l of r.airLinks) {
     if (!r.air.has(l.from) || !r.air.has(l.to)) problems.push(`airLinks に存在しないエアのポート: ${l.from} -> ${l.to}`);
   }
+  // 機器の中の負荷（リレーターミナルのコイルなど）と、接点の actor
+  const loads = typeof def.internalLoads === 'function' ? def.internalLoads(r.params) : (def.internalLoads ?? []);
+  const loadIds = new Set(loads.map((l) => l.id));
+  for (const l of loads) for (const t of l.terminals) if (!ids.has(t)) problems.push(`internalLoads ${l.id} に存在しない端子: ${t}`);
+  for (const l of r.links) if (l.actor && !loadIds.has(l.actor)) problems.push(`links の actor に存在しない internalLoads: ${l.actor}`);
   for (const [unitPort, hostPort] of Object.entries(def.bus?.host?.airGallery ?? {})) {
     if (!r.air.has(hostPort)) problems.push(`bus.host.airGallery に存在しないエアのポート: ${unitPort} -> ${hostPort}`);
   }

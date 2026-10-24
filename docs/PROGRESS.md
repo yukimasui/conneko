@@ -1,9 +1,11 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.13 電線の端末処理など）
+最終更新: 2026-10-24（v0.6.14 機器の中のコイルと接点など）
 
 ## 現在地
 
+- v0.6.14（#6）: `internalLoads` と `InternalLink.actor`、短絡の状態検査を負荷ごとに。汎用のリレーターミナル 8 点。
+  東洋技研のリレー付き端子台（PCRY など）は #11 の機器の候補に残す
 - v0.6.13（#5）: 電線の端末処理（`fromTermination` / `toTermination`、`src/data/terminations.ts`）、端子の `wire`・`ratedCurrent`、
   チェック（`termination-mismatch`・`wire-size-terminal`・`terminal-overcurrent`）、部品表のフェルール・圧着端子、線番表の端末処理。東洋技研の端子台にデータ。
   v0.6.12 の `cable` が保存で落ちていたのを修正
