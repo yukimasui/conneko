@@ -4,7 +4,7 @@
  * いずれも元のデータは変えず、新しい Diagram を返す。
  */
 import { buildModel, key } from '../check/model';
-import { resolveDevice } from '../devices/resolve';
+import { isLanPort, resolveDevice } from '../devices/resolve';
 import { deviceSize, type DeviceDefinition, type TerminalSide } from '../devices/types';
 import { busAccepts } from './bus';
 import { CABLE_WIRE_TYPE, isTube, nextDeviceId, nextWireId, sheetOf, type Diagram, type DiagramDevice, type DiagramWire, type TerminalRef } from './diagram';
@@ -262,7 +262,8 @@ export function isLanCable(d: Diagram, w: DiagramWire, lookup: DefLookup): boole
   };
   const a = conn(w.from);
   const b = conn(w.to);
-  return !!a && !!b && a.pins === 0 && b.pins === 0 && a.kind === 'RJ45' && b.kind === 'RJ45';
+  // RJ-45 どうしのほか、RJ-45 とつなげる通信ポート（SI ユニットの M12 D コードなど）も LAN ケーブルとして扱う
+  return isLanPort(a) && isLanPort(b);
 }
 
 /** 装着の親・子を含めて、一緒に動く機器の ID */

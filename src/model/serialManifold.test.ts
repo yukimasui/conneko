@@ -15,6 +15,7 @@ import { computeBus, effectiveParams, serialOutputName } from './bus';
 import type { Diagram, DiagramWire } from './diagram';
 import { addStation, changeStationType, isSerialManifold, manifoldRows, manifoldSummary, stationTypes } from './manifold';
 import { hasMateCandidates } from './mates';
+import { isLanCable, splitCrossSheetWires } from './ops';
 import { moveUnit, removeUnit } from './plc';
 import { suggestConnections } from './suggest';
 
@@ -206,6 +207,32 @@ describe('通信タイプのマニホールドのチェック', () => {
     ]);
     // EtherNet/IP の SI ユニットは 2 白が電磁弁用 +24V
     expect(checkDiagram(base({ protocol: 'E' }), lookup).some((i) => i.rule === 'conductor-mismatch')).toBe(true);
+  });
+
+  it('電源ケーブル・通信のつなぎ忘れは、見えないピンごとではなくコネクタ 1 つで警告する（#32）', () => {
+    const noPower = base();
+    noPower.wires = noPower.wires.filter((w) => w.id !== 'C2');
+    const issues = checkDiagram(noPower, lookup).filter((i) => i.devices.includes('MF1'));
+    expect(issues.filter((i) => i.rule === 'unconnected')).toEqual([]);
+    expect(issues.filter((i) => i.rule === 'connector-unconnected').map((i) => i.message)).toEqual(['MF1: コネクタ PWR（M12） がつながっていません']);
+    const noBus = base();
+    noBus.wires = noBus.wires.filter((w) => w.id !== 'C1');
+    expect(checkDiagram(noBus, lookup).filter((i) => i.rule === 'connector-unconnected').map((i) => i.message)).toEqual(['MF1: コネクタ BUS IN がつながっていません']);
+  });
+
+  it('電源の消費電流に、装着した弁のソレノイドの電流を数える（#32）', () => {
+    // SOL1 シングル 1・SOL2 ダブル 2・SOL3 3 位置 2 ＝ ソレノイド 5 個 × 0.017A ＋ 制御用 0.1A
+    expect(computeBus(base().devices, lookup).params.get('MF1')?.loadCurrent).toBe(0.185);
+  });
+
+  it('シートをまたぐ SI ユニットと PLC の通信ケーブルは、ネットワークリンクに置き換える（#32）', () => {
+    const d = base();
+    const sheets = [{ id: 'S1', name: 'A' }, { id: 'S2', name: 'B' }];
+    const moved: Diagram = { ...d, sheets, devices: d.devices.map((x) => ({ ...x, sheet: x.id === 'PLC1' ? 'S2' : 'S1' })) };
+    expect(isLanCable(moved, moved.wires.find((w) => w.id === 'C1')!, lookup)).toBe(true);
+    const split = splitCrossSheetWires(moved, lookup);
+    expect(split.wires.some((w) => w.id === 'C1')).toBe(false);
+    expect(split.devices.filter((x) => x.type === 'generic.network-link')).toHaveLength(2);
   });
 
   it('装着した弁の P はマニホールドの P とつながり、A・B からシリンダまでエアが届く', () => {

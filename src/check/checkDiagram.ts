@@ -105,6 +105,21 @@ function checkUnconnected(m: Model, push: Push) {
     // エアのポートはエアのチェック（pneumatic.ts）で確かめる
     if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector' || t.role === 'air') continue;
     if (m.wiresAt.has(k) || cabled.has(k)) continue;
+    // コネクタのピン（画面に出ない）は、コネクタにケーブルがつながっていなければ、ピンごとではなくコネクタ 1 つで指摘する
+    const hash = t.id.indexOf('#');
+    const ck = hash > 0 ? k.slice(0, k.length - (t.id.length - hash)) : undefined;
+    const cn = ck ? m.terminals.get(ck) : undefined;
+    if (ck && cn && !m.wiresAt.has(ck) && !m.cabled.has(ck)) {
+      push({
+        severity: 'warning',
+        rule: 'connector-unconnected',
+        message: `${device.id}: コネクタ ${cn.terminal.label ?? cn.terminal.id} がつながっていません`,
+        devices: [device.id],
+        wires: [],
+        key: `unconnected:${ck}`,
+      });
+      continue;
+    }
     if (t.role === 'ground') {
       push({ severity: 'warning', rule: 'ground-missing', message: `${device.id}: 接地端子 ${t.id} が接地されていません`, devices: [device.id], wires: [], key: `unconnected:${k}` });
     } else {
