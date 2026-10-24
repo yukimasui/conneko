@@ -127,11 +127,13 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
 ### 非常停止・安全
 
 - PCON/ACON/DCON-CB の `EMG-` は「+24V を加えると運転可」の DC24V 受電端子（`function: 'safety-input'`）。
-- ティーチングボックスの非常停止接点（S1-S2、EMG1+/EMG1− など）は、TB 未接続時に内部で短絡（またはダミープラグ）されるため、Conneko では**常に閉の導通**として扱った。
-  外側に入れた非常停止スイッチの接点の種類（b 接点か）をチェックできるようにするため。
+- ティーチングボックスの非常停止接点（S1-S2、EMG1+/EMG1− など）は、TB 未接続時に内部で短絡（またはダミープラグ）される b 接点。
+  `{ switch: 'NC', safetyContact: true }`（機器の外のもので開く b 接点）として書き、安全入力のループの接点に数える（v0.6.15、#7）。
+  コントローラー自身が動作しても閉じたままとして短絡を調べる。
 - 内蔵 24V から非常停止スイッチを通して戻す停止入力（XSEL の EMGin・ENBin、MSEL の EMGIN・ENBIN、PSEL の EMG−・ENB− など）は、内蔵 24V 出力を
   `supply.kind: 'test'`、戻りの入力を `role: 'signal'`＋`function: 'safety-input'` にし、`stopLoop()`（mode `nc-nc`、configurable）の安全チャンネルを付けた。
-  ループに a 接点（例: 電磁接触器の 13-14）を入れると `estop-not-nc` の注意になる（テストあり）。
+  ループに a 接点（例: 電磁接触器の 13-14）を入れると `estop-not-nc` の注意になる。セーフティリレーの安全出力（13-14 など、
+  `function: 'safety-contact'`）は b 接点と同じに扱い、指摘しない（テストあり）。
 - SCON-CB の STO 仕様・SCON2・RCON-SC の STO（/SRI1+・/SRI2+）は 2 チャンネルの安全入力。CB-SC-STO を通して安全コントローラーの OSSD 2 本をつなぐとエラーなし、片側だけだと `safety-channel-partial`（テストあり）。
 
 ### アクチュエーターとコントローラーの接続
@@ -222,8 +224,10 @@ IAI のロボシリンダー・単軸ロボット用コントローラーと、�
    提案: `TerminalDef` に `protocols?: string[]` と `port?: string`（同じポートの端子の組）を足し、ポート単位で protocol-mismatch を調べる。
 3. **機器自身の内部経路が安全チェーンで飛ばされる**。TB の非常停止接点（b 接点）を `switch: 'NC'` の内部経路にすると安全チェーンの探索で無視されるため、常に閉の導通にした。
    提案: 安全チェーンの探索で、機器自身の内部経路も「接点」として経路に含めるオプション（`InternalLink.safetyContact?: true`）。
+   → v0.6.15 で対応（#7）。TB の非常停止・イネーブル接点は `{ switch: 'NC', safetyContact: true }`。
 4. **安全リレーの a 接点を停止ループに入れる構成が `estop-not-nc` になる**。そのため `stopLoop` を configurable にして注意にとどめた。
    提案: 安全接点（安全リレー・安全コントローラーの出力接点）に `function: 'safety-output-contact'` のような印を付け、b 接点と同等に扱う。
+   → v0.6.15 で対応（#7）。端子の `function: 'safety-contact'` の接点は、安全入力のループで b 接点と同じに扱う。
 5. **8 点ごとのコモン電流の上限（例: MSEL・PSEL の出力 400mA/8 点）が書けない**。`commonLimits` は端子単位で、同じ N ピンを共有する出力の組ごとの上限を表せない。
    提案: `commonLimits` に「出力ピンの組 → 上限電流」の形を足す。
    → v0.6.9 で対応（#2。`commonLimits` の `outputs`）。MSEL の標準 I/O の出力は 300〜307・308〜315 の 8 点ごとに 400mA。PSEL は未確認のため未設定。

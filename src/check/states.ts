@@ -4,6 +4,7 @@
  * 次の状態ごとに同電位グループを作り直し、電源出力どうしの矛盾（短絡・混触・地絡など）を探す。
  * - 通常時: すべての b 接点が閉、a 接点と出力が開
  * - 機器ごとの動作時: その機器の a 接点・出力が閉、b 接点が開（ほかの機器は通常時のまま）
+ *   ただし、機器の外のもので開く b 接点（safetyContact。ティーチングボックスの非常停止接点など）は閉じたまま
  *
  * 1 台ずつ動作させるので、正逆転のように 2 台が同時に動作しないことを前提にした回路は誤検出しない。
  * 常時の状態ですでに見つかった矛盾は重ねて報告しない。
@@ -66,7 +67,7 @@ export function checkSwitchStates(m: Model, push: Push, conflictRoots: Set<strin
     const active = links.filter((s) => s.link.switch !== 'NC');
     if (!active.length) continue;
     // 動作したときに開く b 接点は、同じ単位のものだけ（ほかの単位の b 接点は閉じたまま）
-    const inUnit = (s: SwitchLink) => s.device === device && (s.link.actor ?? '') === actor;
+    const inUnit = (s: SwitchLink) => s.device === device && (s.link.actor ?? '') === actor && !s.link.safetyContact;
     const what = active.every((s) => s.link.switch === 'output') ? '出力が ON になる' : '動作する';
     const who = actor ? `${device} の ${actorLabel(m, device, actor)}` : device;
     evaluate([...nc.filter((s) => !inUnit(s)), ...active], active, `${who} が${what}と`, [device]);

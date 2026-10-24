@@ -51,7 +51,8 @@ export function checkSafety(m: Model, push: Push) {
       if (here.length && !startRoots.has(r)) continue;
       expanded.add(r);
       for (const s of linksAt.get(r) ?? []) {
-        if (s.device === owner || links.includes(s)) continue;
+        // 機器自身の経路は通らない。ただし機器の外のもので開く b 接点（ティーチングボックスの非常停止接点など）は通る
+        if ((s.device === owner && !s.link.safetyContact) || links.includes(s)) continue;
         links.push(s);
         const other = m.fixed.find(s.a) === r ? m.fixed.find(s.b) : m.fixed.find(s.a);
         if (!visited.has(other)) {
@@ -87,7 +88,7 @@ export function checkSafety(m: Model, push: Push) {
         const info = m.terminals.get(k)!;
         const id = info.device.id;
         if (id === owner || info.terminal.role !== 'input') continue;
-        if (!m.switchLinks.some((s) => s.device === id && (s.link.switch === 'NO' || s.link.switch === 'NC'))) continue;
+        if (!m.switchLinks.some((s) => s.device === id && (s.link.switch === 'NO' || s.link.switch === 'NC') && !s.link.safetyContact)) continue;
         coils.set(id, [...(coils.get(id) ?? []), k]);
       }
     }
@@ -173,8 +174,11 @@ export function checkSafety(m: Model, push: Push) {
         for (const s of ch.links) {
           const other = m.devices.get(s.device)!;
           const contact = `${s.device} の ${s.link.from}-${s.link.to}`;
-          // イネーブルスイッチの a 接点（強制開離）は安全入力に使える
-          if (s.link.switch === 'NO' && !s.link.directOpening) {
+          // 機器の外のもので開く b 接点（ティーチングボックスの非常停止接点など）は、定義で確かめてあるものとする
+          if (s.link.safetyContact) continue;
+          // イネーブルスイッチの a 接点（強制開離）と、安全出力の接点（セーフティリレーの 13-14 など。
+          // 安全回路が開くと開く）は、b 接点と同じに安全入力に使える
+          if (s.link.switch === 'NO' && !s.link.directOpening && !isSafetyOutputContact(other, s)) {
             push({
               severity: severe,
               rule: 'estop-not-nc',
@@ -367,6 +371,11 @@ export function checkSafety(m: Model, push: Push) {
       });
     }
   }
+}
+
+/** 安全出力の接点か（セーフティリレーの 13-14 など。端子の function が 'safety-contact'） */
+function isSafetyOutputContact(d: DeviceInfo, s: SwitchLink): boolean {
+  return [s.link.from, s.link.to].some((t) => functionsOf(d.r.terminal(t) ?? d.r.pin(t) ?? {}).includes('safety-contact'));
 }
 
 function ratingText(s: SafetyRating): string {

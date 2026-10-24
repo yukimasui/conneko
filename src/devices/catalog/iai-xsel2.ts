@@ -260,11 +260,11 @@ const pins = (p: ParamValues): PinDef[] => [
 ];
 
 const links = (p: ParamValues): InternalLink[] => [
-  // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグで閉）。Conneko では常に閉の導通として扱う
-  { from: 'EMG1+', to: 'EMG1-' },
-  { from: 'EMG2+', to: 'EMG2-' },
-  { from: 'ENB1+', to: 'ENB1-' },
-  { from: 'ENB2+', to: 'ENB2-' },
+  // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグで閉）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+  { from: 'EMG1+', to: 'EMG1-', switch: 'NC', safetyContact: true },
+  { from: 'EMG2+', to: 'EMG2-', switch: 'NC', safetyContact: true },
+  { from: 'ENB1+', to: 'ENB1-', switch: 'NC', safetyContact: true },
+  { from: 'ENB2+', to: 'ENB2-', switch: 'NC', safetyContact: true },
   // EMGin の −側と EMGout の 0V は内部で同じ基準（フォトカプラーの入力回路）
   { from: 'SHDWN+', to: 'SHDWN-', switch: 'NO' },
   { from: 'RDY+', to: 'RDY-', switch: 'NO' },

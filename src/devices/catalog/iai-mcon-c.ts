@@ -203,8 +203,8 @@ const terminals = (p: ParamValues): TerminalDef[] => {
 const links = (): InternalLink[] => {
   const ls: InternalLink[] = [
     { from: 'CP0V', to: 'MP0V' },
-    // SIO にティーチングツールの非常停止接点（MCON-C は未接続時に内部で短絡）。Conneko では常に閉の導通として扱う
-    { from: 'S1', to: 'S2' },
+    // SIO にティーチングツールの非常停止接点（MCON-C は未接続時に内部で短絡）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+    { from: 'S1', to: 'S2', switch: 'NC', safetyContact: true },
   ];
   for (let n = 0; n < 4; n++) ls.push({ from: 'MP24V', to: `MPO${n}`, directed: true });
   return ls;

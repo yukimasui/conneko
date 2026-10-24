@@ -118,8 +118,8 @@ const terminals = (p: ParamValues): TerminalDef[] => {
 };
 
 const links: InternalLink[] = [
-  // ティーチングボックスの STOP スイッチ（TB 未接続時は内部で短絡。GWG はダミープラグ）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
-  { from: 'S2', to: 'S1' },
+  // ティーチングボックスの STOP スイッチ（TB 未接続時は内部で短絡。GWG はダミープラグ）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
+  { from: 'S2', to: 'S1', switch: 'NC', safetyContact: true },
 ];
 
 /** ゲートウェイユニットの機器定義を作る */

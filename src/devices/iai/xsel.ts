@@ -90,14 +90,14 @@ export function xselSystemIo(x: number, y: number, pitch: number, sa: boolean, t
     if (s.id === 'AUTO2IN') return { ...base, role: 'signal', optional: true };
     return { ...base, role: 'signal', optional: true };
   });
-  // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグ DP-2 で閉）。Conneko では TB の停止スイッチを常に閉の導通として扱う（外側に入れた非常停止スイッチの接点の種類をチェックするため）
+  // ティーチングボックスの非常停止・イネーブル接点（TB またはダミープラグ DP-2 で閉）。Conneko では機器の外のもので開く b 接点（safetyContact）として扱い、安全入力のループの接点に数える
   const links: InternalLink[] = [
-    { from: 'EMG1+', to: 'EMG1-' },
-    { from: 'ENB1+', to: 'ENB1-' },
+    { from: 'EMG1+', to: 'EMG1-', switch: 'NC', safetyContact: true },
+    { from: 'ENB1+', to: 'ENB1-', switch: 'NC', safetyContact: true },
     ...(sa
       ? [
-          { from: 'EMG2+', to: 'EMG2-' },
-          { from: 'ENB2+', to: 'ENB2-' },
+          { from: 'EMG2+', to: 'EMG2-', switch: 'NC' as const, safetyContact: true },
+          { from: 'ENB2+', to: 'ENB2-', switch: 'NC' as const, safetyContact: true },
         ]
       : []),
     { from: 'SDN+', to: 'SDN-', switch: 'NO' },

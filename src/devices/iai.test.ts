@@ -239,6 +239,50 @@ describe('プログラムコントローラー（MSEL・XSEL・PSEL）', () => {
     expect(rulesOf(d)).toContain('estop-not-nc');
   });
 
+  it('XSEL のティーチングボックスの非常停止接点は機器の外で開く b 接点（safetyContact）で、ループの接点の種類の指摘に出ない', () => {
+    const l = resolveDevice(def('iai.xsel-ra')).links.find((x) => x.from === 'EMG1+');
+    expect(l).toMatchObject({ to: 'EMG1-', switch: 'NC', safetyContact: true });
+    const rules = checkDiagram(xsel(false), lookup)
+      .filter((i) => i.devices.includes('XSEL1'))
+      .map((i) => i.rule);
+    expect(rules).not.toContain('estop-not-nc');
+    expect(rules).not.toContain('not-direct-opening');
+  });
+
+  it('XSEL の非常停止のループにセーフティリレーの安全出力（13-14）を入れても、a 接点の指摘（estop-not-nc）は出ない', () => {
+    const d = xsel(false);
+    d.devices.push({ id: 'SR1', type: 'omron.g9sa-301', x: 0, y: 0 });
+    d.wires = d.wires.filter((x) => !(x.from.terminal === 'EMG1-' && x.to.terminal === 'EMGIN'));
+    d.wires.push(w('XSEL1.EMG1-', 'SR1.13'), w('SR1.14', 'XSEL1.EMGIN'));
+    expect(checkDiagram(d, lookup).filter((i) => i.rule === 'estop-not-nc')).toEqual([]);
+  });
+
+  it('XSEL が動作しても（RDY の接点が閉じても）、ティーチングボックスの非常停止接点は閉じたままとして短絡を探す', () => {
+    // +24V → RDY（a 接点）→ EMG1（TB の b 接点）→ 0V。XSEL が動作して RDY が閉じると短絡する
+    const d: Diagram = {
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+        { id: 'XSEL1', type: 'iai.xsel-ra', x: 0, y: 0 },
+      ],
+      wires: [w('PSU1.+V1', 'XSEL1.RDY+'), w('XSEL1.RDY-', 'XSEL1.EMG1+'), w('XSEL1.EMG1-', 'PSU1.-V1')],
+    };
+    const issues = checkDiagram(d, lookup).filter((i) => i.key?.startsWith('state:'));
+    expect(issues.map((i) => i.message).join('\n')).toMatch(/XSEL1 が動作する/);
+  });
+
+  it('safetyContact は b 接点（switch: NC）にだけ書ける', () => {
+    const d = (link: DeviceDefinition['links']): DeviceDefinition => ({
+      type: 't', name: 't', model: 't', category: 'plc', labelPrefix: 'T', width: 10, height: 10, svg: '',
+      terminals: [
+        { id: 'A', x: 1, y: 1, side: 'top', role: 'signal' },
+        { id: 'B', x: 2, y: 1, side: 'top', role: 'signal' },
+      ],
+      links: link,
+    });
+    expect(validateDefinition(d([{ from: 'A', to: 'B', switch: 'NC', safetyContact: true }]))).toEqual([]);
+    expect(validateDefinition(d([{ from: 'A', to: 'B', safetyContact: true }])).some((m) => m.includes('safetyContact'))).toBe(true);
+  });
+
   it('MSEL の出力（NPN）から KEYENCE の入力ユニット（プラスコモン）へつなぐとエラーなし、PNP 仕様の MSEL だと極性エラー', () => {
     const d = (io: string): Diagram => ({
       devices: [

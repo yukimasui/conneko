@@ -1,9 +1,11 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.14 機器の中のコイルと接点など）
+最終更新: 2026-10-24（v0.6.15 安全回路のチェックの改善など）
 
 ## 現在地
 
+- v0.6.15（#7）: `InternalLink.safetyContact`（機器の外のもので開く b 接点。安全入力のループで機器自身の経路でも数え、短絡の状態検査では閉じたまま）。
+  IAI のティーチングボックスの非常停止・イネーブル接点に適用。安全出力の接点（`function: 'safety-contact'`）は `estop-not-nc` の対象外
 - v0.6.14（#6）: `internalLoads` と `InternalLink.actor`、短絡の状態検査を負荷ごとに。汎用のリレーターミナル 8 点。
   東洋技研のリレー付き端子台（PCRY など）は #11 の機器の候補に残す
 - v0.6.13（#5）: 電線の端末処理（`fromTermination` / `toTermination`、`src/data/terminations.ts`）、端子の `wire`・`ratedCurrent`、
