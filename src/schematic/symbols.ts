@@ -438,6 +438,23 @@ function plcPoint(dir: 'in' | 'out'): SymbolDef {
   };
 }
 
+/**
+ * PLC のソース出力（PNP）。電源側から出力点を通って負荷へ流すので、段の左に置き、端子を右に出す（plc-out を左右に映した形）
+ */
+function plcSourceOut(): SymbolDef {
+  return {
+    description: 'PLC の出力（ソース出力。段の左に置く）',
+    primitives: [rect(-17.5, -2.5, -2.5, 2.5), line([-2.5, 0], [0, 0]), line([-16, -2.5], [-16, 2.5])],
+    pins: { 1: [0, 0] },
+    attributes: [
+      attr('ADDR', [-9.25, 0], TAG_TEXT),
+      attr('T1', [-1.25, 1.5], PIN_TEXT),
+      attr('TAG', [-10, 4], PIN_TEXT),
+      attr('COMMENT', [-10, -4], PIN_TEXT),
+    ],
+  };
+}
+
 // ---- 箱（どの記号にも当たらない機器） ----
 
 export interface BoxPin {
@@ -513,6 +530,7 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   'ground',
   'plc-in',
   'plc-out',
+  'plc-out-src',
 ];
 
 /** 接点の記号 ID（C は c 接点）。directOpening で直接開路動作の印をつける（末尾 -do） */
@@ -581,6 +599,8 @@ function buildSymbol(id: string): SymbolDef | undefined {
       return plcPoint('in');
     case 'plc-out':
       return plcPoint('out');
+    case 'plc-out-src':
+      return plcSourceOut();
   }
   return undefined;
 }

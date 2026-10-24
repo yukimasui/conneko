@@ -155,6 +155,22 @@ export function route(a: PinAt, b: PinAt, net: string, obstacles: Bounds[], segm
   return best;
 }
 
+/**
+ * 手で決めた位置に真ん中の区間を通す線。端子から少し出し、x なら縦の区間を x に、y なら横の区間を y に通してつなぐ（y は上向きの座標）
+ */
+export function bentRoute(a: PinAt, b: PinAt, bend: { x?: number; y?: number }): Point[] {
+  const sa: Point = [a.pos[0] + a.dir[0] * STUB, a.pos[1] + a.dir[1] * STUB];
+  const sb: Point = [b.pos[0] + b.dir[0] * STUB, b.pos[1] + b.dir[1] * STUB];
+  const mid: Point[] = bend.x !== undefined ? [[bend.x, sa[1]], [bend.x, sb[1]]] : [[sa[0], bend.y!], [sb[0], bend.y!]];
+  return simplify([a.pos, sa, ...mid, sb, b.pos]);
+}
+
+/** 手で決めた高さ（y は上向きの座標）を通して母線へ引き出す線 */
+export function bentRailRoute(p: PinAt, railX: number, y: number): Point[] {
+  const s: Point = [p.pos[0] + p.dir[0] * STUB, p.pos[1] + p.dir[1] * STUB];
+  return simplify([p.pos, s, [s[0], y], [railX, y]]);
+}
+
 /** 置いた端子どうしを結ぶ最小全域木（Prim 法。距離は縦横の和）の辺 */
 export function spanningTree(pins: PinAt[]): [number, number][] {
   const n = pins.length;

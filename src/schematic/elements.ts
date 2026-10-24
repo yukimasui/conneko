@@ -224,7 +224,8 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
         key: id,
         kind,
         name: `${kind === 'plc-input' ? '入力' : '出力'} ${label}`,
-        symbol: kind === 'plc-input' ? 'plc-in' : 'plc-out',
+        // ソース出力（PNP）は段の左に置く記号
+        symbol: kind === 'plc-input' ? 'plc-in' : (r.terminal(id) ?? r.pin(id))?.signal?.kind === 'pnp' ? 'plc-out-src' : 'plc-out',
         pinOf: { [id]: '1' },
         // ネジ端子の PLC は端子名が入出力番号そのもの（'Y00'）なので、同じなら端子番号を書かない
         attributes: { ADDR: addr, ...(pin !== addr ? { T1: pin } : {}) },

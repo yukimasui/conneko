@@ -23,7 +23,7 @@ import {
   type SchematicSheetOut,
   type SymbolDef,
 } from './format';
-import { paperOf, splitRail, type Rails, type SchematicItem } from './model';
+import { paperOf, splitRail, wireEdgeKey, wireEnd, type Rails, type SchematicItem, type WireBend } from './model';
 import { pinDirection, pinPoint, placedBounds } from './place';
 import { librarySymbol } from './symbols';
 import { bomPages } from './sheets/bom';
@@ -33,7 +33,7 @@ import { pneumaticLayout, type PneumaticGroup } from './sheets/pneumatic';
 import { rackHosts, rackPages } from './sheets/rack';
 import { ioSystem } from '../model/io';
 import { terminalPages } from './sheets/terminal';
-import { junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, wireNoAt, type PinAt, type Segment } from './wiring';
+import { bentRailRoute, bentRoute, junctions, r3, railRoute, RAIL_DETOURS, route, spanningTree, STUB, wireNoAt, type PinAt, type Segment } from './wiring';
 
 /** 1 行目の段の高さ（用紙の上端から）[mm] */
 export const ROW_TOP = 30;
@@ -241,6 +241,8 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
   interface PlacedPin extends PinAt {
     root: string;
     row: number;
+    /** 線の端の名前（要素 ID # 記号の端子） */
+    ref: string;
   }
   const pinsBySheet = new Map<string, PlacedPin[]>();
   const sheetsOfNet = new Map<string, Map<string, number[]>>();
@@ -258,7 +260,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       seen.add(id);
       const row = rowOf.get(e.id)!;
       const list = pinsBySheet.get(e.placed.sheet) ?? [];
-      list.push({ root, pos, dir: pinDirection(sym, pin, item.rotation), row });
+      list.push({ root, pos, dir: pinDirection(sym, pin, item.rotation), row, ref: wireEnd(e.id, pin) });
       pinsBySheet.set(e.placed.sheet, list);
       const bySheet = sheetsOfNet.get(root) ?? new Map<string, number[]>();
       bySheet.set(e.placed.sheet, [...(bySheet.get(e.placed.sheet) ?? []), row]);
@@ -326,8 +328,8 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     // 線が避ける記号の外形と、引いた線分（別の網の線と重ならないように経路を選ぶ）
     const obstacles = out.inserts.map((ins) => placedBounds(symbolOfInsert(ins.symbol, byId.get(ins.element!)!), ins.at, ins.rotation));
     const segments: Segment[] = [];
-    const draw = (points: Point[], net: string) => {
-      out.polylines.push({ points, layer: 'WIRE' });
+    const draw = (points: Point[], net: string, edge?: string) => {
+      out.polylines.push({ points, layer: 'WIRE', ...(edge ? { edge } : {}) });
       for (let i = 0; i + 1 < points.length; i++) segments.push({ a: points[i], b: points[i + 1], net });
     };
     const byNet = new Map<string, PlacedPin[]>();
@@ -335,15 +337,22 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
 
     // 母線と母線への引き出し（先に引き、ほかの線はこれを避ける）。母線の上端・下端はすべての母線でそろえる
     const railYs: number[] = [];
-    for (const rail of rails) {
-      if (!rail.root) continue;
+    // 手で動かした曲がり位置（y は下向きで持っているので上向きに直す）
+    const bendOf = (k: string): WireBend | undefined => {
+      const b = sh.bends?.[k];
+      return b ? (b.x !== undefined ? { x: b.x } : { y: H - b.y! }) : undefined;
+    };
+    rails.forEach((rail, ri) => {
+      if (!rail.root) return;
       const pins = byNet.get(rail.root) ?? [];
       const no = wireNoOf(rail.root);
       const ys = railYs;
       for (const p of pins) {
         if (r3(p.pos[0]) === r3(rail.x)) continue;
-        const pl = railRoute(p, rail.x, rail.root, obstacles, segments, rail.detours);
-        draw(pl, rail.root);
+        const edge = wireEdgeKey(ri === 0 ? 'rail:supply' : 'rail:common', p.ref);
+        const bend = bendOf(edge);
+        const pl = bend?.y !== undefined ? bentRailRoute(p, rail.x, bend.y) : railRoute(p, rail.x, rail.root, obstacles, segments, rail.detours);
+        draw(pl, rail.root, edge);
         const end = pl[pl.length - 1];
         ys.push(end[1]);
         out.dots.push({ at: end, layer: 'WIRE' });
@@ -352,7 +361,7 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
           out.texts.push({ at: [(a[0] + b[0]) / 2, b[1] + 1.8], text: no, height: WIRE_NO_TEXT, layer: 'WIRENO' });
         }
       }
-    }
+    });
     const top = railYs.length ? Math.max(...railYs) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
     const bottom = railYs.length ? Math.min(...railYs) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
     for (const rail of rails) {
@@ -369,8 +378,10 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
       if (rails.some((r) => r.root === root)) continue;
       const polylines: Point[][] = [];
       for (const [i, j] of spanningTree(pins)) {
-        const pl = route(pins[i], pins[j], root, obstacles, segments);
-        draw(pl, root);
+        const edge = wireEdgeKey(pins[i].ref, pins[j].ref);
+        const bend = bendOf(edge);
+        const pl = bend ? bentRoute(pins[i], pins[j], bend) : route(pins[i], pins[j], root, obstacles, segments);
+        draw(pl, root, edge);
         polylines.push(pl);
       }
       // 別のシートにも同じ網の端子があれば、その行番号を書く

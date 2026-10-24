@@ -64,6 +64,8 @@ export interface SchematicPolyline {
   dashed?: boolean;
   /** 元になった電線の ID。DXF には書かない */
   wire?: string;
+  /** 展開接続図の線のキー（両端の要素の端子。手で曲がり位置を動かすのに使う。model.ts の wireEdgeKey）。DXF には書かない */
+  edge?: string;
 }
 
 /** 線の接続点（T 字の黒丸） */

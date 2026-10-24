@@ -2254,6 +2254,25 @@ textarea {
   stroke: var(--accent);
   stroke-dasharray: 1 0.6;
 }
+/* 展開接続図の線の区間（ドラッグで曲がり位置を動かす）。縦の区間は左右、横の区間は上下に動く */
+.schem-wire-hit {
+  stroke: transparent;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  cursor: ns-resize;
+}
+.schem-wire-hit.is-vertical {
+  cursor: ew-resize;
+}
+.schem-wire-hit:hover {
+  stroke: rgba(37, 99, 235, 0.35);
+}
+.schem-wire-hit.is-moved {
+  stroke: rgba(234, 88, 12, 0.18);
+}
+.schem-wire-hit.is-moved:hover {
+  stroke: rgba(234, 88, 12, 0.45);
+}
 
 .schem-info,
 .schem-settings {

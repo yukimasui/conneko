@@ -98,12 +98,18 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
   // --- 経路のグラフ（網を頂点、記号を辺とする） ---
   const adjacency = new Map<string, Edge[]>();
   const addEdge = (e: Edge) => adjacency.set(e.a, [...(adjacency.get(e.a) ?? []), e]);
+  /** ソース出力（PNP）の出力点。段の左に置き、負荷を通って戻り側の母線へ着く経路を別に探す */
+  const sources: { entry: ElementEntry; net: string }[] = [];
   for (const entry of build.elements) {
     if (!LADDER_KINDS.has(entry.element.kind)) continue;
     const terminalOf = (pin: string) => Object.entries(entry.element.pinOf).find(([, p]) => p === pin)?.[0];
     const t1 = terminalOf('1');
     if (!t1) continue;
     const n1 = build.netOf(entry.device, t1);
+    if (entry.element.kind === 'plc-output' && entry.element.symbol === 'plc-out-src') {
+      sources.push({ entry, net: n1 });
+      continue;
+    }
     if (entry.element.kind === 'plc-input' || entry.element.kind === 'plc-output') {
       addEdge({ entry, a: n1, b: PLC_END, reversed: false });
       continue;
@@ -209,6 +215,42 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
         bxCursor += widthOf(e.entry.symbol) + GAP;
       }
     }
+  }
+
+  // --- ソース出力（PNP）: 出力点を段の左に置き、負荷（と途中の接点）を通って戻り側の母線へ着く段にする ---
+  for (const src of right ? sources : []) {
+    if (where.has(src.entry.id) || elsewhere.has(src.entry.id)) continue;
+    let best: Edge[] | undefined;
+    const walk = (net: string, path: Edge[], seen: Set<string>) => {
+      if (path.length >= MAX_DEPTH || (best && path.length >= best.length)) return;
+      for (const e of adjacency.get(net) ?? []) {
+        if (e.b === PLC_END || e.entry.element.kind.startsWith('plc-') || path.some((p) => p.entry === e.entry)) continue;
+        if (e.b === right) {
+          if (!best || path.length + 1 < best.length) best = [...path, e];
+          continue;
+        }
+        if (seen.has(e.b) || e.b === left) continue;
+        seen.add(e.b);
+        walk(e.b, [...path, e], seen);
+        seen.delete(e.b);
+      }
+    };
+    walk(src.net, [], new Set([src.net]));
+    if (!best) continue;
+    const chain = best as Edge[];
+    const above = Math.max(0, symbolBounds(src.entry.symbol).y2, ...chain.filter((e) => !isPlaced(e)).map((e) => symbolBounds(e.entry.symbol).y2));
+    const y = rowBelow(bottomOf(items, build.byId, paper), above);
+    // 出力点の記号は端子（右端）が基準点なので、枠の幅だけ右に置く
+    const sx = START - symbolBounds(src.entry.symbol).x1;
+    put({ entry: src.entry }, sx, y);
+    let cursor = sx + GAP;
+    for (const e of chain.slice(0, -1)) {
+      if (isPlaced(e)) continue;
+      put(e, cursor, y);
+      cursor += widthOf(e.entry.symbol) + GAP;
+    }
+    const last = chain[chain.length - 1];
+    if (!isPlaced(last)) put(last, Math.max(cursor, rightX(last.entry.symbol, paper)), y);
   }
 
   // --- 接点でたどれない入出力点: つながった機器の箱と 1 段にする ---
