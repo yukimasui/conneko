@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.24 概念図の機器名の位置など）
+最終更新: 2026-10-24（v0.6.25 LED の色で変わる消費電流など）
 
 ## 現在地
 
+- v0.6.25（#1 完了）: A22N・M22N の LED の電流を色の関数に（`a22nLedCurrent`）。SCON-CB の幅・XSEL の 5〜8 軸は資料待ち
 - v0.6.24（#34 完了）: 機器名のラベルの位置を、線・機器と重ならない候補から選ぶ（`src/editor/labelPlace.ts`、画面とシートの画像で共通）
 - v0.6.23（#22）: `InternalLink` の `timed`・`positions`・`system`、`switch-system`、状態検査のセレクタの位置ごとの単位。記号 `contact-*-selector`・`-on-delay`・`-off-delay`・`buzzer`。
   G3NA の `loadRating` パラメーター

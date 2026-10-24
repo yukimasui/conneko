@@ -11,7 +11,7 @@
  *   定格: AC-15 AC240V 3A・AC120V 6A、DC-13 DC24V 4A、最小適用負荷 DC5V 10mA。LED 24V AC/DC ±10%、約 12mA（赤・橙・黄・青）/ 約 5mA（白・緑）
  *   接点ブロックの色: a 接点 = 青、b 接点 = 橙
  */
-import { A22N_RATING, LED_24V_ACDC, buildPanelSwitch, type ColorOption, type ContactBlock, type Unit } from './panel-switch';
+import { A22N_RATING, LED_24V_ACDC, a22nLedCurrent, buildPanelSwitch, type ColorOption, type ContactBlock, type Unit } from './panel-switch';
 
 /** 照光なしのボタンの色（不透明） */
 export const A22N_OPAQUE: ColorOption[] = [
@@ -82,7 +82,7 @@ export function buildA22nl100() {
     colors: A22N_LIT,
     // 裏から見て左からユニット位置 3（なし）・2（照光ユニット）・1（a 接点）
     units: [{ kind: 'led' }, NO],
-    led: { accepts: LED_24V_ACDC, current: 0.012, note: '24V AC/DC、極性なし' },
+    led: { accepts: LED_24V_ACDC, current: a22nLedCurrent, note: '24V AC/DC、極性なし' },
     caption: (c) => `A22NL-BNM-${c}A-G100-${c.slice(1)}C`,
     actuator: 'pushbutton',
     rating: A22N_RATING,

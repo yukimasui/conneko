@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDeviceDefinition } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
+import { resolveNum } from '../devices/types';
 import type { Diagram, DiagramWire } from '../model/diagram';
 import { deviceElements } from '../schematic/elements';
 import { LIBRARY_SYMBOL_IDS, librarySymbol } from '../schematic/symbols';
@@ -72,6 +73,18 @@ describe('限時接点（timed）', () => {
 
   it('ブザー HW1Z は展開図でブザーの記号になる', () => {
     expect(deviceElements(def('idec.hw1z-2pq4b')).map((e) => e.symbol)).toEqual(['buzzer']);
+  });
+});
+
+describe('パラメーターで変わる消費電流（#1）', () => {
+  it('A22N の照光・M22N の表示灯の LED の電流は色で変わる（赤 12mA・白と緑 5mA）', () => {
+    const m22 = def('omron.m22n-bn-a-c');
+    expect(resolveNum(m22.loadCurrent, m22, { color: 'TR' })).toBe(0.012);
+    expect(resolveNum(m22.loadCurrent, m22, { color: 'TG' })).toBe(0.005);
+    expect(resolveNum(m22.loadCurrent, m22, {})).toBe(0.005);
+    const a22 = def('omron.a22nl-bnm-g100-c');
+    expect(resolveNum(a22.loadCurrent, a22, { color: 'TW' })).toBe(0.005);
+    expect(resolveNum(a22.loadCurrent, a22, { color: 'TO' })).toBe(0.012);
   });
 });
 
