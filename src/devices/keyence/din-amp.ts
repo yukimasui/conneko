@@ -38,6 +38,8 @@ export interface DinAmpOpts {
   vmin: number;
   vmax: number;
   rated: number;
+  /** 出力の合計の上限[A]（「2 出力合計 100mA」など） */
+  outputTotal?: number;
   params?: ParamDef[];
   loadCurrent?: number;
   bus?: BusSpec;
@@ -75,6 +77,7 @@ export function buildDinAmp(o: DinAmpOpts): DeviceDefinition {
     vmin: o.vmin,
     vmax: o.vmax,
     rated: o.rated,
+    outputTotal: o.outputTotal,
     params: o.params,
     loadCurrent: o.loadCurrent,
     title: o.title,

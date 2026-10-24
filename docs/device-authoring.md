@@ -97,6 +97,9 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
   - 線番の重複は、常時導通の経路だけでつながった範囲ごとに確認する（出力点ごとに別の線番にできる）。
 - 定格: 出力 1 点の定格電流は `ratedCurrent`（出力点につないだ負荷の `loadCurrent` の合計と比較）、
   コモンあたりの上限は `commonLimits: [{ common: 'COM0', current: 8 }]`（`to` がそのコモンの出力の負荷電流を合計）。
+  コモンとは別に、出力点のグループで上限が決まる場合（「8 点で 400mA」「2 出力合計 100mA」）は
+  `commonLimits: [{ outputs: ['Y0', 'Y1', …], current: 0.4, label: '出力 Y0〜Y7' }]`（`from` がその出力の負荷電流を合計）。
+  NPN / PNP で基準側が変わる機器も、出力の端子で書けば同じ書き方でよい。`commonLimits` はパラメータの関数にもできる。
 - 安全用の接点: 直接開路動作（⊕）の b 接点は `directOpening: true`、ミラー接点・強制ガイド接点は `linked: 'mirror' | 'force-guided'`。
 
 ## 信号の種類（`signal`）
