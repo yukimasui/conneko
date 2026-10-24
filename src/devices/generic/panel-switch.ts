@@ -6,7 +6,7 @@
  * 背面のブロックは「裏から見た並び」（メーカーの BOTTOM VIEW と同じ左右）で描く。
  * 接点ブロック 1 個につきネジ端子が上下に 1 つずつあり、上の端子から上へ、下の端子から下へ電線が出る。
  */
-import type { AcceptSpec, ContactActuator, DeviceDefinition, InternalLink, ParamDef, ParamValues, TerminalDef } from '../types';
+import type { AcceptSpec, ContactActuator, DeviceDefinition, InternalLink, NumOrParam, ParamDef, ParamValues, TerminalDef } from '../types';
 import { SCREW_GRADIENT, TINTS, noSymbol, ncSymbol, screw, text, tintGradient, type Tint } from './parts';
 
 /** 操作部の種類 */
@@ -50,7 +50,7 @@ export interface PanelSwitchSpec {
   /** 背面のユニット（裏から見て左から順） */
   units: Unit[];
   /** 照光 LED（端子 X1・X2） */
-  led?: { accepts: AcceptSpec | AcceptSpec[]; current: number; note: string };
+  led?: { accepts: AcceptSpec | AcceptSpec[]; current: NumOrParam; note: string };
   /** 型式の表示（色記号から作る） */
   caption: (code: string) => string;
   /** セレクタの位置の表示（左から） */
@@ -257,6 +257,12 @@ export function buildPanelSwitch(s: PanelSwitchSpec): DeviceDefinition {
     ...(s.estimated ? { estimated: s.estimated } : {}),
   };
 }
+
+/**
+ * オムロン A22N・M22N の LED の電流[A]（24V AC/DC。色で変わる: 赤・橙・黄・青 約 12mA、白・緑 約 5mA）。
+ * params の color（色記号。末尾の 1 文字が色: G 緑・R 赤・Y 黄・W 白・A 青・O 橙）から求める
+ */
+export const a22nLedCurrent = (p: ParamValues): number => (/[GW]$/.test(String(p.color ?? '')) ? 0.005 : 0.012);
 
 /** オムロン A22N の接点の定格（データシート A22N/M22N/A30N の Ratings） */
 export const A22N_RATING = 'AC-15: AC240V 3A・AC120V 6A、DC-13: DC24V 4A（最小適用負荷 DC5V 10mA）';

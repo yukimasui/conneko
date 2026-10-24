@@ -1,6 +1,6 @@
 import type { DeviceDefinition, ParamValues } from '../types';
 import { A22N_LIT } from '../generic/omron-a22n';
-import { LED_24V_ACDC } from '../generic/panel-switch';
+import { LED_24V_ACDC, a22nLedCurrent } from '../generic/panel-switch';
 import { SCREW_GRADIENT, TINTS, screw, text, tintGradient } from '../generic/parts';
 
 /**
@@ -85,7 +85,8 @@ const def: DeviceDefinition = {
       default: 'TG',
     },
   ],
-  loadCurrent: 0.012,
+  // LED の電流は色で変わる（赤・橙・黄・青 約 12mA、白・緑 約 5mA）
+  loadCurrent: a22nLedCurrent,
   schematic: { elements: [{ kind: 'lamp', terminals: ['X1', 'X2'] }] },
 };
 
