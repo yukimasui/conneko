@@ -181,9 +181,11 @@ export function bentRailRoute(p: PinAt, railX: number, y: number): Point[] {
 }
 
 /** 置いた端子どうしを結ぶ最小全域木（Prim 法。距離は縦横の和）の辺 */
-export function spanningTree(pins: PinAt[]): [number, number][] {
+export function spanningTree(pins: PinAt[], linked: [number, number][] = []): [number, number][] {
   const n = pins.length;
-  const dist = (i: number, j: number) => Math.abs(pins[i].pos[0] - pins[j].pos[0]) + Math.abs(pins[i].pos[1] - pins[j].pos[1]);
+  // linked の組（幹線で結んだ端子など）はすでにつながっているものとして、その組の線は返さない
+  const isLinked = (i: number, j: number) => linked.some(([a, b]) => (a === i && b === j) || (a === j && b === i));
+  const dist = (i: number, j: number) => (isLinked(i, j) ? -1 : Math.abs(pins[i].pos[0] - pins[j].pos[0]) + Math.abs(pins[i].pos[1] - pins[j].pos[1]));
   const inTree = new Array<boolean>(n).fill(false);
   const best = new Array<number>(n).fill(Infinity);
   const from = new Array<number>(n).fill(-1);
@@ -193,7 +195,7 @@ export function spanningTree(pins: PinAt[]): [number, number][] {
     let u = -1;
     for (let i = 0; i < n; i++) if (!inTree[i] && (u < 0 || best[i] < best[u])) u = i;
     inTree[u] = true;
-    if (from[u] >= 0) edges.push([from[u], u]);
+    if (from[u] >= 0 && !isLinked(from[u], u)) edges.push([from[u], u]);
     for (let v = 0; v < n; v++) {
       if (inTree[v]) continue;
       const d = dist(u, v);
@@ -204,6 +206,64 @@ export function spanningTree(pins: PinAt[]): [number, number][] {
     }
   }
   return edges;
+}
+
+/** 主回路の幹線（縦にまっすぐ向かい合う 2 つの端子を結ぶ線。上の端子の y が y2、下の端子の y が y1） */
+export interface Trunk {
+  upper: number;
+  lower: number;
+  x: number;
+  y1: number;
+  y2: number;
+}
+
+/**
+ * 網の端子のうち、同じ x で上の端子が下を向き、下の端子が上を向いて向かい合う組（主回路の上から下へまっすぐ降りる線）。
+ * 上の端子ごとに、真下のいちばん近い端子と組にする
+ */
+export function trunks(pins: PinAt[]): Trunk[] {
+  const out: Trunk[] = [];
+  const used = new Set<number>();
+  pins.forEach((u, i) => {
+    if (u.dir[1] >= 0 || used.has(i)) return;
+    let best = -1;
+    pins.forEach((l, j) => {
+      if (j === i || used.has(j) || l.dir[1] <= 0 || r3(l.pos[0]) !== r3(u.pos[0]) || l.pos[1] >= u.pos[1]) return;
+      if (best < 0 || l.pos[1] > pins[best].pos[1]) best = j;
+    });
+    if (best < 0) return;
+    used.add(i).add(best);
+    out.push({ upper: i, lower: best, x: u.pos[0], y1: pins[best].pos[1], y2: u.pos[1] });
+  });
+  return out;
+}
+
+/**
+ * 端子から幹線へ T 字に引く線（分岐）。横向きの端子は端子の高さのまま幹線へまっすぐ、縦向きの端子は少し出してから横へ。
+ * 幹線の途中（両端の端子から 2.5mm 以上内側）に着き、記号を横切らず、別の網の線と重ならない（交差はよい）ものを選ぶ。
+ * 着けられなければ undefined
+ */
+export function tapRoute(p: PinAt, list: Trunk[], net: string, obstacles: Bounds[], segments: Segment[]): { trunk: Trunk; points: Point[] } | undefined {
+  let best: { trunk: Trunk; points: Point[] } | undefined;
+  let bestScore = Infinity;
+  for (const t of list) {
+    const ys = p.dir[0] !== 0 ? [p.pos[1]] : STUBS.map((len) => p.pos[1] + p.dir[1] * len);
+    // 横向きの端子は幹線の方を向いていること
+    if (p.dir[0] !== 0 && p.dir[0] * (t.x - p.pos[0]) <= 0) continue;
+    for (const y of ys) {
+      if (y <= t.y1 + 2.5 || y >= t.y2 - 2.5) continue;
+      const points = simplify([p.pos, [p.pos[0], y], [t.x, y]]);
+      if (hits(points, obstacles)) continue;
+      const c = conflicts(points, net, segments);
+      if (c >= 10) continue;
+      const score = c + Math.abs(t.x - p.pos[0]) * 0.01 + Math.abs(y - p.pos[1]) * 0.01;
+      if (score < bestScore) {
+        best = { trunk: t, points };
+        bestScore = score;
+      }
+    }
+  }
+  return best;
 }
 
 /** 線の分かれ目（3 本以上の線が集まる点）。点を通り抜ける線は 2 本と数える */
