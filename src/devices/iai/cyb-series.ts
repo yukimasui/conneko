@@ -141,7 +141,7 @@ export function buildCybSeries(s: CybSpec): DeviceDefinition {
     return [
       { id: 'PIO', label: 'PIO（20 極）', note: 'PIO コネクター（モレックス 51353-2000 の 20 極）。CYB は PIO ケーブル CB-PAD-PIO、PLB/POB はシールド付き CB-PAD-PIOS でつなぐ', x: PIO.x, y: PIO.y, side: 'left', role: 'connector', connector: { kind: 'IAI-PIO20', pins: 20, width: 34, length: 18, facing: 'front' }, optional: true },
       { id: 'SIO', label: 'SIO', note: 'ティーチングツール・ゲートウェイの接続用', x: SIO.x, y: SIO.y, side: 'left', role: 'connector', connector: { kind: 'MINIDIN8', pins: 0, width: 16, length: 14, facing: 'front', protocols: ['iai-sio'] }, optional: true },
-      { id: 'MPG', label: 'モーター・エンコーダー（下面）', note: 'アクチュエーターのモーター・エンコーダー一体ケーブル', x: MOT.x, y: MOT.y, side: 'bottom', role: 'connector', connector: { kind: s.motorKind, pins: 0, width: 20, length: 10 }, optional: true },
+      { id: 'MPG', label: 'モーター・エンコーダー（下面）', note: 'アクチュエーターのモーター・エンコーダー一体ケーブル', x: MOT.x, y: MOT.y, side: 'bottom', role: 'connector', connector: { kind: s.motorKind, pins: 0, width: 20, length: 10, required: true }, optional: true },
       { ...at('BK'), id: 'BK', label: 'BK', note: 'ブレーキ強制解除の電源入力（DC24V 150mA。+24V で解除）', role: 'input', accepts: DC24_PLUS, optional: true },
       { ...at('MP'), id: 'MP', label: 'MP', note: 'モーター駆動電源 +24V（制御電源と同じ電源から、または外部の遮断回路を通して供給）', role: 'input', accepts: DC24_PLUS },
       { ...at('CP'), id: 'CP', label: 'CP', note: '制御電源 +24V（DC24V ±10%）。PIO の入力のプラスコモンを兼ねる', role: 'input', accepts: DC24_PLUS },

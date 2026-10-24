@@ -198,7 +198,7 @@ export function buildCbSeries(s: CbSeriesSpec): DeviceDefinition {
       y: n2(MPG.y + MPG.h / 2),
       side: 'left',
       role: 'connector',
-      connector: { kind: s.motorKind, pins: 0, width: MPG.h, length: 14, facing: 'front' },
+      connector: { kind: s.motorKind, pins: 0, width: MPG.h, length: 14, facing: 'front', required: true },
       optional: true,
     });
     const pw = power.pos;

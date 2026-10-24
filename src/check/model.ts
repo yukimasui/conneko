@@ -107,6 +107,8 @@ export interface Model {
   tubesAt: Map<string, DiagramWire[]>;
   /** ケーブルで導通するピンの組 */
   cablePairs: [string, string][];
+  /** ケーブルでつないだコネクタの端子 */
+  cabled: Set<string>;
   wiresAt: Map<string, DiagramWire[]>;
   /** 常時導通の内部経路（端子キーの組。リンクによる導通も含む） */
   fixedLinks: [string, string][];
@@ -430,6 +432,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
     tubes,
     tubesAt,
     cablePairs,
+    cabled,
     wiresAt,
     fixedLinks,
     labelLinks,

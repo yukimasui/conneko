@@ -199,7 +199,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       role: 'signal',
       function: 'safety-input',
     },
-    { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（GIC2.5/4-STF-7.62）', x: mo.V.x, y: n2((mo.U.y + mo.V.y) / 2), side: 'left', role: 'connector', connector: { kind: 'IAI-SCON-MOT', pins: 0, width: 4 * 7.62 * MM, length: 16, facing: 'front' }, optional: true },
+    { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（GIC2.5/4-STF-7.62）', x: mo.V.x, y: n2((mo.U.y + mo.V.y) / 2), side: 'left', role: 'connector', connector: { kind: 'IAI-SCON-MOT', pins: 0, width: 4 * 7.62 * MM, length: 16, facing: 'front', required: true }, optional: true },
     { id: 'RB', label: 'RB（回生抵抗ユニット）', note: '回生抵抗ユニット RESU-2 などの接続', x: L.rb.x, y: L.rb.y, side: 'left', role: 'connector', connector: { kind: 'IAI-RB', pins: 0, width: 40, length: 14, facing: 'front' }, optional: true },
     { id: 'BK+', label: 'BK+', note: 'ブレーキ電源 DC24V ±10%（最大 1A。ブレーキ付きアクチュエーターのとき）', x: L.bk.x, y: n2(L.bk.y - 2), side: 'left', role: 'input', accepts: DC24_PLUS, optional: true },
     { id: 'PWR-', label: 'PWR-', note: 'ブレーキ電源 0V', x: L.bk.x, y: n2(L.bk.y + 5), side: 'left', role: 'input', accepts: DC24_MINUS, optional: true },
@@ -222,7 +222,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: L.pg.y,
       side: 'right',
       role: 'connector',
-      connector: { kind: 'IAI-SCON-PG', pins: 26, width: 44, length: 14, facing: 'front', style: 'lan' },
+      connector: { kind: 'IAI-SCON-PG', pins: 26, width: 44, length: 14, facing: 'front', style: 'lan', required: true },
       optional: true,
     },
   );

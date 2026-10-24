@@ -69,6 +69,8 @@ export const actuatorConnector = (kind: string, mates: string[] = [], width = 14
   kind,
   pins: 0,
   width,
+  // コントローラーにつながないとアクチュエーターは動かない
+  required: true,
   ...(mates.length ? { mates } : {}),
 });
 
@@ -113,6 +115,7 @@ export const encoder26Connector = (kind: string, mates: string[] = [], width = 1
   pins: 26,
   width,
   style: 'lan',
+  required: true,
   ...(mates.length ? { mates } : {}),
 });
 

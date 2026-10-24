@@ -349,6 +349,27 @@ describe('アクチュエーター（ロボシリンダー・エレシリンダ�
     expect(errorsOf(pcon('iai.rcp6-sa', { brake: 'B' }))).toEqual([]);
   });
 
+  it('アクチュエーターのモーター・エンコーダー、1 軸コントローラーのモーターのコネクタをつなぎ忘れると警告する（#23）', () => {
+    const d = pcon('iai.rcp6-sa');
+    const alone: Diagram = { ...d, wires: d.wires.filter((x) => x.wireType !== 'CABLE') };
+    const found = checkDiagram(alone, lookup).filter((i) => i.rule === 'connector-unconnected');
+    expect(found.map((i) => i.devices[0]).sort()).toEqual(['AX1', 'C1']);
+    expect(found.every((i) => i.severity === 'warning')).toBe(true);
+    // つなげば出ない
+    expect(rulesOf(d)).not.toContain('connector-unconnected');
+    // RCS4 と SCON-CB は MOT・PG の両方
+    const scon: Diagram = {
+      devices: [
+        { id: 'C1', type: 'iai.scon-cb', x: 0, y: 0 },
+        { id: 'AX1', type: 'iai.rcs4-sa', x: 0, y: 0 },
+      ],
+      wires: [],
+    };
+    const keys = checkDiagram(scon, lookup).filter((i) => i.rule === 'connector-unconnected').map((i) => i.key);
+    expect(keys).toEqual(expect.arrayContaining(['unconnected:C1:MOT', 'unconnected:C1:PG']));
+    expect(keys.filter((k) => k?.startsWith('unconnected:AX1:')).length).toBe(2);
+  });
+
   it('RCP6 の高推力タイプ（SA8C・RA8C、P4）は PCON-CB にはつながらず、PCON-CFB にはつながる', () => {
     expect(rulesOf(pcon('iai.rcp6-sa', { type: 'SA8C' }))).toContain('connector-mismatch');
     expect(rulesOf(pcon('iai.rcp6-ra', { type: 'RA8C' }))).toContain('connector-mismatch');
