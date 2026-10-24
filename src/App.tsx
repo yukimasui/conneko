@@ -19,6 +19,7 @@ import './styles.css';
 import iconUrl from './assets/conneko-face.png?inline';
 import { checkDiagram, type CheckIssue, type Severity } from './check/checkDiagram';
 import { DEFAULT_WIRE } from './data/wires';
+import { linkShape, withLinkParam } from './devices/link';
 import { deviceDefinitions, getDeviceDefinition } from './devices/registry';
 import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
 import { deviceModel, deviceSize } from './devices/types';
@@ -46,7 +47,7 @@ import { DEVICE_DRAG_TYPE, Palette } from './editor/Palette';
 import { SheetTabs } from './editor/SheetTabs';
 import { WireEdge } from './editor/WireEdge';
 import { buildAiPrompt } from './io/aiPrompt';
-import { alignableLinkCount, alignLinks } from './model/alignLinks';
+import { alignableLinkCount, alignLinks, alignLinksAs, setLinkOrientation, verticalLinkCounts } from './model/alignLinks';
 import { airCandidates, isAirPort, normalizeTubes, tubeAttrs } from './model/air';
 import { isTubeType } from './data/tubes';
 import { computeBus, effectiveParams, mountedPositions } from './model/bus';
@@ -759,10 +760,46 @@ function Editor() {
 
   const changeParam = useCallback(
     (id: string, key: string, value: number | string) => {
-      setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, params: { ...n.data.params, [key]: value } } } : n)));
+      setNodes((ns) =>
+        ns.map((n) => {
+          if (n.id !== id) return n;
+          // リンクは向きとつなぐ側が食い違わないよう、もう一方も合わせる
+          const params = getDeviceDefinition(n.data.deviceType)?.netLabel ? withLinkParam(n.data.params, key, value) : { ...n.data.params, [key]: value };
+          return { ...n, data: { ...n.data, params } };
+        }),
+      );
     },
     [setNodes],
   );
+
+  /** リンク ids の向きを切り替える（横のものが 1 つでもあれば全部を縦に、なければ全部を横にする） */
+  const toggleLinkOrientation = useCallback(
+    (ids: string[]) => {
+      const links = diagram.devices.filter((x) => ids.includes(x.id) && getDeviceDefinition(x.type)?.netLabel);
+      if (!links.length) return;
+      const vertical = links.some((x) => !linkShape(x.params).vertical);
+      applyDiagram(
+        setLinkOrientation(diagram, links.map((x) => x.id), vertical, getDeviceDefinition),
+        `${links.length === 1 ? links[0].id : `リンク ${links.length} 個`}を${vertical ? '縦' : '横'}向きにしました`,
+      );
+    },
+    [diagram, applyDiagram],
+  );
+  // V キー: 選んだリンクの縦・横を切り替える（展開図の「縦にする」と同じキー）
+  useEffect(() => {
+    if (mode !== 'diagram') return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest('input, textarea, select') || t.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'v' && e.key !== 'V')) return;
+      const ids = nodes.filter((n) => n.selected).map((n) => n.id);
+      if (!ids.length) return;
+      e.preventDefault();
+      toggleLinkOrientation(ids);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode, nodes, toggleLinkOrientation]);
 
   const changeNote = useCallback(
     (id: string, note: string) => {
@@ -830,6 +867,10 @@ function Editor() {
       const others = sheets.filter((s) => s.id !== node.data.sheet);
       const name = def?.netLabel ? String(node.data.params?.[def.netLabel.param] ?? '').trim() : '';
       const peers = (linkPeers.get(linkKey(node.data.deviceType, name)) ?? []).filter((p) => p.id !== node.id);
+      // 選択中のリンクを右クリックしたら、選択中のリンクをまとめて切り替える
+      const linkIds = def?.netLabel ? (node.selected ? nodes.filter((n) => n.selected).map((n) => n.id) : [node.id]) : [];
+      const vertical = linkIds.every((id) => linkShape(nodes.find((n) => n.id === id)?.data.params).vertical);
+      const counts = verticalLinkCounts(diagram, node.id, getDeviceDefinition);
       const items: MenuItem[] = [
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => openPlc(node.id, 'rack') }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => openPlc(node.id, 'io') }] : []),
@@ -843,6 +884,25 @@ function Editor() {
               },
             ]
           : []),
+        ...(counts.horizontal
+          ? [
+              {
+                label: '上下の端子のリンクを縦にしてそろえる',
+                onClick: () => applyDiagram(alignLinksAs(diagram, node.id, true, getDeviceDefinition), `${node.id} の上下の端子のリンクを縦にして並べました`),
+              },
+            ]
+          : []),
+        ...(counts.vertical
+          ? [
+              {
+                label: '上下の端子のリンクを横にしてそろえる',
+                onClick: () => applyDiagram(alignLinksAs(diagram, node.id, false, getDeviceDefinition), `${node.id} の上下の端子のリンクを横にして並べました`),
+              },
+            ]
+          : []),
+        ...(linkIds.length
+          ? [{ label: vertical ? '↔ 横向きにする' : '↕ 縦向きにする', hint: 'V', onClick: () => toggleLinkOrientation(linkIds) }]
+          : []),
         {
           label: node.data.mount ? '別のシートへ移動（親と一緒に）' : '別のシートへ移動',
           children: [
@@ -854,7 +914,7 @@ function Editor() {
       ];
       setMenu({ x: e.clientX, y: e.clientY, items });
     },
-    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, openPlc, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram],
+    [sheets, linkPeers, ioDevices, plcDevices, valveDevices, openPlc, focusDevice, moveDevicesToSheet, moveToNewSheet, deleteElements, diagram, applyDiagram, nodes, toggleLinkOrientation],
   );
 
   const onEdgeContextMenu = useCallback(

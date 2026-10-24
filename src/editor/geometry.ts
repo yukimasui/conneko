@@ -5,10 +5,10 @@
  * - 重なりを避けるレーン
  * - 折れ線（自動の経路、または手で曲げた経路）
  */
+import { linkShape } from '../devices/link';
 import { resolveDevice } from '../devices/resolve';
-import type { DeviceDefinition, ParamValues, TerminalSide } from '../devices/types';
+import { deviceSize, type DeviceDefinition, type ParamValues, type TerminalSide } from '../devices/types';
 import type { DiagramWire, TerminalRef } from '../model/diagram';
-import { LINK_TYPE } from '../model/ops';
 import { FAN_LENGTH } from './CableGraphics';
 import { HANDLE_DEPTH } from './DeviceNode';
 import type { WireGeometry } from './EditorContext';
@@ -26,26 +26,31 @@ export interface LayoutDevice {
 
 export type LayoutWire = Pick<DiagramWire, 'id' | 'from' | 'to' | 'fromSide' | 'toSide' | 'bend' | 'route'>;
 
-/** 向きが「自動」のリンクを、つないだ相手の端子のある側に向ける（side は電線をつなぐ側） */
+/**
+ * 向きが「自動」のリンクを、つないだ相手の端子のある側に向ける（side は電線をつなぐ側）。
+ * 横のリンクは左か右、縦のリンク（orientation: 'vertical'）は上か下
+ */
 export function linkSidesOf(
   devices: LayoutDevice[],
   wires: LayoutWire[],
   paramsOf: (id: string) => ParamValues | undefined,
   lookup: DefLookup,
-): Map<string, 'left' | 'right'> {
-  const out = new Map<string, 'left' | 'right'>();
+): Map<string, TerminalSide> {
+  const out = new Map<string, TerminalSide>();
   const byId = new Map(devices.map((d) => [d.id, d]));
-  const linkDef = lookup(LINK_TYPE);
   for (const d of devices) {
     const def = lookup(d.type);
-    if (!def?.netLabel || (paramsOf(d.id)?.side ?? 'auto') !== 'auto' || !linkDef) continue;
+    const p = paramsOf(d.id);
+    if (!def?.netLabel || (p?.side ?? 'auto') !== 'auto') continue;
     const w = wires.find((x) => x.from.device === d.id || x.to.device === d.id);
     const ref = w && (w.from.device === d.id ? w.to : w.from);
     const other = ref && byId.get(ref.device);
     const odef = other && lookup(other.type);
     const t = other && odef && ref ? resolveDevice(odef, paramsOf(other.id)).terminal(ref.terminal) : undefined;
     if (!other || !t) continue;
-    out.set(d.id, other.x + t.x < d.x + linkDef.width / 2 ? 'left' : 'right');
+    const size = deviceSize(def, p);
+    if (linkShape(p).vertical) out.set(d.id, other.y + t.y < d.y + size.height / 2 ? 'top' : 'bottom');
+    else out.set(d.id, other.x + t.x < d.x + size.width / 2 ? 'left' : 'right');
   }
   return out;
 }
@@ -63,7 +68,6 @@ export function wireLayout(
   const byId = new Map(devices.map((d) => [d.id, d]));
   const inputs: LaneInput[] = [];
   const geometry = new Map<string, WireGeometry>();
-  const linkDef = lookup(LINK_TYPE);
   const raw = (r: TerminalRef) => {
     const n = byId.get(r.device);
     const def = n && lookup(n.type);
@@ -79,8 +83,8 @@ export function wireLayout(
     const sideOf = (me: NonNullable<typeof a>, other: NonNullable<typeof a>, manual?: TerminalSide): TerminalSide => {
       if (manual) return manual;
       const horizontal = me.t.side === 'left' || me.t.side === 'right';
-      if (horizontal && !me.t.connector && !other.t.connector && other.def.netLabel && !me.def.netLabel && linkDef) {
-        return other.n.x + linkDef.width / 2 < me.x ? 'left' : 'right';
+      if (horizontal && !me.t.connector && !other.t.connector && other.def.netLabel && !me.def.netLabel) {
+        return other.n.x + other.rd.width / 2 < me.x ? 'left' : 'right';
       }
       return me.t.side;
     };

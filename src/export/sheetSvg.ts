@@ -5,6 +5,7 @@
  */
 import { getWireColor } from '../data/wires';
 import { instantiateSvg } from '../devices/registry';
+import { linkShape } from '../devices/link';
 import { deviceModel, deviceSize, type DeviceDefinition, type ParamValues } from '../devices/types';
 import { cableStyle } from '../devices/resolve';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
@@ -66,9 +67,12 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
   for (const x of devices) {
     const def = lookup(x.type);
     if (!def) continue;
-    grow(x.x, x.y - (def.netLabel ? 4 : LABEL_SPACE + (notes && x.note ? 18 : 0)));
     const size = deviceSize(def, paramsOf(x.id));
-    grow(x.x + Math.max(size.width, 120), x.y + size.height + (def.netLabel ? 16 : 4));
+    // 縦のリンクは、相手のシートを矢印の先（上か下）に縦書きで書く
+    const shape = def.netLabel ? linkShape(paramsOf(x.id)) : undefined;
+    const vlink = shape?.vertical;
+    grow(x.x, x.y - (vlink ? (shape.side === 'bottom' ? 80 : 4) : def.netLabel ? 4 : LABEL_SPACE + (notes && x.note ? 18 : 0)));
+    grow(x.x + (vlink ? size.width : Math.max(size.width, 120)), x.y + size.height + (vlink ? (shape.side === 'top' ? 80 : 4) : def.netLabel ? 16 : 4));
   }
   const paths = wires.flatMap((w) => {
     const geo = geometry.get(w.id);
@@ -113,6 +117,15 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       const k = linkKey(x.type, String(paramsOf(x.id)?.name ?? '').trim());
       const others = [...new Set((peers.get(k) ?? []).filter((s) => s !== sheetId))].map((s) => sheets.find((v) => v.id === s)?.name ?? s);
       const text = others.length ? `→ ${others.join('、')}` : (peers.get(k)?.length ?? 0) > 1 ? '→ このシート' : '相手なし';
+      const shape = linkShape(paramsOf(x.id));
+      if (shape.vertical) {
+        // 上でつなぐなら下の矢印の先から下へ、下でつなぐなら上の矢印の先から上へ向かって縦書きで書く
+        const below = shape.side === 'top';
+        out.push(
+          `<text x="${px + width / 2}" y="${below ? py + height + 3 : py - 3}" writing-mode="tb" glyph-orientation-vertical="0" text-anchor="${below ? 'start' : 'end'}" font-family="sans-serif" font-size="9" fill="#1d4ed8">${esc(text)}</text>`,
+        );
+        continue;
+      }
       out.push(`<text x="${px + 6}" y="${py + height + 11}" font-family="sans-serif" font-size="9" fill="#1d4ed8">${esc(text)}</text>`);
       continue;
     }

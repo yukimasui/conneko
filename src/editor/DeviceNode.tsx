@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { linkShape } from '../devices/link';
 import { getDeviceDefinition, instantiateSvg } from '../devices/registry';
 import { resolveDevice } from '../devices/resolve';
 import { linkKey } from '../model/ops';
@@ -19,14 +20,27 @@ const POSITION: Record<TerminalSide, Position> = {
 export const HANDLE_DEPTH = 10;
 
 /** リンクの相手（同じ名前のリンク）があるシート。クリックでそのシートのリンクへ移動する */
-function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: string; sheet: string; sheetName: string }[]; sheet: string; onJump: (id: string) => void }) {
+function LinkPeers({
+  self,
+  peers,
+  sheet,
+  onJump,
+  place,
+}: {
+  self: string;
+  peers: { id: string; sheet: string; sheetName: string }[];
+  sheet: string;
+  onJump: (id: string) => void;
+  /** 一覧を出す場所: 横のリンクは下、縦のリンクは矢印の先（上でつなぐなら下、下でつなぐなら上）に縦書きで出す */
+  place: 'below' | 'vertical-below' | 'vertical-above';
+}) {
   const others = peers.filter((p) => p.id !== self);
   // シートごとに 1 つにまとめる（このシートの相手は最後に）
   const bySheet = new Map<string, { id: string; name: string }>();
   for (const p of others) if (!bySheet.has(p.sheet)) bySheet.set(p.sheet, { id: p.id, name: p.sheet === sheet ? 'このシート' : p.sheetName });
   const list = [...bySheet].sort((a, b) => Number(a[0] === sheet) - Number(b[0] === sheet));
   return (
-    <div className={`link-peers${others.length ? '' : ' is-alone'}`}>
+    <div className={`link-peers${others.length ? '' : ' is-alone'}${place === 'below' ? '' : ` link-peers--${place}`}`}>
       {list.length
         ? list.map(([s, p]) => (
             <button
@@ -45,6 +59,11 @@ function LinkPeers({ self, peers, sheet, onJump }: { self: string; peers: { id: 
         : '相手なし'}
     </div>
   );
+}
+
+function linkPlace(params: Parameters<typeof linkShape>[0]): 'below' | 'vertical-below' | 'vertical-above' {
+  const { vertical, side } = linkShape(params);
+  return !vertical ? 'below' : side === 'top' ? 'vertical-below' : 'vertical-above';
 }
 
 function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
@@ -105,6 +124,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
           peers={linkPeers.get(linkKey(def.type, String(params?.[def.netLabel.param] ?? '').trim())) ?? []}
           sheet={data.sheet}
           onJump={onJump}
+          place={linkPlace(params)}
         />
       )}
       {terminals.map((t) => (

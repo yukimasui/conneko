@@ -1140,6 +1140,23 @@ textarea {
 .link-peers__item:hover {
   text-decoration: underline;
 }
+/* 縦のリンク: 矢印の先に縦書きで出す（横に詰めて並べても隣と重ならない） */
+.link-peers--vertical-below,
+.link-peers--vertical-above {
+  left: 50%;
+  transform: translateX(-50%);
+  writing-mode: vertical-rl;
+}
+.link-peers--vertical-below .link-peers__item,
+.link-peers--vertical-above .link-peers__item {
+  padding: 2px 0;
+}
+.link-peers--vertical-above {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 1px;
+}
 
 /* --- I/O 割付ダイアログ --- */
 .io-dialog {
