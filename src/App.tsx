@@ -31,6 +31,7 @@ import { renderSheetSvg } from './export/sheetSvg';
 import { ConnectPicker } from './editor/ConnectPicker';
 import { ContextMenu, type MenuItem } from './editor/ContextMenu';
 import { DeviceNode } from './editor/DeviceNode';
+import { labelLefts as computeLabelLefts } from './editor/labelPlace';
 import { linkSidesOf, wireLayout } from './editor/geometry';
 import { EditorContext } from './editor/EditorContext';
 import { diagramToFlow, flowToDiagram, type DeviceFlowNode, type WireEdgeData, type WireFlowEdge } from './editor/flow';
@@ -239,6 +240,20 @@ function Editor() {
     [nodes, edges, shownParams, sheet],
   );
 
+  // 機器名のラベルの位置（上から来る線を避ける）。表示中のシートの機器と電線で決める
+  const labelLefts = useMemo(
+    () =>
+      computeLabelLefts(
+        nodes.filter((n) => n.data.sheet === sheet).map((n) => ({ id: n.id, type: n.data.deviceType, x: n.position.x, y: n.position.y, ...(n.data.mount ? { mount: n.data.mount } : {}) })),
+        flowToDiagram([], edges).wires,
+        geometry,
+        lanes,
+        getDeviceDefinition,
+        (id) => shownParams.get(id),
+      ),
+    [nodes, edges, geometry, lanes, shownParams, sheet],
+  );
+
   // --- シートと移動 ---
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -322,8 +337,8 @@ function Editor() {
       i.devices.forEach((d) => worst(deviceSeverity, d, i.severity));
       i.wires.forEach((w) => worst(wireSeverity, w, i.severity));
     }
-    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params: shownParams, hosts: new Set(bus.groups.keys()), linkPeers, onJump: focusDevice, showMarkers, showNotes };
-  }, [issues, lanes, geometry, shownParams, bus, linkPeers, focusDevice, showMarkers, showNotes]);
+    return { deviceSeverity, wireSeverity, lanes, geometry, issues, params: shownParams, hosts: new Set(bus.groups.keys()), labelLefts, linkPeers, onJump: focusDevice, showMarkers, showNotes };
+  }, [issues, lanes, geometry, shownParams, bus, labelLefts, linkPeers, focusDevice, showMarkers, showNotes]);
 
   // シートごとの最も重い指摘（タブに印を付ける）
   const sheetSeverity = useMemo(() => {

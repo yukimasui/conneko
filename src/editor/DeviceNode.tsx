@@ -24,6 +24,23 @@ export function labelBelow(terminals: { side: TerminalSide }[]): boolean {
   return terminals.length > 0 && terminals.every((t) => t.side === 'top');
 }
 
+/** 機器名のラベルの幅の目安[px]（機器名は太字 13px、型式は 11px） */
+export function labelWidth(id: string, model: string): number {
+  const w = (s: string, px: number) => [...s].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0xff ? px : px * 0.62), 0);
+  return Math.ceil(w(id, 13) + w(model, 11) + 18);
+}
+
+/**
+ * 機器名のラベルを上に出すときの左の位置[px]。上下の両方に端子がある機器（マニホールド・シリンダ・ブレーカーなど）で、
+ * 左端に置いたラベルに上の端子がかかる（上から来る電線・チューブが横切る）ときは、上の端子のいちばん右より右へずらす
+ */
+export function labelOffset(terminals: { side: TerminalSide; x: number }[], width: number): number {
+  const top = terminals.filter((t) => t.side === 'top');
+  if (!top.length || labelBelow(terminals)) return 0;
+  if (Math.min(...top.map((t) => t.x)) > width + 6) return 0;
+  return Math.ceil(Math.max(...top.map((t) => t.x)) + 10);
+}
+
 /** コネクタの接続点（Handle）の厚み。ケーブルの始点は Handle の side 側の端になる */
 export const HANDLE_DEPTH = 10;
 
@@ -78,12 +95,14 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
   const def = getDeviceDefinition(data.deviceType);
   // マウスを乗せている端子（ポップアップを出す）
   const [hover, setHover] = useState<{ id: string; rect: DOMRect } | null>(null);
-  const { deviceSeverity, params: effective, hosts, linkPeers, onJump, showNotes } = useEditorContext();
+  const { deviceSeverity, params: effective, hosts, labelLefts, linkPeers, onJump, showNotes } = useEditorContext();
   const severity = deviceSeverity.get(id);
   const params = effective.get(id) ?? data.params;
   const svg = useMemo(() => (def ? instantiateSvg(def, id, params) : ''), [def, id, params]);
   const resolved = useMemo(() => (def ? resolveDevice(def, params) : undefined), [def, params]);
   const terminals = useMemo(() => resolved?.terminals ?? [], [resolved]);
+  // 上から来る線にかからない機器名の位置（src/editor/labelPlace.ts）
+  const labelLeft = labelLefts.get(id) ?? 0;
   // パラメータで端子が変わる機器があるため、端子の位置を React Flow に知らせ直す
   // （初回の描画では不要。初回にも呼ぶと全体表示（fitView）が計測前に走ってしまう）
   // 元の端子に戻った場合も知らせ直すため、直前の端子と比べる
@@ -109,7 +128,11 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
       className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}${def.netLabel ? ' is-link' : ''}${labelBelow(terminals) ? ' is-label-below' : ''}`}
       style={{ width: resolved?.width ?? def.width, height: resolved?.height ?? def.height }}
     >
-      <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
+      <div
+        className="device-node__label"
+        title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}
+        style={labelLeft ? { left: labelLeft } : undefined}
+      >
         {/* 機器のコメントは、下の端子と重ならないよう機器名の上に出す */}
         {showNotes && data.note && !def.netLabel && (
           <div className="device-node__note" title={data.note}>

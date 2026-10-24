@@ -9,6 +9,7 @@ import { linkShape } from '../devices/link';
 import { deviceModel, deviceSize, type DeviceDefinition, type ParamValues } from '../devices/types';
 import { cableStyle, resolveDevice } from '../devices/resolve';
 import { labelBelow } from '../editor/DeviceNode';
+import { labelLefts } from '../editor/labelPlace';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
 import { DIR, toRoundedPath, type Point } from '../editor/routing';
 import { DIRECT_STROKES, tubeStrokes } from '../editor/tubeStyle';
@@ -53,6 +54,8 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
   const sides = linkSidesOf(devices, wires, (id) => base.get(id), lookup);
   const paramsOf = (id: string) => (sides.has(id) ? { ...base.get(id), side: sides.get(id)! } : base.get(id));
   const { geometry, lanes } = wireLayout(devices, wires, paramsOf, lookup);
+  // 機器名を上に出すときの左の位置（上から来る線を避ける。画面と同じ）
+  const lefts = labelLefts(devices, wires, geometry, lanes, lookup, paramsOf);
 
   // 範囲（機器、ラベル、電線の折れ線）
   let minX = Infinity;
@@ -76,7 +79,9 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
     const below = !def.netLabel && labelBelow(resolveDevice(def, paramsOf(x.id)).terminals);
     const labelSpace = LABEL_SPACE + (notes && x.note ? 18 : 0);
     grow(x.x, x.y - (vlink ? (shape.side === 'bottom' ? 80 : 4) : def.netLabel || below ? 4 : labelSpace));
-    grow(x.x + (vlink ? size.width : Math.max(size.width, 120)), x.y + size.height + (vlink ? (shape.side === 'top' ? 80 : 4) : def.netLabel ? 16 : below ? labelSpace : 4));
+    const shift = lefts.get(x.id) ?? 0;
+    grow(x.x + Math.min(0, shift), x.y);
+    grow(x.x + (vlink ? size.width : Math.max(size.width, shift + 120)), x.y + size.height + (vlink ? (shape.side === 'top' ? 80 : 4) : def.netLabel ? 16 : below ? labelSpace : 4));
   }
   const paths = wires.flatMap((w) => {
     const geo = geometry.get(w.id);
@@ -138,16 +143,19 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       out.push(`<text x="${px}" y="${py - 6}" font-family="sans-serif" font-size="9" font-weight="bold" fill="#111827">${esc(x.id)}</text>`);
       continue;
     }
-    // 端子が上にしかない機器は、画面と同じく機器名を下に書く
-    const below = labelBelow(resolveDevice(def, paramsOf(x.id)).terminals);
+    // 端子が上にしかない機器は、画面と同じく機器名を下に書く。上の端子にかかる機器名は右へずらす
+    const terms = resolveDevice(def, paramsOf(x.id)).terminals;
+    const below = labelBelow(terms);
+    const lx = px + (lefts.get(x.id) ?? 0);
     out.push(
-      `<text x="${px}" y="${below ? py + height + 14 : py - (bus.groups.has(x.id) ? 22 : 8)}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
+      `<text x="${lx}" y="${below ? py + height + 14 : py - (bus.groups.has(x.id) ? 22 : 8)}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
     );
     if (notes && x.note) {
       const w = Math.min(240, 14 + x.note.length * 10);
-      const ny = below ? py + height + 20 : py - 42;
-      out.push(`<rect x="${px}" y="${ny}" width="${w}" height="16" rx="8" fill="#fff8db" stroke="#f1d27a"/>`);
-      out.push(`<text x="${px + 8}" y="${ny + 11.5}" font-family="sans-serif" font-size="10" font-weight="bold" fill="#713f12">${esc(x.note)}</text>`);
+      // 親の機器名はユニットの機器名の上に出すので、コメントはさらにその上
+      const ny = below ? py + height + 20 : py - (bus.groups.has(x.id) ? 56 : 42);
+      out.push(`<rect x="${lx}" y="${ny}" width="${w}" height="16" rx="8" fill="#fff8db" stroke="#f1d27a"/>`);
+      out.push(`<text x="${lx + 8}" y="${ny + 11.5}" font-family="sans-serif" font-size="10" font-weight="bold" fill="#713f12">${esc(x.note)}</text>`);
     }
   }
 
