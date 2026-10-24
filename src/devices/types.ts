@@ -211,6 +211,11 @@ export interface SignalSpec {
   offCurrent?: number;
   /** 入力（dir: 'in'）: false の場合、2 線式センサーをつなげない（メーカーの資料で不可とされている入力） */
   twoWire?: false;
+  /**
+   * アナログの入出力（analog-v / analog-i）: 信号の基準（−側・GND）の端子ID。
+   * アナログ出力をつないだ入力の基準が、出力の基準とつながっているか（電流ループの帰り道）を確かめる
+   */
+  ref?: string;
 }
 
 /**
