@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.20 アナログ信号の帰り道のチェックなど）
+最終更新: 2026-10-24（v0.6.21 IDEC RU4S-D24 の追加など）
 
 ## 現在地
 
+- v0.6.21（#11 の一部）: `idec.ru4s-d24`（SY4S-05 の端子の位置は推定）
 - v0.6.20（#10 の一部）: `SignalSpec.ref`（アナログの基準端子）と `analog-return`。KV-AM40V・KV-TP40・IL-1000・FR-E820 に設定
 - v0.6.19（#10 の一部）: 接点の `ratedCurrent` と `contact-overload`、`cContact` の定格。`SignalSpec` の `leakCurrent`・`residualVoltage`・`onVoltage`・`offCurrent`・`twoWire` と
   `two-wire-input`。残り: アナログの電流ループの帰り道、同時動作の短絡（方針として見ない）、PL の計算
