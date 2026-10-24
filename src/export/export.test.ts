@@ -26,6 +26,13 @@ describe('部品表の仕様', () => {
     expect(sw.spec).toMatch(/スイッチの個数/);
     expect(sw.spec).toMatch(/リード線/);
   });
+
+  it('スピコンを直付けしたアクチュエータは、継手のパラメータを「直付けのスピコンの継手」の外径として書く（#33）', () => {
+    const rows = bomRows({ devices: [{ id: 'CY1', type: 'smc.cm2', x: 0, y: 0, params: { bore: 25, stroke: 100, speedController: 'meter-out' } }], wires: [] }, getDeviceDefinition);
+    const cy = rows.find((r) => r.ids.includes('CY1'))!;
+    expect(cy.spec).toMatch(/チューブ外径（直付けのスピコンの継手） φ6/);
+    expect(cy.spec).not.toMatch(/ポートの継手/);
+  });
 });
 
 describe('部品表・線番表・I/O 表', () => {

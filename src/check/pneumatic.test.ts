@@ -124,7 +124,36 @@ describe('エア回路のチェック', () => {
     const d = circuit();
     d.wires[1] = { ...d.wires[1], to: { device: 'SOL1', terminal: 'EA' }, tubeOD: 6 };
     const issues = air(d);
-    expect(issues.find((i) => i.rule === 'air-exhaust-pressurized')?.severity).toBe('error');
+    const ex = issues.find((i) => i.rule === 'air-exhaust-pressurized')!;
+    expect(ex.severity).toBe('error');
+    // 下流のシリンダの「届かない」は排気ポートへの給気の指摘にまとめる（#33）
+    expect(ex.message).toContain('CY1 にもエアが届いていません');
+    expect(ex.devices).toEqual(['SOL1', 'CY1']);
+    expect(issues.filter((i) => i.rule === 'air-no-supply')).toEqual([]);
+  });
+
+  it('複動シリンダの速度制御がメータイン（給気を絞る）なら注意する（#33）', () => {
+    const cm2 = (params: Record<string, string | number>): Diagram => ({
+      devices: [
+        { id: 'AIR1', type: 'generic.air-source', x: 0, y: 0 },
+        { id: 'SOL1', type: 'smc.sy3120-5lz', x: 0, y: 0 },
+        { id: 'CY1', type: 'smc.cm2', x: 0, y: 0, params: { bore: 25, stroke: 100, ...params } },
+      ],
+      wires: [tube('AIR1.OUT', 'SOL1.P', 6), tube('SOL1.A', 'CY1.HEAD'), tube('SOL1.B', 'CY1.ROD')],
+    });
+    const meterIn = (d: Diagram) => checkDiagram(d, lookup).filter((i) => i.rule === 'air-meter-in');
+    expect(meterIn(cm2({ speedController: 'meter-out' }))).toEqual([]);
+    const direct = meterIn(cm2({ speedController: 'meter-in' }));
+    expect(direct).toHaveLength(1);
+    expect(direct[0].severity).toBe('info');
+    // インラインのスピードコントローラを、自由流れの入口（IN）をシリンダ側にしてつなぐとメータイン
+    const inline = cm2({});
+    inline.devices.push({ id: 'SC1', type: 'smc.as-f.inline', x: 0, y: 0 });
+    inline.wires = [tube('AIR1.OUT', 'SOL1.P', 6), tube('SOL1.A', 'SC1.OUT'), tube('SC1.IN', 'CY1.HEAD'), tube('SOL1.B', 'CY1.ROD')];
+    expect(meterIn(inline).map((i) => i.message)[0]).toContain('SC1');
+    // 逆向き（IN を電磁弁側）はメータアウトなので出ない
+    inline.wires = [tube('AIR1.OUT', 'SOL1.P', 6), tube('SOL1.A', 'SC1.IN'), tube('SC1.OUT', 'CY1.HEAD'), tube('SOL1.B', 'CY1.ROD')];
+    expect(meterIn(inline)).toEqual([]);
   });
 
   it('レギュレータの IN と OUT を逆につなぐと指摘する', () => {

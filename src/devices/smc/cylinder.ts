@@ -32,6 +32,7 @@ import {
   type SwitchName,
 } from './autoswitch';
 import {
+  fittingSpecLabel,
   elbowMissing,
   elbowOnPort,
   portAirThread,
@@ -429,6 +430,7 @@ function seriesParams(s: CylinderSeries): ParamDef[] {
   out.push({
     key: 'fitting',
     label: 'ポートの継手（チューブ外径）',
+    specLabel: fittingSpecLabel,
     unit: 'mm',
     options: [4, 6, 8, 10, 12].map((v) => ({ value: v, label: `φ${v}` })),
     default: s.defaultFitting ?? 6,

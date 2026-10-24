@@ -234,6 +234,9 @@ export const speedControllerParam: ParamDef = {
   default: 'none',
 };
 
+/** ポートの継手のパラメータの、部品表の仕様での名前（スピコンを直付けすると、継手はスピコンのワンタッチ管継手になる） */
+export const fittingSpecLabel = (p: ParamValues) => (speedControlOf(p) ? 'チューブ外径（直付けのスピコンの継手）' : 'ポートの継手（チューブ外径）');
+
 /** パラメータで選んだ制御方式（なしは undefined） */
 export const speedControlOf = (p: ParamValues): SpeedControl | undefined =>
   p.speedController === 'meter-out' || p.speedController === 'meter-in' ? p.speedController : undefined;

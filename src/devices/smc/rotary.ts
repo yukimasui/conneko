@@ -10,6 +10,7 @@ import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { text } from '../generic/parts';
 import { pneumaticSwitchList, leadsMinWidth, spreadLeads, switchBody, switchCable, labelSideOf, switchDescription, switchLinks, switchOf, switchParams, switchSlots, switchSuffix, switchTerminals, type SwitchName } from './autoswitch';
 import {
+  fittingSpecLabel,
   elbowMissing,
   elbowOnPort,
   portAirThread,
@@ -90,7 +91,7 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
       ],
       default: 'A',
     },
-    { key: 'fitting', label: 'ポートの継手（チューブ外径）', unit: 'mm', options: [4, 6, 8].map((v) => ({ value: v, label: `φ${v}` })), default: 4 },
+    { key: 'fitting', label: 'ポートの継手（チューブ外径）', specLabel: fittingSpecLabel, unit: 'mm', options: [4, 6, 8].map((v) => ({ value: v, label: `φ${v}` })), default: 4 },
     speedControllerParam,
     ...switchParams({ names: { 1: 'A 側の回転端', 2: 'B 側の回転端' }, magnet: false }),
   ];
