@@ -90,6 +90,7 @@ export function switchParams(opts: { names: { 1: string; 2: string }; magnet?: b
         { value: 'rod', label: `1 個（${opts.names[2]}）` },
       ],
       default: 'both',
+      relevant: (p) => !!switchOf(p),
     },
     {
       key: 'lead',
@@ -101,6 +102,7 @@ export function switchParams(opts: { names: { 1: string; 2: string }; magnet?: b
         { value: 'Z', label: '5m（Z）' },
       ],
       default: '',
+      relevant: (p) => !!switchOf(p),
     },
   ];
 }

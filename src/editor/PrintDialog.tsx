@@ -16,8 +16,8 @@ interface Props {
   sheets: Sheet[];
   /** 展開図のシート（展開図がなければ空） */
   schematicSheets?: PrintSchematicSheet[];
-  /** 展開図のシートを、はじめから印刷するものに入れる（展開図の画面から開いたとき） */
-  schematicFirst?: boolean;
+  /** 前に印刷したときの設定（同じ図面を開いている間は覚えておく）。なければ全部のシートと一覧を印刷する */
+  last?: PrintOptions;
   settings: DiagramSettings;
   onSettings: (patch: Partial<DiagramSettings>) => void;
   onPrint: (options: PrintOptions) => void;
@@ -25,18 +25,27 @@ interface Props {
 }
 
 /** 印刷・PDF の設定（図面枠の内容、用紙、印刷するシートと一覧） */
-export function PrintDialog({ sheets, schematicSheets = [], schematicFirst, settings, onSettings, onPrint, onClose }: Props) {
-  const [opts, setOpts] = useState<PrintOptions>({
-    paper: 'A3',
-    sheets: schematicFirst ? [] : sheets.map((s) => s.id),
-    schematic: schematicFirst ? schematicSheets.map((s) => s.id) : [],
-    bom: true,
-    wires: true,
-    io: true,
-    issues: true,
-    markers: true,
-    notes: true,
-  });
+export function PrintDialog({ sheets, schematicSheets = [], last, settings, onSettings, onPrint, onClose }: Props) {
+  // 既定は、どの画面から開いても同じ（概念図・展開図の全部のシートと一覧）。前に印刷した設定があればそれにする
+  const [opts, setOpts] = useState<PrintOptions>(() =>
+    last
+      ? {
+          ...last,
+          sheets: last.sheets.filter((id) => sheets.some((s) => s.id === id)),
+          schematic: last.schematic.filter((id) => schematicSheets.some((s) => s.id === id)),
+        }
+      : {
+          paper: 'A3',
+          sheets: sheets.map((s) => s.id),
+          schematic: schematicSheets.map((s) => s.id),
+          bom: true,
+          wires: true,
+          io: true,
+          issues: true,
+          markers: true,
+          notes: true,
+        },
+  );
   const set = (patch: Partial<PrintOptions>) => setOpts((o) => ({ ...o, ...patch }));
   const toggleSheet = (id: string) => set({ sheets: opts.sheets.includes(id) ? opts.sheets.filter((x) => x !== id) : [...opts.sheets, id] });
   const toggleSchematic = (id: string) => set({ schematic: opts.schematic.includes(id) ? opts.schematic.filter((x) => x !== id) : [...opts.schematic, id] });

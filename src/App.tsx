@@ -157,6 +157,8 @@ function Editor() {
     { mode: 'add'; familyId: string; initial: string; onChosen: (type: string) => void } | { mode: 'replace'; deviceId: string } | null
   >(null);
   const [printDialog, setPrintDialog] = useState(false);
+  /** 前に印刷したときの設定（次に印刷ダイアログを開いたときの既定） */
+  const [lastPrint, setLastPrint] = useState<PrintOptions | null>(null);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => loadToggle('conneko.markers'));
@@ -1306,12 +1308,13 @@ function Editor() {
         <PrintDialog
           sheets={sheets}
           schematicSheets={(schematic?.sheets ?? []).map((s) => ({ id: s.id, name: s.name, paper: s.paper ?? schematic?.settings?.paper ?? 'A3' }))}
-          schematicFirst={mode === 'schematic'}
+          last={lastPrint ?? undefined}
           settings={settings}
           onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
           onClose={() => setPrintDialog(false)}
           onPrint={(o) => {
             setPrintDialog(false);
+            setLastPrint(o);
             setPrinting(o);
           }}
         />

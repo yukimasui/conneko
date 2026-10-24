@@ -156,7 +156,9 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
     // 通信タイプのマニホールドは SI ユニットの型式も書く（マニホールドの型式に SI ユニットの記号が入り、一緒に手配する）
     const serial = def.bus?.host?.serial;
     const spec = [
-      ...(def.params ?? []).filter((p) => !NOT_SPEC.has(p.key)).map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`),
+      ...(def.params ?? [])
+        .filter((p) => !NOT_SPEC.has(p.key) && (p.relevant?.(paramsWithDefaults(def, params)) ?? true))
+        .map((p) => `${p.label} ${paramLabel(def, p.key, x.params?.[p.key] ?? p.default)}`),
       ...(serial ? [`SI ユニット ${serial.unitModel(paramsWithDefaults(def, params))}`] : []),
     ].join('、');
     const k = `${def.type}|${model}|${spec}`;

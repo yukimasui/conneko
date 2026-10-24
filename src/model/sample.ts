@@ -76,7 +76,7 @@ const base: Diagram = {
     { id: 'SC1', type: 'smc.as-f.inline', x: 760, y: 200, sheet: 'S5' },
     { id: 'SC2', type: 'smc.as-f.inline', x: 760, y: 90, sheet: 'S5' },
     { id: 'CY1', type: 'smc.cm2', x: 960, y: 300, params: { bore: 25, stroke: 100, switch: 'M9N' }, sheet: 'S5', note: 'ワーク押出し' },
-    { id: 'CY2', type: 'smc.mhz2', x: 150, y: 110, params: { size: 16, switch: 'M9N' }, sheet: 'S5', note: 'ワーク把持' },
+    { id: 'CY2', type: 'smc.mhz2', x: 150, y: 110, params: { size: 16, switch: 'M9N', speedController: 'meter-out' }, sheet: 'S5', note: 'ワーク把持（スピコンをポートに直付け）' },
     { id: 'SL1', type: 'smc.an', x: 544, y: 900, params: { thread: '01' }, sheet: 'S5' },
     { id: 'SL2', type: 'smc.an', x: 574, y: 920, params: { thread: '01' }, sheet: 'S5' },
     { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },

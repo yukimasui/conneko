@@ -101,10 +101,11 @@ export function DevicePicker({ family, initial, mode, impact, onPick, onClose }:
               title={d.description}
             >
               <Thumb def={d} />
-              <span className="picker__name">{variantLabel(family, d)}</span>
+              {/* 見出しは型式。極数・切換えなどの違いとメーカーは下に小さく出す */}
+              <span className="picker__name">{d.model}</span>
               <span className="picker__model">
                 {d.maker && <span className="palette__maker">{d.maker}</span>}
-                {d.model}
+                {variantLabel(family, d)}
               </span>
             </button>
           ))}
