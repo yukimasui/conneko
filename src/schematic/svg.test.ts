@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SymbolDef } from './format';
 import { symbolSvg, upsideDown } from './svg';
+import { wireNoAt } from './wiring';
 
 const def: SymbolDef = {
   description: 't',
@@ -23,5 +24,34 @@ describe('記号を回したときの属性の文字', () => {
     expect(flipped).toMatch(/rotate\(-180\)/);
     expect(flipped).toMatch(/text-anchor="end"/);
     expect(symbolSvg(def, { TAG: 'PL1' }, '#000', 90)).not.toMatch(/rotate/);
+  });
+});
+
+describe('線番の位置（wireNoAt）', () => {
+  it('横の区間の途中に分かれ目があれば、分かれ目で区切った長いほうの空きの中央に置く', () => {
+    // 0〜20 の横線の x = 5 から下へ分かれる
+    const at = wireNoAt([
+      [
+        [0, 0],
+        [20, 0],
+      ],
+      [
+        [5, 0],
+        [5, -10],
+      ],
+    ]);
+    expect(at?.at).toEqual([12.5, 1.8]);
+  });
+
+  it('分かれ目がなければ、いちばん長い横の区間の中央', () => {
+    expect(
+      wireNoAt([
+        [
+          [0, 0],
+          [0, 10],
+          [30, 10],
+        ],
+      ])?.at,
+    ).toEqual([15, 11.8]);
   });
 });

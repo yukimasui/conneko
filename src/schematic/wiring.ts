@@ -207,13 +207,20 @@ export function onSegment(p: Point, a: Point, b: Point): boolean {
 
 /** 線番を書く位置（いちばん長い横の区間の中央の上。横の区間がなければ最初の区間の右） */
 export function wireNoAt(polylines: Point[][]): { at: Point; align: 'center' | 'left' } | undefined {
+  // 横の区間を、同じ網の線の折れ点・分かれ目（区間の途中に乗る点）で区切り、いちばん長い空きの中央に置く
+  const vertices = polylines.flat();
   let best: { at: Point; len: number } | undefined;
   for (const pl of polylines) {
     for (let i = 0; i + 1 < pl.length; i++) {
       const [a, b] = [pl[i], pl[i + 1]];
       if (r3(a[1]) !== r3(b[1])) continue;
-      const len = Math.abs(b[0] - a[0]);
-      if (!best || len > best.len) best = { at: [(a[0] + b[0]) / 2, a[1] + 1.8], len };
+      const [x1, x2] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])];
+      const cuts = vertices.filter((v) => r3(v[1]) === r3(a[1]) && v[0] > x1 + 1e-6 && v[0] < x2 - 1e-6).map((v) => v[0]);
+      const xs = [x1, ...[...new Set(cuts)].sort((p, q) => p - q), x2];
+      for (let j = 0; j + 1 < xs.length; j++) {
+        const len = xs[j + 1] - xs[j];
+        if (!best || len > best.len + 1e-6) best = { at: [(xs[j] + xs[j + 1]) / 2, a[1] + 1.8], len };
+      }
     }
   }
   if (best) return { at: best.at, align: 'center' };
