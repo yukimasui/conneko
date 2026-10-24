@@ -21,6 +21,8 @@ export interface XcSpec {
    */
   numbering: 'keyence' | 'std';
   description: string;
+  /** 推定の値の説明（DeviceDefinition.estimated） */
+  estimated?: string;
 }
 
 export function buildXcTerminal(s: XcSpec): DeviceDefinition {
@@ -142,6 +144,7 @@ export function buildXcTerminal(s: XcSpec): DeviceDefinition {
     maker: 'KEYENCE',
     category: 'terminal',
     description: s.description,
+    ...(s.estimated ? { estimated: s.estimated } : {}),
     labelPrefix: 'TB',
     width: W,
     height: H,

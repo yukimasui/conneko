@@ -21,6 +21,7 @@ const def: DeviceDefinition = {
   name: 'R-unit PIO ユニット',
   model: 'RCON-NP/PN',
   maker: 'IAI',
+  estimated: 'ユニットの幅は 24V ドライバーユニットと同じ 22.6mm と推定',
   category: 'control',
   description:
     'IAI の R-unit（RCON・RSEL）の PIO ユニット（入力 16 点・出力 16 点、NPN の RCON-NP / PNP の RCON-PN）。ゲートウェイユニットの右に連結し、40 極 PIO コネクター（HIF6）に PIO ケーブル CB-PAC-PIO をつなぐ。' +
