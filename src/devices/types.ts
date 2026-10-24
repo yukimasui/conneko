@@ -102,6 +102,11 @@ export interface ConnectorSpec {
   facing?: 'front';
   /** facing: 'front' のときのプラグの長さ[px]（side 方向）。省略時は 12 */
   length?: number;
+  /**
+   * つながっていなければ警告する（アクチュエーターのモーター・エンコーダー、1 軸コントローラーの MOT / PG など、
+   * つながないと機器が働かないコネクタ）。省略時は、コネクタは未接続でも指摘しない
+   */
+  required?: boolean;
 }
 
 /**

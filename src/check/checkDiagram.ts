@@ -90,6 +90,18 @@ function checkUnconnected(m: Model, push: Push) {
   const cabled = new Set(m.cablePairs.flat());
   for (const [k, info] of m.terminals) {
     const { terminal: t, device } = info;
+    // つながないと働かないコネクタ（アクチュエーターのモーター・エンコーダーなど）
+    if (t.role === 'connector' && t.connector?.required && !m.wiresAt.has(k) && !m.cabled.has(k)) {
+      push({
+        severity: 'warning',
+        rule: 'connector-unconnected',
+        message: `${device.id}: コネクタ ${t.label ?? t.id} がつながっていません`,
+        devices: [device.id],
+        wires: [],
+        key: `unconnected:${k}`,
+      });
+      continue;
+    }
     // エアのポートはエアのチェック（pneumatic.ts）で確かめる
     if (t.optional || t.role === 'signal' || t.role === 'supply' || t.role === 'pass' || t.role === 'connector' || t.role === 'air') continue;
     if (m.wiresAt.has(k) || cabled.has(k)) continue;

@@ -157,7 +157,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       connector: { kind: 'MINIDIN8', pins: 0, width: 16, length: 14, facing: 'front', protocols: ['iai-sio'] },
       optional: true,
     },
-    { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（F35FDC-04V-K）', x: MOT.x, y: MOT.y, side: 'left', role: 'connector', connector: { kind: 'IAI-SCON2-MOT', pins: 0, width: 16, length: 20, facing: 'front' }, optional: true },
+    { id: 'MOT', label: 'MOT（モーター U/V/W/PE）', note: 'アクチュエーターのモーターケーブル（F35FDC-04V-K）', x: MOT.x, y: MOT.y, side: 'left', role: 'connector', connector: { kind: 'IAI-SCON2-MOT', pins: 0, width: 16, length: 20, facing: 'front', required: true }, optional: true },
     {
       id: 'PG',
       label: 'PG（エンコーダー）',
@@ -166,7 +166,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: PG.y,
       side: 'right',
       role: 'connector',
-      connector: { kind: 'IAI-SCON-PG', pins: 26, width: 40, length: 14, facing: 'front', style: 'lan' },
+      connector: { kind: 'IAI-SCON-PG', pins: 26, width: 40, length: 14, facing: 'front', style: 'lan', required: true },
       optional: true,
     },
     {
