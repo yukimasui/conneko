@@ -244,17 +244,19 @@ const def: DeviceDefinition = {
       key: 'loadCurrent',
       label: 'モーター電源の電流（全軸の定格の合計）',
       unit: 'A',
+      // 既定は接続軸数から求める（1 軸あたり約 2A）。モーターの容量に合わせて手で選ぶこともできる
       options: [
+        { value: 'auto', label: '接続軸数から（1 軸あたり約 2A）' },
         { value: 2, label: '約 2A（1 軸）' },
         { value: 4, label: '約 4A（2 軸）' },
         { value: 8, label: '約 8A（4 軸）' },
         { value: 12, label: '約 12A（6 軸）' },
         { value: 16, label: '約 16A（8 軸）' },
       ],
-      default: 8,
+      default: 'auto',
     },
   ],
-  loadCurrent: { param: 'loadCurrent' },
+  loadCurrent: (p) => (p.loadCurrent === 'auto' ? axesOf(p) * 2 : Number(p.loadCurrent)),
 };
 
 export default def;
