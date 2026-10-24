@@ -1,9 +1,11 @@
 # 進捗
 
-最終更新: 2026-10-24（v0.6.11 装着が必要なユニットとゲートウェイなど）
+最終更新: 2026-10-24（v0.6.12 変換ケーブルのピン対応など）
 
 ## 現在地
 
+- v0.6.12（#4）: 変換ケーブルの種類（`src/data/cables.ts`、`DiagramWire.cable`、`ConnectorSpec.defaultCable`）。チェックの `cablePairs`・部品表・電線のプロパティ。
+  東洋技研の三菱用 MIL 40 極端子台のピンを物理番号に（`pinMap`）
 - v0.6.11（#35 の残り）: コネクタの候補で装着が必要なユニットを選ぶと、親（ゲートウェイ）も置いて装着（`mountTargetFor`・`applyMateCandidate`）。
   サンプルに通信マニホールド MF2・スイッチングハブ SW1
 - v0.6.10（#3）: `TerminalDef.port` / `protocols`（ネジ端子の通信線）、チェック `checkPortProtocols`。IAI の DV・CC、KV-DN20 に反映

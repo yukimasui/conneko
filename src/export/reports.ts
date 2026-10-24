@@ -2,12 +2,13 @@
  * 図面から作る一覧（部品表・線番表・I/O 表）と CSV の書き出し。
  * 画面の接続リスト、印刷、CSV 保存で共通に使う。
  */
-import { buildModel, key } from '../check/model';
+import { buildModel, cableSpecOf, key } from '../check/model';
 import { fittingModel } from '../data/threads';
 import { getTubeColor, getTubeType, tubeModel } from '../data/tubes';
 import { airPortOf, isDirectTube } from '../model/air';
 import { getWireColor } from '../data/wires';
 import { hasEstimates } from '../devices/estimates';
+import { resolveDevice } from '../devices/resolve';
 import { deviceAccessories, deviceModel, paramLabel, paramsWithDefaults, type DeviceCategory, type DeviceDefinition } from '../devices/types';
 import { CABLE_WIRE_TYPE, isTube, sheetOf, sheetsOf, type Diagram, type TerminalRef } from '../model/diagram';
 import { computeBus, effectiveParams } from '../model/bus';
@@ -184,6 +185,23 @@ export function bomRows(d: Diagram, lookup: DefLookup): BomRow[] {
       ag.ids.push(a.terminal ? `${x.id}.${a.terminal}` : x.id);
       groups.set(ak, ag);
     }
+  }
+  // 変換ケーブル: 種類（電線の cable、なければコネクタの defaultCable）が決まっているケーブルを 1 本ずつ数える
+  for (const w of d.wires) {
+    if (w.wireType !== CABLE_WIRE_TYPE) continue;
+    const conn = (r: TerminalRef) => {
+      const dev = d.devices.find((x) => x.id === r.device);
+      const def = dev && lookup(dev.type);
+      return def ? resolveDevice(def, dev.params).terminal(r.terminal)?.connector : undefined;
+    };
+    const [a, b] = [conn(w.from), conn(w.to)];
+    const spec = a && b ? cableSpecOf(w, a, b) : undefined;
+    if (!spec) continue;
+    const k = `cable|${spec.id}`;
+    const g = groups.get(k) ?? { category: 'terminal' as DeviceCategory, maker: spec.maker, model: spec.model, name: spec.name, spec: '長さは現物合わせ', qty: 0, ids: [], estimated: false };
+    g.qty++;
+    g.ids.push(w.id);
+    groups.set(k, g);
   }
   // チューブ: 種類・外径・色ごとに 1 巻（20m 巻）。長さは図面にないので、図面上の本数を仕様に書く
   // ねじのポートには、チューブの外径に合うワンタッチ管継手（ハーフユニオン）を付ける。おねじを直接ねじ込んだ接続（直結）は数えない

@@ -124,6 +124,10 @@ export interface ConnectorBlockSpec {
   rows: Rows | ((p: ParamValues) => Rows);
   /** コネクタのピンの表示名 */
   pinLabel?: (n: number) => string;
+  /** 記名板の端子の pins（行の約束の番号）→ コネクタのピン番号（物理的な番号）。省略時は同じ番号 */
+  pinMap?: (n: number) => number;
+  /** コネクタの defaultCable（この端子台が前提にする変換ケーブル） */
+  defaultCable?: string;
   description: string;
   params?: ParamDef[];
 }
@@ -257,7 +261,7 @@ export function buildConnectorBlock(s: ConnectorBlockSpec): DeviceDefinition {
       // ケーブルのプラグは上から差す（正面向き）
       connector:
         s.connector === 'MIL'
-          ? { kind: `MIL${s.poles}`, pins: s.poles, width: header.width, facing: 'front', length: 16 }
+          ? { kind: `MIL${s.poles}`, pins: s.poles, width: header.width, facing: 'front', length: 16, ...(s.defaultCable ? { defaultCable: s.defaultCable } : {}) }
           : { kind: 'FCN40', pins: 40, width: header.width, facing: 'front', length: 18 },
     };
     return [
@@ -289,7 +293,7 @@ export function buildConnectorBlock(s: ConnectorBlockSpec): DeviceDefinition {
     const rows = evalRows(s.rows, p);
     const all = [...rows.upper, ...rows.lower];
     const out: InternalLink[] = [];
-    for (const t of all) for (const n of t.pins ?? []) out.push({ from: `CN#${n}`, to: t.id });
+    for (const t of all) for (const n of t.pins ?? []) out.push({ from: `CN#${s.pinMap ? s.pinMap(n) : n}`, to: t.id });
     const buses = new Map<string, string[]>();
     for (const t of all) if (t.bus) buses.set(t.bus, [...(buses.get(t.bus) ?? []), t.id]);
     for (const ids of buses.values()) for (let i = 1; i < ids.length; i++) out.push({ from: ids[i - 1], to: ids[i] });
