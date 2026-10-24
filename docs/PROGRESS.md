@@ -12,6 +12,8 @@
     機器の下（上）に一列に詰め、端子の真下に置けないぶんは電線を横に振る（交差しないことをテストで確認）。
     左右の端子の縦のリンクは、並べ直すと横にする
   - 相手のシートの一覧は、縦のリンクでは矢印の先に縦書きで出す（画面・印刷とも）
+- リリースの自動化: main にマージすると、GitHub Actions（`.github/workflows/release.yml`）が package.json のバージョンのリリースを作る
+  （タグがまだなければ、テスト・ビルドをして単一 HTML を添付する）。本文は `docs/releases/v<バージョン>.md`。手順は [releases/README.md](releases/README.md)
 - v0.6.0（ブランチ `feature/device-families`）
   - パレットを大くくりの機器ファミリー（約 75）にし、機種は「機種を選ぶ」ダイアログ・プロパティの「機種を変える…」で選ぶ（`src/devices/families.ts`、`src/editor/DevicePicker.tsx`、`replaceDeviceType`）
   - PLC はパレットに CPU（三菱電機・KEYENCE）とリモート I/O だけを出す。iQ-R の CPU は PLC エディタを開くとベースユニット・電源ユニットを自動で付け、ベースの大きさも自動で替える（`src/model/plc.ts` の `attachBase`・`fitBase`）
