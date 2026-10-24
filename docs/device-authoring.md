@@ -107,6 +107,9 @@ svg: (p) => `...<text ...>${p.ratedCurrent}A</text>...`,
 - 接点（`switch: 'NO' | 'NC'`）にも `ratedCurrent` を書ける（リレーは抵抗負荷の定格、電磁接触器の主接点は AC-3 の定格電流）。
   開閉する負荷（`directed` の接点は `to` 側、そうでなければ電源の来ていない側）の `loadCurrent` の合計と比べる（`contact-overload`）。
   c 接点は `cContact(com, nc, no, ratedCurrent)`（`src/devices/generic/relay-socket.ts`）。
+- タイマーの限時接点は `timed: 'on-delay' | 'off-delay'`（展開図で限時動作・限時復帰の記号になる）。
+- セレクタスイッチの a 接点は、閉じる位置（つまみの位置の名前）を `positions: ['2']` に書く。短絡の状態検査は位置ごとに 1 つずつ閉じて調べる。
+- 開閉できる電源の種類が決まっている接点・出力（SSR の交流専用の出力など）は `system: 'AC'`。ほかの種類の電源をつなぐと `switch-system` のエラー。
 - 安全用の接点: 直接開路動作（⊕）の b 接点は `directOpening: true`、ミラー接点・強制ガイド接点は `linked: 'mirror' | 'force-guided'`。
   ティーチングボックスの非常停止接点のように、機器の端子の間にあり機器の外のもので開く b 接点は `{ switch: 'NC', safetyContact: true }`。
   機器自身が動作しても切り換わらず（短絡の検査では閉じたまま）、安全入力のループでは機器自身の経路でも接点として数える。
@@ -385,9 +388,9 @@ SMC のエアシリンダ・エアチャック・ロータリテーブルは `sr
 
 | 書き方 | 使う機器 |
 |---|---|
-| `actuator: 'pushbutton' \| 'emergency' \| 'pull' \| 'limit' \| 'thermal'` | 接点の操作の種類。押しボタン（イネーブルスイッチを含む）・非常停止・ロープ式（引き操作）・リミットスイッチやインタロックスイッチ。サーマルリレーは書かなくても熱動になる |
+| `actuator: 'pushbutton' \| 'emergency' \| 'pull' \| 'limit' \| 'thermal' \| 'selector'` | 接点の操作の種類。押しボタン（イネーブルスイッチを含む）・非常停止・ロープ式（引き操作）・リミットスイッチやインタロックスイッチ・セレクタスイッチ（ひねり操作）。サーマルリレーは書かなくても熱動になる。タイマーの限時接点は接点の `timed` から限時動作・限時復帰の記号になる |
 | `earthLeakage: true` | 漏電遮断器（遮断器の記号に漏電検出を付ける） |
-| `elements: [{ kind: 'coil' \| 'lamp' \| 'motor', terminals: [...] }]` | 電磁接触器・リレー以外のコイル（電磁ロックのソレノイドなど）、表示灯、電動機・ファン（端子 2 つか 3 つ） |
+| `elements: [{ kind: 'coil' \| 'lamp' \| 'motor' \| 'buzzer', terminals: [...] }]` | 電磁接触器・リレー以外のコイル（電磁ロックのソレノイドなど）、表示灯、電動機・ファン（端子 2 つか 3 つ）、ブザー |
 
 自動で切り出されるもの（書かなくてよい）:
 

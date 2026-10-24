@@ -91,6 +91,15 @@ function actuatorPrimitives(actuator: ContactActuator): Primitive[] {
     case 'thermal':
       // 熱動
       return [line([3, y], [4, y], [4, y + 1.2], [6, y + 1.2], [6, y], [7, y])];
+    case 'selector':
+      // ひねり操作: 段のついた横棒
+      return [line([3.5, y - 0.7], [3.5, y], [6.5, y], [6.5, y + 0.7])];
+    case 'on-delay':
+      // 限時動作: 上に凸の弧（動作のときに遅れる）
+      return [{ kind: 'arc', center: [LINK_X, y - 1.2], r: 1.6, start: 20, end: 160 }];
+    case 'off-delay':
+      // 限時復帰: 下に凸の弧（復帰のときに遅れる）
+      return [{ kind: 'arc', center: [LINK_X, y + 1.2], r: 1.6, start: 200, end: 340 }];
   }
 }
 
@@ -100,6 +109,9 @@ const ACTUATOR_NAMES: Record<ContactActuator, string> = {
   pull: '引き操作',
   limit: 'リミットスイッチ',
   thermal: '熱動',
+  selector: 'セレクタスイッチ',
+  'on-delay': '限時動作',
+  'off-delay': '限時復帰',
 };
 
 function contact(kind: 'NO' | 'NC', actuator?: ContactActuator): SymbolDef {
@@ -240,6 +252,21 @@ function lamp(): SymbolDef {
       line([LINK_X - d, -d], [LINK_X + d, d]),
       line([LINK_X - d, d], [LINK_X + d, -d]),
       line([7, 0], [LEN, 0]),
+    ],
+    pins: { 1: [0, 0], 2: [LEN, 0] },
+    attributes: [attr('T1', [1.5, 1.5], PIN_TEXT), attr('T2', [8.5, 1.5], PIN_TEXT), attr('TAG', [LINK_X, -4], TAG_TEXT)],
+  };
+}
+
+/** ブザー: 平らな側を下にした半円に、両端の端子から線をつなぐ */
+function buzzer(): SymbolDef {
+  return {
+    description: 'ブザー',
+    primitives: [
+      line([0, 0], [3, 0], [3, -1]),
+      line([7, -1], [7, 0], [LEN, 0]),
+      line([2.6, -1], [7.4, -1]),
+      { kind: 'arc', center: [LINK_X, -1], r: 2.4, start: 0, end: 180 },
     ],
     pins: { 1: [0, 0], 2: [LEN, 0] },
     attributes: [attr('T1', [1.5, 1.5], PIN_TEXT), attr('T2', [8.5, 1.5], PIN_TEXT), attr('TAG', [LINK_X, -4], TAG_TEXT)],
@@ -452,7 +479,7 @@ export function boxSymbol(title: string, left: BoxPin[], right: BoxPin[]): Symbo
 
 // ---- 記号 ID ----
 
-const ACTUATORS: ContactActuator[] = ['pushbutton', 'emergency', 'pull', 'limit', 'thermal'];
+const ACTUATORS: ContactActuator[] = ['pushbutton', 'emergency', 'pull', 'limit', 'thermal', 'selector', 'on-delay', 'off-delay'];
 
 /** 記号 ID の一覧（ライブラリの記号。箱は含まない） */
 export const LIBRARY_SYMBOL_IDS: string[] = [
@@ -462,6 +489,7 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   ...ACTUATORS.flatMap((a) => [`contact-no-${a}`, `contact-nc-${a}`, `contact-c-${a}`]),
   'coil',
   'lamp',
+  'buzzer',
   'motor-3p',
   'motor-1p',
   'motor-3p-v',
@@ -492,7 +520,7 @@ export function librarySymbol(id: string): SymbolDef | undefined {
 }
 
 function buildSymbol(id: string): SymbolDef | undefined {
-  const c = /^contact-(no|nc|c)(?:-([a-z]+))?$/.exec(id);
+  const c = /^contact-(no|nc|c)(?:-([a-z-]+))?$/.exec(id);
   if (c) {
     const actuator = c[2] as ContactActuator | undefined;
     if (actuator && !ACTUATORS.includes(actuator)) return undefined;
@@ -526,6 +554,8 @@ function buildSymbol(id: string): SymbolDef | undefined {
       return coil();
     case 'lamp':
       return lamp();
+    case 'buzzer':
+      return buzzer();
     case 'motor-3p':
       return motor(3);
     case 'motor-1p':

@@ -93,11 +93,11 @@ export function buildA22nl100() {
 export function buildA22ns(positions: 2 | 3) {
   const two = positions === 2;
   const units: Unit[] = two
-    ? [{ ...NO, note: '「2」（右）で閉、「1」（左）で開' }]
+    ? [{ ...NO, note: '「2」（右）で閉、「1」（左）で開', closedAt: ['2'] }]
     : [
         // 裏から見て左がユニット位置 3（右で閉）、右がユニット位置 1（左で閉）。どちらも 3-4 と印字されるので ID に位置を付ける
-        { kind: 'NO', top: 'P3-3', bottom: 'P3-4', topLabel: '3', bottomLabel: '4', note: 'ユニット位置 3。「2」（右）で閉' },
-        { kind: 'NO', top: 'P1-3', bottom: 'P1-4', topLabel: '3', bottomLabel: '4', note: 'ユニット位置 1。「1」（左）で閉' },
+        { kind: 'NO', top: 'P3-3', bottom: 'P3-4', topLabel: '3', bottomLabel: '4', note: 'ユニット位置 3。「2」（右）で閉', closedAt: ['2'] },
+        { kind: 'NO', top: 'P1-3', bottom: 'P1-4', topLabel: '3', bottomLabel: '4', note: 'ユニット位置 1。「1」（左）で閉', closedAt: ['1'] },
       ];
   return buildPanelSwitch({
     type: two ? 'omron.a22ns-2bm-g100' : 'omron.a22ns-3bm-g101',
@@ -113,6 +113,7 @@ export function buildA22ns(positions: 2 | 3) {
     labelPrefix: 'COS',
     operator: two ? 'selector2' : 'selector3',
     positions: two ? ['1', '2'] : ['1', '0', '2'],
+    actuator: 'selector',
     colors: A22NS_KNOB,
     units,
     caption: (c) => (two ? `A22NS-2BM-${c}A-G100-NN` : `A22NS-3BM-${c}A-G101-NN`),

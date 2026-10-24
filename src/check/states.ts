@@ -4,6 +4,7 @@
  * 次の状態ごとに同電位グループを作り直し、電源出力どうしの矛盾（短絡・混触・地絡など）を探す。
  * - 通常時: すべての b 接点が閉、a 接点と出力が開
  * - 機器ごとの動作時: その機器の a 接点・出力が閉、b 接点が開（ほかの機器は通常時のまま）
+ *   セレクタスイッチの位置で閉じる a 接点（positions）は、位置ごとに閉じる（別の位置の接点が同時に閉じたとはみなさない）
  *   ただし、機器の外のもので開く b 接点（safetyContact。ティーチングボックスの非常停止接点など）は閉じたまま
  *
  * 1 台ずつ動作させるので、正逆転のように 2 台が同時に動作しないことを前提にした回路は誤検出しない。
@@ -56,21 +57,25 @@ export function checkSwitchStates(m: Model, push: Push, conflictRoots: Set<strin
   const nc = m.switchLinks.filter((s) => s.link.switch === 'NC');
   evaluate(nc, null, '通常時（b 接点が閉じた状態）に', []);
 
-  // 動作の単位: 機器ごと。機器の中に別々に動く負荷（リレーターミナルのリレーなど。link.actor）があれば、その負荷ごと
+  // 動作の単位: 機器ごと。機器の中に別々に動く負荷（リレーターミナルのリレーなど。link.actor）があれば、その負荷ごと。
+  // セレクタスイッチの位置で閉じる接点（link.positions）は、位置ごと
   const byActor = new Map<string, SwitchLink[]>();
+  const addTo = (k: string, s: SwitchLink) => byActor.set(k, [...(byActor.get(k) ?? []), s]);
   for (const s of m.switchLinks) {
-    const k = `${s.device}\u0000${s.link.actor ?? ''}`;
-    byActor.set(k, [...(byActor.get(k) ?? []), s]);
+    if (s.link.positions) for (const p of s.link.positions) addTo(`${s.device}\u0000${s.link.actor ?? ''}\u0000${p}`, s);
+    else addTo(`${s.device}\u0000${s.link.actor ?? ''}\u0000`, s);
   }
   for (const [k, links] of byActor) {
-    const [device, actor] = k.split('\u0000');
+    const [device, actor, position] = k.split('\u0000');
     const active = links.filter((s) => s.link.switch !== 'NC');
     if (!active.length) continue;
     // 動作したときに開く b 接点は、同じ単位のものだけ（ほかの単位の b 接点は閉じたまま）
-    const inUnit = (s: SwitchLink) => s.device === device && (s.link.actor ?? '') === actor && !s.link.safetyContact;
+    const inUnit = (s: SwitchLink) =>
+      s.device === device && (s.link.actor ?? '') === actor && !s.link.safetyContact && (position ? !!s.link.positions?.includes(position) : !s.link.positions);
     const what = active.every((s) => s.link.switch === 'output') ? '出力が ON になる' : '動作する';
     const who = actor ? `${device} の ${actorLabel(m, device, actor)}` : device;
-    evaluate([...nc.filter((s) => !inUnit(s)), ...active], active, `${who} が${what}と`, [device]);
+    const describe = position ? `${device} を位置 ${position} にすると` : `${who} が${what}と`;
+    evaluate([...nc.filter((s) => !inUnit(s)), ...active], active, describe, [device]);
   }
 }
 

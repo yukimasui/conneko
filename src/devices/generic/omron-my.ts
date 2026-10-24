@@ -201,7 +201,8 @@ export function buildH3y(): DeviceDefinition {
       labelOffset: pyf08Label,
       relay: { x: 4, y: 50, w: W - 8, h: 44, cover: '#c9cbc6', ink: '#222', lines: ['H3Y-2', '{{range}}'], textTop: 0.02, dial: { x: W / 2, y: 79, r: 8 }, led: { x: 9, y: 62, color: '#ff8a1e' } },
       coil: { system: 'DC', minVoltage: 20.4, maxVoltage: 26.4 },
-      links: poleLinks(2),
+      // 限時接点（オンディレー）
+      links: poleLinks(2).map((l) => ({ ...l, timed: 'on-delay' as const })),
       loadCurrent: 0.0375,
       socketName: 'PYF08A-E',
   });

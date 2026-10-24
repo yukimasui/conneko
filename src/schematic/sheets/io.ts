@@ -29,7 +29,7 @@ const ROW_H = 10;
 /** 相手の機器の左の端子の x */
 const PARTNER_X = 140;
 /** 相手として探す要素の種類（先にあるものを優先する） */
-const PARTNER_KINDS = ['contact', 'coil', 'lamp', 'box'];
+const PARTNER_KINDS = ['contact', 'coil', 'lamp', 'buzzer', 'box'];
 
 export interface IoContext {
   diagram: Diagram;

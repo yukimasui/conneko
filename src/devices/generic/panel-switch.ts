@@ -23,6 +23,8 @@ export interface ContactBlock {
   bottomLabel?: string;
   /** 接点の説明（セレクタの「右で閉」など） */
   note?: string;
+  /** セレクタスイッチの a 接点が閉じる位置（positions の名前） */
+  closedAt?: string[];
 }
 
 /** 背面のユニット（接点ブロックか照光ユニット） */
@@ -221,7 +223,7 @@ export function buildPanelSwitch(s: PanelSwitchSpec): DeviceDefinition {
     );
   });
 
-  const links: InternalLink[] = s.units.filter(isBlock).map((b) => ({ from: b.top, to: b.bottom, switch: b.kind }));
+  const links: InternalLink[] = s.units.filter(isBlock).map((b) => ({ from: b.top, to: b.bottom, switch: b.kind, ...(b.closedAt ? { positions: b.closedAt } : {}) }));
   const params: ParamDef[] = [
     {
       key: 'color',

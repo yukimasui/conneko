@@ -80,6 +80,7 @@ const def: DeviceDefinition = {
     { id: 'X2', label: 'X2', note: 'ブザー電源（DC12〜24V、極性なし）', x: TX, y: BOT_Y, side: 'bottom', role: 'input', accepts: ACC },
   ],
   loadCurrent: 0.009,
+  schematic: { elements: [{ kind: 'buzzer', terminals: ['X1', 'X2'] }] },
   estimated: '裏の端子 X1・X2 の位置（上 X1・下 X2）は推定',
 };
 

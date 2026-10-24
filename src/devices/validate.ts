@@ -62,6 +62,9 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
     if (!ids.has(l.from) || !ids.has(l.to)) problems.push(`links に存在しない端子: ${l.from} -> ${l.to}`);
     if ((l.directOpening || l.linked) && l.switch !== 'NC' && l.switch !== 'NO') problems.push(`directOpening / linked は接点（switch: 'NC' / 'NO'）に指定する: ${l.from} -> ${l.to}`);
     if (l.safetyContact && l.switch !== 'NC') problems.push(`safetyContact は b 接点（switch: 'NC'）に指定する: ${l.from} -> ${l.to}`);
+    if (l.timed && l.switch !== 'NC' && l.switch !== 'NO') problems.push(`timed は接点（switch: 'NC' / 'NO'）に指定する: ${l.from} -> ${l.to}`);
+    if (l.positions && (l.switch !== 'NO' || !l.positions.length)) problems.push(`positions は a 接点（switch: 'NO'）に 1 つ以上書く: ${l.from} -> ${l.to}`);
+    if (l.system && !l.switch) problems.push(`system は開閉する経路（switch）に指定する: ${l.from} -> ${l.to}`);
     if (l.safetyContact && l.actor) problems.push(`safetyContact の接点には actor を書かない（機器の動作では切り換わらない）: ${l.from} -> ${l.to}`);
   }
   for (const l of r.airLinks) {
