@@ -248,19 +248,11 @@ export function checkPneumatic(m: Model, push: Push) {
     }
   }
 
-  // 排気ポートへの給気（チューブ・リンクでエアが入ってくる）
-  for (const [k, p] of ports) {
-    if (p.spec.kind !== 'exhaust' || !pressure.has(k)) continue;
-    push({
-      severity: 'error',
-      rule: 'air-exhaust-pressurized',
-      message: `${p.device}: 排気ポート ${p.label} にエアが供給されています（排気ポートは大気へ逃がします）`,
-      devices: [p.device],
-      wires: (m.tubesAt.get(k) ?? []).map((w) => w.id),
-    });
-  }
+  // 排気ポートへの給気（チューブ・リンクでエアが入ってくる）。下流の「届かない」をまとめるため、指摘はあとで出す
+  const exhaustFed = [...ports].filter(([k, p]) => p.spec.kind === 'exhaust' && pressure.has(k));
 
   checkCylinderValves(m, ports, push);
+  checkMeterIn(m, push);
 
   // 機器ごとの圧力: 届かない・使用圧力範囲の外・向きの逆
   const vacuum = vacuumNet(m, ports);
@@ -275,7 +267,10 @@ export function checkPneumatic(m: Model, push: Push) {
     const fed = ks.filter((k) => ['in', 'work'].includes(ports.get(k)!.spec.kind) && (m.tubesAt.has(k) || linked.has(k) || joined.has(k)));
     if (fed.length && !fed.some((k) => pressure.has(k)) && !fed.some((k) => vacuum.has(k))) {
       // 向きのある通り道の出口側だけにエアが来ているなら、つなぐ向きが逆
-      const reversed = info.r.airLinks.find((l) => l.directed && pressure.has(key(device, l.to)) && !pressure.has(key(device, l.from)));
+      // 排気ポートへ向かう通り道は除く（排気ポートへの給気は別に指摘する）
+      const reversed = info.r.airLinks.find(
+        (l) => l.directed && ports.get(key(device, l.to))?.spec.kind !== 'exhaust' && pressure.has(key(device, l.to)) && !pressure.has(key(device, l.from)),
+      );
       if (reversed) reversedAt.push({ device, from: reversed.from, to: reversed.to });
       else noSupply.push(device);
       continue;
@@ -336,6 +331,24 @@ export function checkPneumatic(m: Model, push: Push) {
         (downstream.length ? `（このため ${downstream.join('・')} にもエアが届いていません）` : ''),
       devices: [rv.device, ...downstream],
       wires: [],
+    });
+  }
+  // 排気ポートに給気した機器から配管でつながる機器の「届かない」は、排気ポートへの給気の指摘にまとめる
+  for (const [k, p] of exhaustFed) {
+    const seen = new Set<string>([k]);
+    const queue = [k];
+    while (queue.length) for (const n of undirected.get(queue.shift()!) ?? []) if (!seen.has(n)) (seen.add(n), queue.push(n));
+    const downstream = noSupply.filter((d) => d !== p.device && !suppressed.has(d) && [...seen].some((x) => x.startsWith(`${d}:`)));
+    downstream.forEach((d) => suppressed.add(d));
+    suppressed.add(p.device);
+    push({
+      severity: 'error',
+      rule: 'air-exhaust-pressurized',
+      message:
+        `${p.device}: 排気ポート ${p.label} にエアが供給されています（排気ポートは大気へ逃がします）` +
+        (downstream.length ? `。このため ${downstream.join('・')} にもエアが届いていません` : ''),
+      devices: [p.device, ...downstream],
+      wires: (m.tubesAt.get(k) ?? []).map((w) => w.id),
     });
   }
   for (const device of noSupply.filter((d) => !suppressed.has(d))) {
@@ -429,6 +442,39 @@ function checkCylinderValves(m: Model, ports: Map<string, Port>, push: Push) {
       devices: [device.id, ...va, ...vb],
       wires: [],
       key: `air-cylinder-valve:${device.id}`,
+    });
+  }
+}
+
+/**
+ * 複動シリンダの速度制御がメータイン（給気を絞る）になっていたら注意する。
+ * 複動シリンダは、負荷が変わっても速度が安定するメータアウト（排気を絞る）が基本（SMC のスピードコントローラの選定の説明）。
+ * - ポートに直付けしたスピードコントローラ（pneumatic.speedControllers）がメータイン
+ * - シリンダのポートにチューブで直接つないだスピードコントローラの自由流れの入口（記号の in）がシリンダ側（＝シリンダへの給気を絞る）
+ * 単動シリンダ・エアチャックなどは対象外（メータインを使うことがある）
+ */
+function checkMeterIn(m: Model, push: Push) {
+  for (const { device, r } of m.devices.values()) {
+    const hint = r.pneumatic;
+    if (hint?.symbol !== 'cylinder' || hint.cylinder?.acting !== 'double') continue;
+    const found: string[] = [];
+    for (const [sym, sc] of Object.entries(hint.speedControllers ?? {})) if (sc.control === 'meter-in') found.push(`${hint.ports[sym] ?? sym}（${sc.model}）`);
+    for (const t of Object.values(hint.ports)) {
+      for (const w of m.tubesAt.get(key(device.id, t)) ?? []) {
+        const other = w.from.device === device.id && w.from.terminal === t ? w.to : w.from;
+        const sc = m.devices.get(other.device);
+        const sh = sc?.r.pneumatic;
+        if (sh?.symbol === 'speed-controller' && sh.ports.in === other.terminal) found.push(`${t}（${other.device}）`);
+      }
+    }
+    if (!found.length) continue;
+    push({
+      severity: 'info',
+      rule: 'air-meter-in',
+      message: `${device.id}: ${found.join('・')} のスピードコントローラがメータイン（給気を絞る）です。複動シリンダは、負荷が変わっても速度が安定するメータアウト（排気を絞る）が基本です（意図したものなら問題ありません）`,
+      devices: [device.id],
+      wires: [],
+      key: `air-meter-in:${device.id}`,
     });
   }
 }

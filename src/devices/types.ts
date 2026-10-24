@@ -447,6 +447,8 @@ export interface ParamDef {
    * false のときはプロパティに出さず、部品表の仕様にも書かない。引数は既定値を補完済みのパラメータ。省略時は常に意味を持つ
    */
   relevant?: (params: ParamValues) => boolean;
+  /** 部品表の仕様に書くときの名前（パラメータで意味が変わるもの。例: スピコンを直付けしたときのチューブ外径）。省略時は label */
+  specLabel?: (params: ParamValues) => string;
 }
 
 export type DeviceCategory =
