@@ -71,6 +71,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkLoadProtection(m, push, protection);
   checkOutputCurrents(m, push);
   checkContactCurrents(m, push);
+  checkSwitchedSystem(m, push);
   checkSupplyCapacity(m, push);
   checkSignals(m, push);
   checkSafety(m, push);
@@ -522,6 +523,24 @@ function checkContactCurrents(m: Model, push: Push) {
       devices: [s.device, ...load.devices.filter((x) => x !== s.device)],
       wires: [],
       key: `contact-overload:${s.a}:${s.b}`,
+    });
+  }
+}
+
+/** 開閉できる電源の種類（link.system）が決まった接点・出力に、ほかの種類の電源が来ていないか（SSR の交流専用の出力など） */
+function checkSwitchedSystem(m: Model, push: Push) {
+  for (const s of m.switchLinks) {
+    const want = s.link.system;
+    if (!want) continue;
+    const p = [s.a, s.b].map((k) => m.potentialOf(k)).find((x) => x.kind === 'ok' && x.supply.conductor !== 'PE');
+    if (!p || p.kind !== 'ok' || p.supply.system === want) continue;
+    push({
+      severity: 'error',
+      rule: 'switch-system',
+      message: `${s.device} の ${s.link.from}-${s.link.to}: ${want === 'AC' ? '交流' : '直流'}専用の出力に${p.supply.system === 'AC' ? '交流' : '直流'}（${p.supply.device}）をつないでいます`,
+      devices: [s.device, p.supply.device],
+      wires: [],
+      key: `switch-system:${s.a}:${s.b}`,
     });
   }
 }

@@ -31,6 +31,7 @@ export type ElementKind =
   | 'ground'
   | 'motor'
   | 'lamp'
+  | 'buzzer'
   | 'source'
   | 'box';
 
@@ -153,7 +154,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
       const attributes = Object.fromEntries(ts.map((t, i) => [`T${i + 1}`, pinNumber(t)]));
       add({ key: ts.join('-'), kind: 'motor', name: `電動機 ${ts.join('-')}`, symbol: ts.length === 3 ? 'motor-3p' : 'motor-1p', pinOf, attributes });
     } else {
-      add(twoPin(e.kind, e.kind, e.kind === 'coil' ? 'コイル' : '表示灯', ts[0], ts[1]));
+      add(twoPin(e.kind, e.kind, e.kind === 'coil' ? 'コイル' : e.kind === 'buzzer' ? 'ブザー' : '表示灯', ts[0], ts[1]));
     }
   }
 
@@ -201,7 +202,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
         key: `${com}-${b}-${a}`,
         kind: 'contact',
         name: `c 接点 ${com}-${b}/${a}`,
-        symbol: contactSymbolId('C', actuator),
+        symbol: contactSymbolId('C', nc.timed ?? no.timed ?? actuator),
         pinOf: { [com]: '1', [b]: '2', [a]: '3' },
         attributes: { T1: pinNumber(com), T2: pinNumber(b), T3: pinNumber(a) },
       });
@@ -210,7 +211,8 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
   }
   for (const l of r.links) {
     if ((l.switch !== 'NO' && l.switch !== 'NC') || !free(l.from) || !free(l.to)) continue;
-    add(twoPin('contact', contactSymbolId(l.switch, actuator), l.switch === 'NO' ? 'a 接点' : 'b 接点', l.from, l.to));
+    const name = `${l.timed === 'on-delay' ? '限時動作 ' : l.timed === 'off-delay' ? '限時復帰 ' : ''}${l.switch === 'NO' ? 'a 接点' : 'b 接点'}${l.positions ? `（位置 ${l.positions.join('・')} で閉）` : ''}`;
+    add(twoPin('contact', contactSymbolId(l.switch, l.timed ?? actuator), name, l.from, l.to));
   }
 
   // 5. PLC の出力点・入力点

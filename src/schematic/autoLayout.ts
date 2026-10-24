@@ -45,7 +45,7 @@ function rightX(def: SymbolDef, paper: Paper): number {
   return snap(paper.width - RAIL_INSET - 10 - (b.x2 - b.x1));
 }
 
-const RIGHT_KINDS = new Set(['coil', 'lamp', 'motor']);
+const RIGHT_KINDS = new Set(['coil', 'lamp', 'buzzer', 'motor']);
 
 /**
  * 要素を 1 つ置く次の位置。コイル・負荷は右の母線の近く、それ以外は左の母線の近くに置き、
@@ -71,7 +71,7 @@ interface Edge {
 /** PLC の入出力点の先（段の終わり）を表す網 */
 const PLC_END = '#plc';
 /** 段を組む記号の種類 */
-const LADDER_KINDS = new Set(['contact', 'coil', 'lamp', 'plc-input', 'plc-output']);
+const LADDER_KINDS = new Set(['contact', 'coil', 'lamp', 'buzzer', 'plc-input', 'plc-output']);
 /** 経路の長さ（記号の数）と、行き着く記号ごとに調べる経路の数の上限 */
 const MAX_DEPTH = 12;
 const MAX_PATHS = 400;

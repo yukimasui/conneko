@@ -350,6 +350,15 @@ export interface InternalLink {
    * （EMGout → ティーチングボックスの非常停止接点 → 外の非常停止スイッチ → EMGin のように、機器の中を通るループ）
    */
   safetyContact?: boolean;
+  /** 限時接点（タイマーの接点）。on-delay は動作が遅れる（限時動作）、off-delay は復帰が遅れる（限時復帰） */
+  timed?: 'on-delay' | 'off-delay';
+  /**
+   * セレクタスイッチの a 接点が閉じる位置（つまみの位置の名前。例: ['2']）。短絡の状態検査では位置ごとに 1 つずつ動作させる
+   * （3 ノッチの左右の接点が同時に閉じたとはみなさない）
+   */
+  positions?: string[];
+  /** 開閉できる電源の種類（SSR の交流専用の出力など）。ほかの種類の電源をつなぐと指摘する */
+  system?: PowerSystem;
 }
 
 /** 機器の中の負荷（リレーターミナルのリレーのコイルなど）。接点の InternalLink.actor で、どの負荷が動かすかを書く */
@@ -788,16 +797,18 @@ export interface PneumaticHint {
  * - pull: 引き操作（ロープ式非常停止スイッチ）
  * - limit: リミットスイッチ・インタロックスイッチ（機械的に操作される）
  * - thermal: 熱動（サーマルリレーの接点。サーマルリレーは指定しなくてもこれになる）
+ * - selector: ひねり操作（セレクタスイッチ）
+ * - on-delay / off-delay: 限時動作 / 限時復帰（タイマーの接点。接点の InternalLink.timed から決まる）
  */
-export type ContactActuator = 'pushbutton' | 'emergency' | 'pull' | 'limit' | 'thermal';
+export type ContactActuator = 'pushbutton' | 'emergency' | 'pull' | 'limit' | 'thermal' | 'selector' | 'on-delay' | 'off-delay';
 
 export interface SchematicHint {
   /** この機器の a 接点・b 接点の操作の種類。省略時はリレー・電磁接触器の接点 */
   actuator?: ContactActuator;
   /** 遮断器の極に漏電検出を付けて描く（漏電遮断器） */
   earthLeakage?: boolean;
-  /** 明示する要素（コイル・表示灯・電動機）。ここに書いた端子は自動の切り出しに使わない */
-  elements?: { kind: 'coil' | 'lamp' | 'motor'; terminals: string[] }[];
+  /** 明示する要素（コイル・表示灯・電動機・ブザー）。ここに書いた端子は自動の切り出しに使わない */
+  elements?: { kind: 'coil' | 'lamp' | 'motor' | 'buzzer'; terminals: string[] }[];
 }
 
 export type ParamValues = Record<string, number | string>;

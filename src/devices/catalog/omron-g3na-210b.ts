@@ -74,8 +74,20 @@ const def: DeviceDefinition = {
     { id: '4', label: '4', note: '入力 −', x: LX, y: IN_Y, side: 'bottom', role: 'input', accepts: { system: 'DC', minVoltage: 4, maxVoltage: 32, conductors: ['-'] } },
     { id: '3', label: '3', note: '入力 +（DC5〜24V）', x: RX, y: IN_Y, side: 'bottom', role: 'input', accepts: { system: 'DC', minVoltage: 4, maxVoltage: 32, conductors: ['+'] } },
   ],
-  // 出力は入力 ON で導通する（展開図では電磁接触器の主接点 1 極として描く）
-  links: [{ from: '1', to: '2', switch: 'NO' }],
+  // 出力は入力 ON で導通する（展開図では電磁接触器の主接点 1 極として描く）。交流専用、負荷電流は放熱器付きで 10A まで
+  links: [{ from: '1', to: '2', switch: 'NO', system: 'AC', ratedCurrent: { param: 'loadRating' } }],
+  params: [
+    {
+      key: 'loadRating',
+      label: '放熱器',
+      unit: 'A',
+      options: [
+        { value: 10, label: '放熱器付き（10A まで）' },
+        { value: 4, label: '放熱器なし（4A まで）' },
+      ],
+      default: 10,
+    },
+  ],
   loadCurrent: 0.007,
 };
 
