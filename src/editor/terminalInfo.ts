@@ -1,6 +1,7 @@
 /**
  * 端子の説明（ホバーのポップアップ・インスペクタの端子一覧に出す文字）を組み立てる。
  */
+import { terminationShort } from '../data/terminations';
 import { terminalHint } from '../devices/hint';
 import type { ResolvedAccept, ResolvedDevice } from '../devices/resolve';
 import { resolveNum, type Conductor, type TerminalDef } from '../devices/types';
@@ -48,6 +49,8 @@ export interface TerminalFacts {
   kind: string;
   /** 受電できる電源・出す電源（'DC 19.2〜26.4V（+）'、'DC24V を出す（+）' など） */
   power?: string;
+  /** 受け入れる電線と定格電流（'電線: フェルール・むき線、0.08〜1.5sq／定格 24A' など） */
+  wire?: string;
 }
 
 /** 端子の説明をまとめる（r はその端子の機器を resolveDevice したもの） */
@@ -63,11 +66,16 @@ export function terminalFacts(t: TerminalDef, r: ResolvedDevice): TerminalFacts 
     power = `${what}: ${t.supply.system}${v !== undefined ? volt(v) : ''}（${CONDUCTOR_NAMES[t.supply.conductor]}）`;
   }
   const hint = terminalHint(t);
+  const w = t.wire;
+  const size = w && (w.minSq !== undefined || w.maxSq !== undefined) ? (w.minSq !== undefined && w.maxSq !== undefined ? `${w.minSq}〜${w.maxSq}sq` : w.maxSq !== undefined ? `${w.maxSq}sq 以下` : `${w.minSq}sq 以上`) : undefined;
+  const wireParts = [w?.methods?.map(terminationShort).join('・'), size].filter(Boolean).join('、');
+  const wire = [wireParts ? `電線: ${wireParts}` : undefined, t.ratedCurrent !== undefined ? `定格 ${t.ratedCurrent}A` : undefined].filter(Boolean).join('／');
   return {
     printed: t.label ?? t.id,
     ...(hint ? { hint } : {}),
     ...(t.note ? { note: t.note } : {}),
     kind,
     ...(power ? { power } : {}),
+    ...(wire ? { wire } : {}),
   };
 }

@@ -7,7 +7,7 @@
  *
  * 端子 ID は汎用の端子台（generic.terminal-block.6p）と同じく、極 n の上側が 'na'、下側が 'nb'。
  */
-import type { DeviceDefinition, ParamDef, ParamValues, TerminalDef } from '../types';
+import type { DeviceDefinition, ParamDef, ParamValues, TerminalDef, Termination } from '../types';
 import { defs, r2, rail, screw, text, togiLogo } from './parts';
 
 const POLES = 10;
@@ -38,6 +38,8 @@ const vtxColorParam: ParamDef = {
 };
 
 const VTX_WIRE = 'プッシュイン、フェルール 0.25〜2.5㎟ / より線 0.14〜2.5㎟ / 単線 φ0.5〜2.0mm、24A';
+/** VTX 2.5 の端子が受け入れる電線と定格電流（チェック用） */
+const VTX_ACCEPT = { wire: { methods: ['ferrule', 'bare'] as Termination[], minSq: 0.14, maxSq: 2.5 }, ratedCurrent: 24 };
 
 export function buildVtx25(): DeviceDefinition {
   const PITCH = 10.4;
@@ -89,8 +91,8 @@ export function buildVtx25(): DeviceDefinition {
   };
 
   const terminals: TerminalDef[] = Array.from({ length: POLES }, (_, i) => [
-    { id: `${i + 1}a`, label: `${i + 1}`, note: `${i + 1} 番の上側（下側 ${i + 1}b と導通）［${VTX_WIRE}］`, x: poleX(i), y: TOP_Y, side: 'top' as const, role: 'pass' as const, optional: true },
-    { id: `${i + 1}b`, label: `${i + 1}`, note: `${i + 1} 番の下側（上側 ${i + 1}a と導通）［${VTX_WIRE}］`, x: poleX(i), y: BOT_Y, side: 'bottom' as const, role: 'pass' as const, optional: true },
+    { id: `${i + 1}a`, label: `${i + 1}`, note: `${i + 1} 番の上側（下側 ${i + 1}b と導通）［${VTX_WIRE}］`, x: poleX(i), y: TOP_Y, side: 'top' as const, role: 'pass' as const, optional: true, ...VTX_ACCEPT },
+    { id: `${i + 1}b`, label: `${i + 1}`, note: `${i + 1} 番の下側（上側 ${i + 1}a と導通）［${VTX_WIRE}］`, x: poleX(i), y: BOT_Y, side: 'bottom' as const, role: 'pass' as const, optional: true, ...VTX_ACCEPT },
   ]).flat();
 
   return {
@@ -165,9 +167,10 @@ export function buildPtul2(): DeviceDefinition {
   ${togiLogo(4, H - 2, 4)}`;
 
   const WIRE = 'M3 ネジアップ式、丸形 / Y 形圧着端子、1.25㎟ 15A';
+  const ACCEPT = { wire: { methods: ['ring', 'fork'] as Termination[], maxSq: 1.25 }, ratedCurrent: 15 };
   const terminals: TerminalDef[] = Array.from({ length: POLES }, (_, i) => [
-    { id: `${i + 1}a`, label: `${i + 1}`, note: `${i + 1} 番の上側（下側 ${i + 1}b と導通）［${WIRE}］`, x: poleX(i), y: TOP_Y, side: 'top' as const, role: 'pass' as const, optional: true },
-    { id: `${i + 1}b`, label: `${i + 1}`, note: `${i + 1} 番の下側（上側 ${i + 1}a と導通）［${WIRE}］`, x: poleX(i), y: BOT_Y, side: 'bottom' as const, role: 'pass' as const, optional: true },
+    { id: `${i + 1}a`, label: `${i + 1}`, note: `${i + 1} 番の上側（下側 ${i + 1}b と導通）［${WIRE}］`, x: poleX(i), y: TOP_Y, side: 'top' as const, role: 'pass' as const, optional: true, ...ACCEPT },
+    { id: `${i + 1}b`, label: `${i + 1}`, note: `${i + 1} 番の下側（上側 ${i + 1}a と導通）［${WIRE}］`, x: poleX(i), y: BOT_Y, side: 'bottom' as const, role: 'pass' as const, optional: true, ...ACCEPT },
   ]).flat();
 
   return {

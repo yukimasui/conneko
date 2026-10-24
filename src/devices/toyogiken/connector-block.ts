@@ -14,7 +14,7 @@
  * 端子の並びは rows（奥段 upper / 手前段 lower、左から順）で与え、各端子に「つながるコネクタのピン番号」を書く。
  * 端子 ID は記名板の印字に合わせ、パラメータ（記名板の種類など）で変えない。
  */
-import type { DeviceDefinition, InternalLink, ParamDef, ParamValues, PinDef, TerminalDef } from '../types';
+import type { DeviceDefinition, InternalLink, ParamDef, ParamValues, PinDef, TerminalDef, WireAcceptSpec } from '../types';
 import { MARK_COLORS, defs, fcnHeaderH, markerCell, milHeaderH, r2, screw, spring35, spring5, text, togiLogo } from './parts';
 
 export type Series = 'pcn7' | 'pcx' | 'pcv5' | 'pcw';
@@ -58,6 +58,8 @@ export interface SeriesSpec {
   method: string;
   /** 端子の注記に付ける、適合電線の要約 */
   wireShort: string;
+  /** 端子が受け入れる電線（端末処理・太さ。チェックに使う） */
+  wire: WireAcceptSpec;
 }
 
 export const SERIES: Record<Series, SeriesSpec> = {
@@ -72,6 +74,7 @@ export const SERIES: Record<Series, SeriesSpec> = {
     method:
       'ネジ式（M3 セルフアップネジ、Y 形圧着端子用。丸形圧着端子は R タイプ）。適合電線 1.25㎟ 以下、締付トルク 1.2N・m',
     wireShort: 'M3 ネジ、Y 形圧着端子、1.25㎟ 以下',
+    wire: { methods: ['fork'], maxSq: 1.25 },
   },
   pcx: {
     label: 'PCX',
@@ -84,6 +87,7 @@ export const SERIES: Record<Series, SeriesSpec> = {
     method:
       'スプリングロック式（プッシュイン）。フェルール 0.14〜0.75㎟（AWG26〜18、DIN46228-4、長さ 8〜12mm）と単線 φ0.3〜1.3mm はそのまま差し込み、より線 0.08〜1.5㎟（むき長さ 9〜10mm）は橙色のボタンを押して差し込む。被覆外径 φ3.2mm 以上の電線は不可',
     wireShort: 'プッシュイン、フェルール 0.14〜0.75㎟ / より線 0.08〜1.5㎟',
+    wire: { methods: ['ferrule', 'bare'], minSq: 0.08, maxSq: 1.5 },
   },
   pcv5: {
     label: 'PCV5',
@@ -96,6 +100,7 @@ export const SERIES: Record<Series, SeriesSpec> = {
     method:
       'スプリングロック式（プッシュイン）。フェルール 0.25〜1㎟（AWG26〜18、DIN46228-4）と単線 φ0.5〜1.6mm は差し込み、より線 0.08〜1.25㎟ は開閉口にドライバを差して差し込む。被覆外径 φ3.6mm 以上の電線は不可',
     wireShort: 'プッシュイン、フェルール 0.25〜1㎟ / より線 0.08〜1.25㎟',
+    wire: { methods: ['ferrule', 'bare'], minSq: 0.08, maxSq: 1.25 },
   },
   pcw: {
     label: 'PCW',
@@ -108,6 +113,7 @@ export const SERIES: Record<Series, SeriesSpec> = {
     method:
       'スプリングロック式（プッシュイン、2.5㎟ 対応）。フェルール 0.14〜2.5㎟（0.14〜0.34㎟ は長さ 12mm、0.5〜2.5㎟ は 10mm）と単線 φ0.3〜1.6mm は差し込み、より線 0.08〜2.5㎟（むき長さ 10〜11mm）は開閉口にドライバ（VT5-1）を差して差し込む。被覆外径 φ4.7mm 以下',
     wireShort: 'プッシュイン、フェルール 0.14〜2.5㎟ / より線 0.08〜2.5㎟',
+    wire: { methods: ['ferrule', 'bare'], minSq: 0.08, maxSq: 2.5 },
   },
 };
 
@@ -277,6 +283,8 @@ export function buildConnectorBlock(s: ConnectorBlockSpec): DeviceDefinition {
           side: 'bottom',
           role: 'pass',
           optional: true,
+          // ネジ式の R タイプ（丸形圧着端子用）は丸形も使える
+          wire: p.crimp === 'R' ? { ...g.wire, methods: ['ring', 'fork'] } : g.wire,
         }),
       ),
     ];

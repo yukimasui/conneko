@@ -115,6 +115,7 @@ export function TerminalPopup(props: { device: string; terminal: TerminalDef; re
       {f.note && <div className="terminal-popup__note">{f.note}</div>}
       <div className="terminal-popup__row">{f.kind}</div>
       {f.power && <div className="terminal-popup__row">{f.power}</div>}
+      {f.wire && <div className="terminal-popup__row">{f.wire}</div>}
       {props.comment && <div className="terminal-popup__row">コメント: {props.comment}</div>}
       <div className={`terminal-popup__row${wires.length ? '' : ' muted'}`}>
         {wires.length ? wires.map((w) => <div key={w.id}>→ {w.to}{w.wireNo ? `（線番 ${w.wireNo}）` : ''}</div>) : '未接続'}
