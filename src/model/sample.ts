@@ -1,6 +1,6 @@
 import { getDeviceDefinition } from '../devices/registry';
 import type { Diagram, DiagramWire } from './diagram';
-import { alignLinks } from './alignLinks';
+import { alignLinks, alignLinksAs } from './alignLinks';
 import { mountedPositions } from './bus';
 import { splitCrossSheetWires } from './ops';
 
@@ -77,8 +77,8 @@ const base: Diagram = {
     { id: 'SC2', type: 'smc.as-f.inline', x: 760, y: 90, sheet: 'S5' },
     { id: 'CY1', type: 'smc.cm2', x: 960, y: 300, params: { bore: 25, stroke: 100, switch: 'M9N' }, sheet: 'S5', note: 'ワーク押出し' },
     { id: 'CY2', type: 'smc.mhz2', x: 150, y: 110, params: { size: 16, switch: 'M9N', speedController: 'meter-out' }, sheet: 'S5', note: 'ワーク把持（スピコンをポートに直付け）' },
-    { id: 'SL1', type: 'smc.an', x: 544, y: 900, params: { thread: '01' }, sheet: 'S5' },
-    { id: 'SL2', type: 'smc.an', x: 574, y: 920, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL1', type: 'smc.an', x: 500, y: 900, params: { thread: '01' }, sheet: 'S5' },
+    { id: 'SL2', type: 'smc.an', x: 590, y: 900, params: { thread: '01' }, sheet: 'S5' },
     { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },
   ],
   wires: [
@@ -190,13 +190,18 @@ const base: Diagram = {
   },
 };
 
-/** シートをまたぐ電線をリンクにし、エア回路のシートの機器のリンクを端子の横にそろえる（装着した電磁弁はマニホールドに並べた位置で） */
+/**
+ * シートをまたぐ電線をリンクにし、エア回路のシートの機器のリンクを端子のそばにそろえる（装着した電磁弁はマニホールドに並べた位置で）。
+ * シリンダ・エアチャックの下に出るリード線のリンクは、縦にして端子の下に一列に並べる
+ */
 function build(): Diagram {
   const lookup = getDeviceDefinition;
   let d = splitCrossSheetWires(base, lookup);
   const pos = mountedPositions(d.devices, lookup);
   d = { ...d, devices: d.devices.map((x) => (pos.has(x.id) ? { ...x, ...pos.get(x.id)! } : x)) };
-  for (const id of ['CY1', 'CY2', 'MF1']) d = alignLinks(d, id, lookup);
+  for (const id of ['CY1', 'CY2']) d = alignLinksAs(d, id, true, lookup);
+  // マニホールドは上にチューブが来るので、ソレノイドのリンクは横にして左右に並べる
+  d = alignLinks(d, 'MF1', lookup);
   return d;
 }
 

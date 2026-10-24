@@ -450,7 +450,9 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
     for (let j = 0; j < count; j++) entries.push({ page: pageNo++, name: pages ? pages[j].name : j ? `${sh.name}（${j + 1}）` : sh.name, kind: sheetKindName(sh) });
   });
   const sheets: SchematicSheetOut[] = schematic.sheets.flatMap((sh, i) => generated[i] ?? coverPages(sh, diagram.settings, entries, paperBySheet.get(sh.id)!));
-  sheets.forEach((out, i) => drawFrame(out, diagram.settings, i, sheets.length));
+  // 空圧回路図は行番号がないので、図面枠に区分け（列番号・行記号）を付けて場所を示せるようにする
+  const zoned = new Set(schematic.sheets.filter((sh) => sh.kind === 'pneumatic').map((sh) => sh.id));
+  sheets.forEach((out, i) => drawFrame(out, diagram.settings, i, sheets.length, zoned.has(out.source ?? out.id)));
 
   // --- 母線にできる網 ---
   const railCandidates: RailCandidate[] = [...model.supplies.entries()].map(([k, s]) => {
@@ -482,9 +484,41 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
   return { doc, elements, byId, rows: rowOf, ioHosts, rackHosts: racks, pneumaticGroups, railCandidates, rowsOf: (id) => rowsBySheet.get(id) ?? rowsPerSheet(paperOf(schematic).height), netOf: (d, t) => uf.find(key(d, t)), circuitNetOf: (d, t) => circuit.find(key(d, t)) };
 }
 
-/** 図面枠と表題欄（図面名・作成者・版・シート名・ページ） */
-function drawFrame(out: SchematicSheetOut, settings: DiagramSettings | undefined, index: number, count: number) {
+/** 図面枠の区分けの幅[mm]と、1 区分のおよその大きさ[mm] */
+const ZONE_STRIP = 5;
+const ZONE_SIZE = 50;
+
+/**
+ * 図面枠の区分け（上の帯に列番号 1, 2, …、左の帯に行記号 A, B, …）。
+ * 図面の中の場所を「3-B」のように言えるようにする（JIS Z 8311 の区域の考え方）
+ */
+export function drawZones(out: SchematicSheetOut) {
   const { width: W, height: H } = out.paper;
+  const cols = Math.max(4, Math.round((W - 20) / ZONE_SIZE));
+  const rows = Math.max(3, Math.round((H - 20 - ZONE_STRIP) / ZONE_SIZE));
+  const cw = (W - 20) / cols;
+  const rh = (H - 20 - ZONE_STRIP) / rows;
+  const top = H - 10;
+  out.polylines.push(
+    { points: [[10, top - ZONE_STRIP], [W - 10, top - ZONE_STRIP]], layer: 'FRAME' },
+    { points: [[10 + ZONE_STRIP, 10], [10 + ZONE_STRIP, top - ZONE_STRIP]], layer: 'FRAME' },
+  );
+  for (let k = 0; k < cols; k++) {
+    const x = 10 + k * cw;
+    if (k) out.polylines.push({ points: [[x, top], [x, top - ZONE_STRIP]], layer: 'FRAME' });
+    out.texts.push({ at: [x + cw / 2, top - ZONE_STRIP / 2], text: String(k + 1), height: 2.5, align: 'center', layer: 'FRAME' });
+  }
+  for (let k = 0; k < rows; k++) {
+    const y = top - ZONE_STRIP - k * rh;
+    if (k) out.polylines.push({ points: [[10, y], [10 + ZONE_STRIP, y]], layer: 'FRAME' });
+    out.texts.push({ at: [10 + ZONE_STRIP / 2, y - rh / 2], text: String.fromCharCode(65 + k), height: 2.5, align: 'center', layer: 'FRAME' });
+  }
+}
+
+/** 図面枠と表題欄（図面名・作成者・版・シート名・ページ）。zones なら区分けも付ける */
+function drawFrame(out: SchematicSheetOut, settings: DiagramSettings | undefined, index: number, count: number, zones = false) {
+  const { width: W, height: H } = out.paper;
+  if (zones) drawZones(out);
   const x1 = W - 130;
   out.polylines.push(
     { points: [[10, 10], [W - 10, 10], [W - 10, H - 10], [10, H - 10]], closed: true, layer: 'FRAME' },

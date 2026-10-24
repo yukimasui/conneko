@@ -16,6 +16,14 @@ const POSITION: Record<TerminalSide, Position> = {
   right: Position.Right,
 };
 
+/**
+ * 機器名のラベルを機器の下に出すか。端子が上にしかない機器（サイレンサ・上にポートのあるシリンダなど）は、
+ * 上から来る電線・チューブがラベルを横切るので下に出す
+ */
+export function labelBelow(terminals: { side: TerminalSide }[]): boolean {
+  return terminals.length > 0 && terminals.every((t) => t.side === 'top');
+}
+
 /** コネクタの接続点（Handle）の厚み。ケーブルの始点は Handle の side 側の端になる */
 export const HANDLE_DEPTH = 10;
 
@@ -98,7 +106,7 @@ function DeviceNodeView({ id, data, selected }: NodeProps<DeviceFlowNode>) {
 
   return (
     <div
-      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}${def.netLabel ? ' is-link' : ''}`}
+      className={`device-node${selected ? ' is-selected' : ''}${severity ? ` has-${severity}` : ''}${data.mount ? ' is-mounted' : ''}${hosts.has(id) ? ' has-mounted' : ''}${def.netLabel ? ' is-link' : ''}${labelBelow(terminals) ? ' is-label-below' : ''}`}
       style={{ width: resolved?.width ?? def.width, height: resolved?.height ?? def.height }}
     >
       <div className="device-node__label" title={data.mount ? `${def.model}（${data.mount.device} の位置 ${data.mount.slot} に装着）` : undefined}>
