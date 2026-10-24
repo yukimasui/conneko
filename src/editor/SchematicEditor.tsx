@@ -11,7 +11,7 @@ import type { DiagramSettings } from '../model/diagram';
 import type { Point, SymbolDef } from '../schematic/format';
 import { autoLayout, nextPosition } from '../schematic/autoLayout';
 import { canBeVertical, canFlip, itemSymbol, type ElementEntry, type SchematicBuild } from '../schematic/layout';
-import { paperOf, snap, type Rotation, type Schematic, type SchematicItem } from '../schematic/model';
+import { paperOf, snap, type Rotation, type Schematic, type SchematicItem, type WireBend } from '../schematic/model';
 import type { PneumaticGroup } from '../schematic/sheets/pneumatic';
 import { NewSheetDialog, SheetSettings } from './SchematicSheetPanel';
 import { placedBounds, symbolBounds } from '../schematic/place';
@@ -93,6 +93,23 @@ export function resetPneumatic(s: Schematic, sheetId: string, element?: string):
   return {
     ...s,
     sheets: s.sheets.map((sh) => (sh.id !== sheetId ? sh : { ...sh, items: element ? sh.items.filter((i) => i.element !== element) : [] })),
+  };
+}
+
+/** 展開接続図の線の曲がり位置を手で決める（bend が null なら自動に戻す。key を省くとシートのすべてを自動に戻す） */
+export function setBend(s: Schematic, sheetId: string, key: string | null, bend: WireBend | null): Schematic {
+  return {
+    ...s,
+    sheets: s.sheets.map((sh) => {
+      if (sh.id !== sheetId) return sh;
+      const { bends: _, ...rest } = sh;
+      const next = { ...(key ? sh.bends : {}) };
+      if (key) {
+        if (bend) next[key] = bend.x !== undefined ? { x: snap(bend.x) } : { y: snap(bend.y!) };
+        else delete next[key];
+      }
+      return Object.keys(next).length ? { ...rest, bends: next } : rest;
+    }),
   };
 }
 
@@ -240,6 +257,8 @@ export function SchematicEditor(props: Props) {
             onSelect={setSelected}
             onDropElement={place}
             groups={pneumatic ? groups : undefined}
+            bends={pneumatic ? undefined : (current.bends ?? {})}
+            onBend={(key, bend) => onChange((s) => setBend(s, current.id, key, bend))}
             onMove={(element, x, y) =>
               pneumatic
                 ? onChange((s) => movePneumatic(s, current.id, element, { x, y }))
@@ -405,6 +424,10 @@ function SheetCanvas(props: {
   onMove: (element: string, x: number, y: number) => void;
   /** 空圧回路図の、ドラッグで動かせる記号のまとまり */
   groups?: PneumaticGroup[];
+  /** 展開接続図の線の曲がり位置（手で動かした線）。undefined なら線は動かせない */
+  bends?: Record<string, WireBend>;
+  /** 線の曲がり位置を動かす（key が null ならシートのすべての線を自動に戻す） */
+  onBend: (key: string | null, bend: WireBend | null) => void;
 }) {
   const { width: W, height: H } = props.paper;
   const view = useRef<HTMLDivElement>(null);
@@ -413,6 +436,8 @@ function SheetCanvas(props: {
   const [viewport, setViewport] = useState({ zoom: 3, x: 16, y: 16 });
   const { zoom } = viewport;
   const drag = useRef<{ element: string; start: Point; origin: Point } | null>(null);
+  // 線の区間のドラッグ（縦の区間は左右へ、横の区間は上下へ動かす）
+  const wireDrag = useRef<{ edge: string; axis: 'x' | 'y'; start: Point; origin: number } | null>(null);
   const pan = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null);
   const [panning, setPanning] = useState(false);
   // 端子台接続図は 1 枚のシートが複数のページになる（2 ページ目からは表示だけ）
@@ -476,6 +501,12 @@ function SheetCanvas(props: {
         setViewport((v) => ({ ...v, x: p.vx + dx, y: p.vy + dy }));
         return;
       }
+      const w = wireDrag.current;
+      if (w) {
+        const [x, y] = toPaper(e.clientX, e.clientY);
+        props.onBend(w.edge, w.axis === 'x' ? { x: w.origin + x - w.start[0] } : { y: w.origin + y - w.start[1] });
+        return;
+      }
       const d = drag.current;
       if (!d) return;
       const [x, y] = toPaper(e.clientX, e.clientY);
@@ -486,6 +517,7 @@ function SheetCanvas(props: {
       if (pan.current && !pan.current.moved) props.onSelect(null);
       pan.current = null;
       drag.current = null;
+      wireDrag.current = null;
       setPanning(false);
     };
     window.addEventListener('pointermove', onMove);
@@ -507,10 +539,15 @@ function SheetCanvas(props: {
         <span className="small muted">{Math.round((zoom / 3.78) * 100)}%</span>
         <button type="button" onClick={() => zoomAt(1.25)} aria-label="拡大">＋</button>
         <button type="button" onClick={fit}>用紙に合わせる</button>
+        {props.bends && Object.keys(props.bends).length > 0 && (
+          <button type="button" onClick={() => props.onBend(null, null)} title="このシートで手で動かした線の曲がり位置を、すべて自動に戻します">
+            線を自動に戻す
+          </button>
+        )}
         <span className="small muted schem-canvas__hint">
           {props.groups
             ? 'ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動（配管は引き直します）、矢印キーで少しずつ、Delete で自動の位置に戻す'
-            : 'ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、V で縦/横、F で端子の入れ替え、Delete で外す'}
+            : 'ホイールで拡大・縮小・空いているところのドラッグで移動・記号はドラッグで移動、R で回転、V で縦/横、F で端子の入れ替え、Delete で外す・線の区間はドラッグで曲がり位置を動かし、ダブルクリックで自動に戻す'}
         </span>
       </div>
       <div
@@ -518,7 +555,7 @@ function SheetCanvas(props: {
         ref={view}
         onPointerDown={(e) => {
           // 記号の上以外（用紙の空いているところ・用紙の外）を左ボタンか中ボタンでドラッグすると動かす
-          if ((e.target as Element).closest('.schem-hit') || (e.button !== 0 && e.button !== 1)) return;
+          if ((e.target as Element).closest('.schem-hit, .schem-wire-hit') || (e.button !== 0 && e.button !== 1)) return;
           e.preventDefault();
           pan.current = { x: e.clientX, y: e.clientY, vx: viewport.x, vy: viewport.y, moved: false };
           setPanning(true);
@@ -544,6 +581,39 @@ function SheetCanvas(props: {
             <rect className="schem-paper__bg" width={W} height={H} fill="#fff" />
             <rect className="schem-paper__bg" width={W} height={H} fill="url(#schem-grid)" />
             <g dangerouslySetInnerHTML={{ __html: body }} />
+            {/* 線の区間（記号より下に置き、記号の上では記号をつかむ） */}
+            {props.bends &&
+              out.polylines.flatMap((pl, k) => {
+                const edge = pl.edge;
+                if (!edge) return [];
+                const moved = !!props.bends?.[edge];
+                return pl.points.slice(1).map((p, i) => {
+                  const a = pl.points[i];
+                  const vertical = Math.abs(a[0] - p[0]) < 1e-6;
+                  if (Math.abs(a[0] - p[0]) + Math.abs(a[1] - p[1]) < 1e-6) return null;
+                  return (
+                    <line
+                      key={`${k}-${i}`}
+                      className={`schem-wire-hit${moved ? ' is-moved' : ''}${vertical ? ' is-vertical' : ''}`}
+                      x1={a[0]}
+                      y1={H - a[1]}
+                      x2={p[0]}
+                      y2={H - p[1]}
+                      onPointerDown={(ev) => {
+                        if (ev.button !== 0) return;
+                        ev.stopPropagation();
+                        wireDrag.current = { edge, axis: vertical ? 'x' : 'y', start: toPaper(ev.clientX, ev.clientY), origin: vertical ? a[0] : H - a[1] };
+                      }}
+                      onDoubleClick={(ev) => {
+                        ev.stopPropagation();
+                        props.onBend(edge, null);
+                      }}
+                    >
+                      <title>{moved ? 'ドラッグで曲がり位置を動かす・ダブルクリックで自動に戻す' : 'ドラッグで曲がり位置を動かす'}</title>
+                    </line>
+                  );
+                });
+              })}
             {out.inserts.map((ins) => {
               const e = ins.element ? props.build.byId.get(ins.element) : undefined;
               if (!e) return null;

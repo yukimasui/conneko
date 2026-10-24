@@ -56,6 +56,28 @@ export interface SchematicSheet {
   /** 母線 */
   rails?: Rails;
   items: SchematicItem[];
+  /**
+   * 手で動かした線の曲がり位置（展開接続図）。キーは線の両端（wireEdgeKey）、値は真ん中の区間の位置[mm]:
+   * x は縦の区間の x、y は横の区間の y（用紙の左上が原点・y は下向き）。書いていない線は自動で引く
+   */
+  bends?: Record<string, WireBend>;
+}
+
+/** 線の真ん中の区間の位置（x: 縦の区間、y: 横の区間のどちらか） */
+export type WireBend = { x: number; y?: undefined } | { y: number; x?: undefined };
+
+/** 線の端の名前（要素 ID と記号の端子。例: 'MC1:13-14#1'）。母線は 'rail:supply' / 'rail:common' */
+export const wireEnd = (element: string, pin: string) => `${element}#${pin}`;
+
+/** 線のキー（両端の名前を並べ替えて '|' でつなぐ） */
+export const wireEdgeKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/** 線のキーの端（母線以外）の要素 ID */
+export function wireEdgeElements(k: string): string[] {
+  return k
+    .split('|')
+    .filter((p) => !p.startsWith('rail:'))
+    .map((p) => p.slice(0, p.lastIndexOf('#')));
 }
 
 export interface SchematicSettings {
@@ -115,6 +137,12 @@ export function newSchematicSheet(s: Schematic | undefined): SchematicSheet {
 export function renameSchematicDevice(s: Schematic | undefined, from: string, to: string): Schematic | undefined {
   if (!s) return s;
   const el = (id: string) => (splitElementId(id).device === from ? `${to}:${splitElementId(id).key}` : id);
+  // 線のキーの端（要素 ID # 端子）も付け替える
+  const end = (p: string) => (p.startsWith('rail:') ? p : `${el(p.slice(0, p.lastIndexOf('#')))}${p.slice(p.lastIndexOf('#'))}`);
+  const bendKey = (k: string) => {
+    const [a, b] = k.split('|');
+    return wireEdgeKey(end(a), end(b ?? ''));
+  };
   const rail = (ref?: string) => (ref && splitRail(ref)?.device === from ? `${to}.${splitRail(ref)!.terminal}` : ref);
   const rails = (r: Rails): Rails => ({ ...r, supply: rail(r.supply), common: rail(r.common) });
   return {
@@ -126,6 +154,7 @@ export function renameSchematicDevice(s: Schematic | undefined, from: string, to
       ...(sh.plc ? { plc: sh.plc === from ? to : sh.plc } : {}),
       ...(sh.units ? { units: sh.units.map((b) => (b === from ? to : b)) } : {}),
       items: sh.items.map((it) => ({ ...it, element: el(it.element) })),
+      ...(sh.bends ? { bends: Object.fromEntries(Object.entries(sh.bends).map(([k, v]) => [bendKey(k), v])) } : {}),
     })),
   };
 }
@@ -136,6 +165,11 @@ export function pruneSchematic(s: Schematic | undefined, devices: Set<string>): 
   let changed = false;
   const sheets = s.sheets.map((sh) => {
     const items = sh.items.filter((it) => devices.has(splitElementId(it.element).device));
+    // 端の要素がどれも置いてある線の曲がり位置だけ残す
+    const placed = new Set(items.map((it) => it.element));
+    const bendEntries = Object.entries(sh.bends ?? {});
+    const bends = bendEntries.filter(([k]) => wireEdgeElements(k).every((e) => placed.has(e)));
+    const bendsChanged = bends.length !== bendEntries.length;
     const keep = (ref?: string) => (ref && devices.has(splitRail(ref)?.device ?? '') ? ref : undefined);
     const rails = sh.rails ? { ...sh.rails, supply: keep(sh.rails.supply), common: keep(sh.rails.common) } : undefined;
     const railsChanged = !!sh.rails && (rails?.supply !== sh.rails.supply || rails?.common !== sh.rails.common);
@@ -143,10 +177,17 @@ export function pruneSchematic(s: Schematic | undefined, devices: Set<string>): 
     const units = sh.units?.filter((b) => devices.has(b));
     const plcGone = !!sh.plc && !devices.has(sh.plc);
     const listsChanged = (!!sh.blocks && blocks!.length !== sh.blocks.length) || (!!sh.units && units!.length !== sh.units.length);
-    if (items.length === sh.items.length && !railsChanged && !listsChanged && !plcGone) return sh;
+    if (items.length === sh.items.length && !railsChanged && !listsChanged && !plcGone && !bendsChanged) return sh;
     changed = true;
-    const { plc: _, ...rest } = sh;
-    return { ...(plcGone ? rest : sh), items, ...(rails ? { rails } : {}), ...(blocks ? { blocks } : {}), ...(units ? { units } : {}) };
+    const { plc: _, bends: __, ...rest } = sh;
+    return {
+      ...(plcGone ? rest : { ...rest, ...(sh.plc ? { plc: sh.plc } : {}) }),
+      items,
+      ...(rails ? { rails } : {}),
+      ...(blocks ? { blocks } : {}),
+      ...(units ? { units } : {}),
+      ...(bends.length ? { bends: Object.fromEntries(bends) } : {}),
+    };
   });
   return changed ? { ...s, sheets } : s;
 }
@@ -199,6 +240,15 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
     const blocks = strings(v.blocks);
     const units = strings(v.units);
     const paper = paperSizeOf(v.paper);
+    // 線の曲がり位置（展開接続図だけ）
+    const bends: Record<string, WireBend> = {};
+    if (!kind && isObj(v.bends)) {
+      for (const [k, b] of Object.entries(v.bends)) {
+        if (!k.includes('|') || !isObj(b)) continue;
+        if (typeof b.x === 'number' && Number.isFinite(b.x)) bends[k] = { x: b.x };
+        else if (typeof b.y === 'number' && Number.isFinite(b.y)) bends[k] = { y: b.y };
+      }
+    }
     sheets.push({
       id,
       name,
@@ -209,6 +259,7 @@ export function parseSchematic(raw: unknown): Schematic | undefined {
       ...(kind === 'io' && units ? { units } : {}),
       ...(rails && Object.keys(rails).length ? { rails } : {}),
       items: !kind || kind === 'pneumatic' ? items : [],
+      ...(Object.keys(bends).length ? { bends } : {}),
     });
   });
   if (!sheets.length) return undefined;
@@ -246,6 +297,9 @@ export function serializeSchematic(s: Schematic): Schematic {
         ...(it.flip ? { flip: true } : {}),
         ...(it.vertical ? { vertical: true } : {}),
       })),
+      ...(!sh.kind && sh.bends && Object.keys(sh.bends).length
+        ? { bends: Object.fromEntries(Object.entries(sh.bends).map(([k, b]) => [k, b.x !== undefined ? { x: r(b.x) } : { y: r(b.y!) }])) }
+        : {}),
     })),
   };
 }

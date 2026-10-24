@@ -131,3 +131,35 @@ describe('展開図の自動配置', () => {
     expect(bk?.points.every((q) => q[1] === ins.at[1])).toBe(true);
   });
 });
+
+describe('ソース出力（PNP）の段', () => {
+  /** +24V → 出力ユニットの COM、出力 0 → 表示灯 → 0V */
+  const pnp = (schematic: Schematic): Diagram => ({
+    devices: [
+      { id: 'PS1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'OUT1', type: 'keyence.kv-b16tcp', x: 0, y: 0 },
+      { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 0, y: 0 },
+    ],
+    wires: [W('W1', 'PS1.+V1', 'OUT1.C0', 'P24'), W('W2', 'OUT1.0', 'PL1.X1', 'R000'), W('W3', 'PL1.X2', 'PS1.-V1', 'N24')],
+    schematic,
+  });
+
+  it('ソース出力の出力点は、端子を右に出す記号（plc-out-src）になる', () => {
+    const b = buildSchematic(pnp(empty), getDeviceDefinition);
+    expect(b.byId.get('OUT1:0')?.element.symbol).toBe('plc-out-src');
+  });
+
+  it('自動配置で、出力点を段の左、表示灯を段の右に置き、表示灯から戻り側の母線へつなぐ', () => {
+    const b = buildSchematic(pnp(empty), getDeviceDefinition);
+    const r = autoLayout(b, empty, 'D1', paperOf(empty));
+    const items = new Map(r.schematic.sheets[0].items.map((i) => [i.element, i]));
+    const out = items.get('OUT1:0')!;
+    const lamp = items.get('PL1:X1-X2')!;
+    expect(out.y).toBe(lamp.y);
+    expect(out.x).toBeLessThan(lamp.x);
+    // 線: 出力点 → 表示灯 → 戻り側の母線
+    const sheet = buildSchematic(pnp(r.schematic), getDeviceDefinition).doc.sheets[0];
+    expect(sheet.polylines.some((l) => l.edge?.includes('OUT1:0#1') && l.edge.includes('PL1:X1-X2#1'))).toBe(true);
+    expect(sheet.polylines.some((l) => l.edge?.includes('rail:common') && l.edge.includes('PL1:X1-X2#2'))).toBe(true);
+  });
+});
