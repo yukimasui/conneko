@@ -124,6 +124,12 @@ def add_block(doc: Drawing, name: str, symbol: dict[str, Any]) -> None:
         attdef.set_placement(tuple(a["at"]), align=ALIGN.get(a.get("align", "center"), TextEntityAlignment.MIDDLE_CENTER))
 
 
+def upside_down(rotation: float) -> bool:
+    """記号の回転で属性の文字が逆さ（180°）か上から読む向き（270°）になるか（svg.ts の upsideDown と同じ）"""
+    r = round(rotation) % 360
+    return r in (180, 270)
+
+
 def add_dot(layout: BaseLayout, at: Point, layer: str) -> None:
     """塗りつぶした円（幅のある閉じたポリライン。AutoCAD の DONUT と同じ作り）"""
     r = DOT_DIAMETER / 4
@@ -148,8 +154,13 @@ def add_sheet(doc: Drawing, schematic: dict[str, Any], sheet: dict[str, Any], or
         )
         values = {k: v for k, v in (ins.get("attributes") or {}).items() if v}
         ref.add_auto_attribs(values)
+        flip = upside_down(ins.get("rotation", 0))
         for attrib in ref.attribs:
             attrib.dxf.layer = "TAG"
+            if flip:
+                # 逆さ・上から読む向きになる文字は 180° 回して読める向きにし、左寄せ・右寄せを入れ替えて記号の外側へ伸ばす
+                attrib.dxf.rotation = (attrib.dxf.rotation + 180) % 360
+                attrib.dxf.halign = {0: 2, 2: 0}.get(attrib.dxf.halign, attrib.dxf.halign)
     for dot in sheet.get("dots", []):
         add_dot(msp, offset(dot["at"], origin), dot["layer"])
     for t in sheet.get("texts", []):

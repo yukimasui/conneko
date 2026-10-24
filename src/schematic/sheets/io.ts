@@ -170,18 +170,27 @@ export function ioPages(
           wireNo(pin, [railOf(row.net)!.x, pin[1]], row.net);
           return;
         }
-        // 相手の機器（ほかの機器で、同じ網の端子を持つ要素）
-        let partner: { e: ElementEntry; t: string } | undefined;
+        // 相手の機器（ほかの機器で、同じ網の端子を持つ要素）。最初の 1 つを記号で描き、残りは名前を添える
+        const partners: { e: ElementEntry; t: string }[] = [];
         for (const kind of PARTNER_KINDS) {
           for (const e of ctx.elements) {
             if (e.device === unit.device.id || e.element.kind !== kind || e.def.category === 'plc') continue;
             const t = Object.keys(e.element.pinOf).find((x) => ctx.netOf(e.device, x) === row.net);
-            if (t) {
-              partner = { e, t };
-              break;
-            }
+            if (t) partners.push({ e, t });
           }
-          if (partner) break;
+        }
+        const partner = partners[0];
+        if (partner) {
+          // 記号にしなかった相手（2 つ目からの機器と、リンクなど記号にならないつなぎ先）
+          const rest = [
+            ...new Set([
+              ...partners.slice(1).map((p) => p.e.device).filter((d) => d !== partner.e.device),
+              ...row.connections.filter((c) => !partners.some((p) => c.startsWith(`${p.e.device}.`))),
+            ]),
+          ];
+          if (rest.length) {
+            page.texts.push({ at: [pin[0] + 1, pin[1] - 2], text: fitText(`ほかに ${rest.join('・')}`, PARTNER_X - TABLE_X - TABLE_W - 2, 1.8), height: 1.8, align: 'left', layer: 'TAG' });
+          }
         }
         if (!partner) {
           // 相手が記号にならない（リンクの先など）ときは、つながる先の名前を書く

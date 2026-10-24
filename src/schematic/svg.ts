@@ -55,10 +55,27 @@ function primitiveSvg(p: Primitive): string {
   }
 }
 
-/** 記号を、属性の値を入れて描く（記号の座標系。y は上向き） */
-export function symbolSvg(def: SymbolDef, attributes: Record<string, string> = {}, tagColor = 'currentColor'): string {
+/**
+ * 記号の回転で、属性の文字が逆さ（180°）か上から読む向き（270°）になるか。
+ * そうなる文字は 180° 回して読める向き（0° か下から読む 90°）にする（Python の upside_down と同じ）
+ */
+export function upsideDown(rotation = 0): boolean {
+  const r = ((Math.round(rotation) % 360) + 360) % 360;
+  return r === 180 || r === 270;
+}
+
+const SWAP_ALIGN: Record<TextAlign, TextAlign> = { left: 'right', center: 'center', right: 'left' };
+
+/**
+ * 記号を、属性の値を入れて描く（記号の座標系。y は上向き）。rotation は配置したときの記号の回転で、
+ * 逆さになる属性の文字は 180° 回し、左寄せ・右寄せを入れ替えて記号の外側へ伸ばす
+ */
+export function symbolSvg(def: SymbolDef, attributes: Record<string, string> = {}, tagColor = 'currentColor', rotation = 0): string {
   const body = def.primitives.map(primitiveSvg).join('');
-  const attrs = def.attributes.map((a) => textSvg(a.at, attributes[a.tag] ?? '', a.height, a.align, 0, tagColor)).join('');
+  const flip = upsideDown(rotation);
+  const attrs = def.attributes
+    .map((a) => textSvg(a.at, attributes[a.tag] ?? '', a.height, flip ? SWAP_ALIGN[a.align ?? 'center'] : a.align, flip ? 180 : 0, tagColor))
+    .join('');
   return body + attrs;
 }
 
@@ -79,7 +96,7 @@ export function sheetSvgBody(doc: SchematicExport, sheet: SchematicSheetOut): st
     const rot = ins.rotation ? ` rotate(${n(ins.rotation)})` : '';
     parts.push(
       `<g transform="translate(${n(ins.at[0])} ${n(ins.at[1])})${rot}" stroke="${color(ins.layer)}" color="${color(ins.layer)}">` +
-        symbolSvg(def, ins.attributes, color('TAG')) +
+        symbolSvg(def, ins.attributes, color('TAG'), ins.rotation) +
         '</g>',
     );
   }
