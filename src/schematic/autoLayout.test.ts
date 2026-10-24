@@ -115,6 +115,21 @@ describe('展開図の自動配置', () => {
     expect(H).toBe(297);
   });
 
+  it('主回路: 分岐の先（CP2 の二次側につながる電源ユニット）も、分岐の右に二次側の高さをそろえて置く（サンプル図面）', () => {
+    const s: Schematic = { sheets: [{ id: 'M', name: '主回路', items: [] }] };
+    const d = { ...sampleDiagram, schematic: s };
+    const r = autoLayout(buildSchematic(d, getDeviceDefinition), s, 'M', paperOf(s));
+    const items = new Map(r.schematic.sheets[0].items.map((i) => [i.element, i]));
+    const psu = items.get('PSU1:main');
+    expect(psu).toBeDefined();
+    expect(psu!.x).toBeGreaterThan(items.get('CP2:main')!.x + 10);
+    // 線: CP2 の二次側（2）から電源ユニットの L へ、まっすぐ横につながる
+    const out = buildSchematic({ ...d, schematic: r.schematic }, getDeviceDefinition).doc.sheets[0];
+    const line = out.polylines.find((l) => l.edge?.includes('CP2:main#2') && l.edge.includes('PSU1:main#'));
+    expect(line).toBeDefined();
+    expect(line!.points).toHaveLength(2);
+  });
+
   it('3 線式センサーにつながる入力は、センサーの箱と入力の 1 段にする（サンプル図面）', () => {
     const s = sampleDiagram.schematic!;
     const b = buildSchematic(sampleDiagram, getDeviceDefinition);
