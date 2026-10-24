@@ -152,6 +152,24 @@ export function checkSignals(m: Model, push: Push) {
       push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} を電源の ${want === '+' ? '+24V' : '0V'} につないでください（入力 ${terminalName(m, inp.key)} と直列にします）`, devices: [id], wires, key: `two-wire:${group}` });
     } else if (p.supply.conductor !== want) {
       push({ severity: 'warning', rule: 'two-wire', message: `${id}: 2線式センサーの ${other.terminal.label ?? other.terminal.id} が入力のコモンと同じ極につながっているため、入力が ON になりません`, devices: [id], wires, key: `two-wire:${group}` });
+    } else {
+      // 入力が 2 線式センサーを受けられるか（漏れ電流・残留電圧と、入力の OFF 電流・最小 ON 電圧）
+      const out = ends[0].terminal.signal!;
+      const sig = inp.terminal.signal!;
+      const where = `入力 ${terminalName(m, inp.key)}`;
+      const devices = [id, inp.device.id];
+      const twoWireIssue = (message: string, kind: string) =>
+        push({ severity: 'warning', rule: 'two-wire-input', message: `${id}: ${message}`, devices, wires, key: `two-wire-input:${kind}:${group}` });
+      if (sig.twoWire === false) twoWireIssue(`${where} は 2線式センサーを使えない入力です（メーカーの資料で不可）。3線式のセンサーにするか、別の入力ユニットにします`, 'ng');
+      else {
+        if (out.leakCurrent !== undefined && sig.offCurrent !== undefined && out.leakCurrent > sig.offCurrent + 1e-9) {
+          twoWireIssue(`2線式センサーの漏れ電流 ${out.leakCurrent}mA が${where} の OFF 電流 ${sig.offCurrent}mA を超えています（センサーが OFF でも入力が OFF にならないことがあります。ブリーダー抵抗を入れます）`, 'leak');
+        }
+        const on = p.supply.voltage - (out.residualVoltage ?? 0);
+        if (out.residualVoltage !== undefined && sig.onVoltage !== undefined && on < sig.onVoltage - 1e-9) {
+          twoWireIssue(`電源 ${p.supply.voltage}V から 2線式センサーの残留電圧 ${out.residualVoltage}V を引いた ${Math.round(on * 100) / 100}V が${where} の最小 ON 電圧 ${sig.onVoltage}V を下回ります（入力が ON にならないことがあります）`, 'on');
+        }
+      }
     }
   }
 }

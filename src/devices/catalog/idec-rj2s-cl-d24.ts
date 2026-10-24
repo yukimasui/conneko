@@ -55,7 +55,8 @@ export default buildRelaySocket({
   relay: { x: 4, y: 68, w: 28, h: 56, cover: 'clear', lines: ['RJ2S', 'DC24V'], poles: 2, textTop: 0.3, led: { x: 27, y: 73, color: '#ff4a3a' } },
   // 動作電圧 70% 以下、許容電圧 170%（RJ シリーズ カタログ）
   coil: { system: 'DC', minVoltage: 16.8, maxVoltage: 40.8 },
-  links: [...cContact('3', '2', '4'), ...cContact('6', '7', '5')],
+  // 接点定格 AC250V 8A（抵抗負荷）
+  links: [...cContact('3', '2', '4', 8), ...cContact('6', '7', '5', 8)],
   loadCurrent: 0.0257,
   socketName: 'SJ2S-07L',
 });

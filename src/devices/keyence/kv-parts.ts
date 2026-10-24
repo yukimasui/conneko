@@ -335,6 +335,8 @@ export interface IoContext {
   inputAccepts?: AcceptSpec | ((p: ParamValues) => AcceptSpec);
   /** 出力点の信号の種類（シンク = 'npn'、ソース = 'pnp'、リレー = 'contact'） */
   outSignal?: SignalKind;
+  /** 入力点の信号に加える項目（最小 ON 電圧・2 線式センサーの可否など） */
+  inputSignal?: Pick<SignalSpec, 'onVoltage' | 'offCurrent' | 'twoWire'>;
 }
 
 /**
@@ -361,7 +363,7 @@ export function ioProps(pt: IoPoint, p: ParamValues, ctx: IoContext = {}): Omit<
         label: named(ioName('kv', 'in', inHead + i)),
         note: pt.note ?? `入力（ユニットの先頭番号 + ${i}）`,
         role: 'signal',
-        signal: { dir: 'in', kind: 'dc', ...(pt.common ? { common: pt.common } : {}) },
+        signal: { dir: 'in', kind: 'dc', ...(pt.common ? { common: pt.common } : {}), ...ctx.inputSignal },
       };
     }
     case 'out': {

@@ -119,10 +119,10 @@ const def: DeviceDefinition = {
   ],
   // a 接点 3 回路と、強制ガイドされた b 接点 11-12（a 接点が溶着すると開いたままになる）
   links: [
-    { from: '23', to: '24', switch: 'NO', linked: 'force-guided' },
-    { from: '33', to: '34', switch: 'NO', linked: 'force-guided' },
-    { from: '43', to: '44', switch: 'NO', linked: 'force-guided' },
-    { from: '11', to: '12', switch: 'NC', linked: 'force-guided' },
+    { from: '23', to: '24', switch: 'NO', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '33', to: '34', switch: 'NO', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '43', to: '44', switch: 'NO', linked: 'force-guided', ratedCurrent: 6 },
+    { from: '11', to: '12', switch: 'NC', linked: 'force-guided', ratedCurrent: 6 },
   ],
   safety: { standards: ['EN 61810-3 タイプA'] },
   // コイル 15mA ＋ 表示灯

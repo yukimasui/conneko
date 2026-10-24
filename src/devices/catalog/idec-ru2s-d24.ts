@@ -53,7 +53,8 @@ export default buildRelaySocket({
   relay: { x: 6, y: 46, w: 48, h: 37, cover: 'clear', lines: ['IDEC RU2S', 'DC24V'], poles: 2, textTop: 0.3, led: { x: 48, y: 51, color: '#ff4a3a' } },
   // 動作電圧 80% 以下。上限は 110% とした（推定）
   coil: { system: 'DC', minVoltage: 19.2, maxVoltage: 26.4 },
-  links: [...cContact('9', '1', '5'), ...cContact('12', '4', '8')],
+  // 接点定格 AC240V / DC30V 10A（抵抗負荷）
+  links: [...cContact('9', '1', '5', 10), ...cContact('12', '4', '8', 10)],
   loadCurrent: 0.0417,
   socketName: 'SM2S-05',
   estimated: 'コイル電圧の上限（定格の 110%）は推定。ソケット上の端子の位置は端子配置図からの読み取り',

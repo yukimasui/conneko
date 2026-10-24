@@ -88,8 +88,11 @@ function poleHints(poles: 2 | 4, coil: { '13': string; '14': string }, what = ''
   return hints;
 }
 
-function poleLinks(poles: 2 | 4) {
-  return poles === 2 ? [...cContact('9', '1', '5'), ...cContact('12', '4', '8')] : [1, 2, 3, 4].flatMap((n) => cContact(String(8 + n), String(n), String(4 + n)));
+/** 接点の内部経路。rated は接点の定格電流[A]（抵抗負荷。MY2N は 5A、MY4N は 3A） */
+function poleLinks(poles: 2 | 4, rated?: number) {
+  return poles === 2
+    ? [...cContact('9', '1', '5', rated), ...cContact('12', '4', '8', rated)]
+    : [1, 2, 3, 4].flatMap((n) => cContact(String(8 + n), String(n), String(4 + n), rated));
 }
 
 const COIL: Record<Coil, { accepts: Omit<AcceptSpec, 'conductors'>; current: number; label: string; model: string }> = {
@@ -145,7 +148,7 @@ export function buildMy(poles: 2 | 4, coil: Coil): DeviceDefinition {
     labelOffset: poles === 2 ? pyf08Label : pyf14Label,
     relay,
     coil: c.accepts,
-    links: poleLinks(poles),
+    links: poleLinks(poles, poles === 2 ? 5 : 3),
     loadCurrent: c.current,
     socketName: socket,
   });

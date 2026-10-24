@@ -201,6 +201,16 @@ export interface SignalSpec {
   common?: string;
   /** コモン端子がなく極性が決まっている入力の場合のコモンの極性（'+' はプラスコモン） */
   commonPolarity?: '+' | '-';
+  /** 2 線式の出力（kind: '2wire'）: OFF のときの漏れ電流[mA] */
+  leakCurrent?: number;
+  /** 2 線式の出力（kind: '2wire'）: ON のときの残留電圧（内部降下電圧）[V] */
+  residualVoltage?: number;
+  /** 入力（dir: 'in'）: ON になる電圧の下限（最小 ON 電圧）[V] */
+  onVoltage?: number;
+  /** 入力（dir: 'in'）: OFF とみなされる電流の上限（OFF 電流）[mA]。2 線式センサーの漏れ電流がこれを超えると OFF にならない */
+  offCurrent?: number;
+  /** 入力（dir: 'in'）: false の場合、2 線式センサーをつなげない（メーカーの資料で不可とされている入力） */
+  twoWire?: false;
 }
 
 /**

@@ -145,9 +145,9 @@ const def: DeviceDefinition = {
   ],
   // 主接点・補助 a 接点 13-14 は a 接点、補助 b 接点 21-22 はミラー接点（主接点が溶着すると開かない）
   links: [
-    { from: '1/L1', to: '2/T1', directed: true, switch: 'NO' },
-    { from: '3/L2', to: '4/T2', directed: true, switch: 'NO' },
-    { from: '5/L3', to: '6/T3', directed: true, switch: 'NO' },
+    { from: '1/L1', to: '2/T1', directed: true, switch: 'NO', ratedCurrent: 13 },
+    { from: '3/L2', to: '4/T2', directed: true, switch: 'NO', ratedCurrent: 13 },
+    { from: '5/L3', to: '6/T3', directed: true, switch: 'NO', ratedCurrent: 13 },
     { from: '13', to: '14', switch: 'NO' },
     { from: '21', to: '22', switch: 'NC', linked: 'mirror' },
   ],

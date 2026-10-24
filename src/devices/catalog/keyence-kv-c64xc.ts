@@ -34,6 +34,7 @@ export default buildMilUnit({
     { from: 'CN1#33', to: 'CN1#34' },
     { from: 'CN2#33', to: 'CN2#34' },
   ],
-  io: { inputs: 64 },
+  // 最小 ON 電圧 19V。EV シリーズの 2 線式近接センサは使えない（KEYENCE 仕様の注記）
+  io: { inputs: 64, inputSignal: { onVoltage: 19, twoWire: false } },
   bus: kvUnitBus(25, { inputs: 64 }),
 });

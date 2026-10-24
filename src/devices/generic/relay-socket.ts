@@ -193,8 +193,8 @@ export function buildRelaySocket(s: RelaySocketSpec): DeviceDefinition {
   };
 }
 
-/** c 接点 1 極分の内部経路（COM → NC は b 接点、COM → NO は a 接点） */
-export const cContact = (com: string, nc: string, no: string): InternalLink[] => [
-  { from: com, to: nc, switch: 'NC' },
-  { from: com, to: no, switch: 'NO' },
+/** c 接点 1 極分の内部経路（COM → NC は b 接点、COM → NO は a 接点）。ratedCurrent は接点の定格電流[A]（抵抗負荷） */
+export const cContact = (com: string, nc: string, no: string, ratedCurrent?: number): InternalLink[] => [
+  { from: com, to: nc, switch: 'NC', ...(ratedCurrent !== undefined ? { ratedCurrent } : {}) },
+  { from: com, to: no, switch: 'NO', ...(ratedCurrent !== undefined ? { ratedCurrent } : {}) },
 ];
