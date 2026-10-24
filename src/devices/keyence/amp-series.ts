@@ -129,6 +129,7 @@ export function buildLvn(unit: 'expansion' | 'main-m8'): DeviceDefinition {
     vmin: 10,
     vmax: 30,
     rated: main ? 0.1 : 0.02,
+    outputTotal: main ? 0.1 : undefined,
     params: [OUTPUT_PARAM],
     loadCurrent: main ? 0.03 : undefined,
     bus: main ? LVN_HOST_BUS : unitBus('lv-n'),
@@ -172,6 +173,7 @@ export function buildLrxn(unit: 'main' | 'expansion' | 'main-m8'): DeviceDefinit
     vmin: 16,
     vmax: 30,
     rated: unit === 'expansion' ? 0.05 : 0.1,
+    outputTotal: unit === 'expansion' ? undefined : 0.1,
     params: m8 ? [OUTPUT_PARAM, PIN2_PARAM] : [OUTPUT_PARAM],
     bus: unit === 'main' ? hostBus('lr-xn', 8) : unit === 'expansion' ? unitBus('lr-xn') : undefined,
   });
@@ -204,6 +206,7 @@ export function buildPx10(): DeviceDefinition {
     vmin: 10.8,
     vmax: 26.4,
     rated: 0.1,
+    outputTotal: 0.1,
     params: [OUTPUT_PARAM],
   });
 }
@@ -241,6 +244,7 @@ export function buildCzv(unit: 'main' | 'expansion'): DeviceDefinition {
     vmin: 21.6,
     vmax: 26.4,
     rated: main ? 0.1 : 0.02,
+    outputTotal: main ? 0.2 : undefined,
     params: [OUTPUT_PARAM],
     bus: main ? hostBus('cz-v20', 3) : unitBus('cz-v20'),
   });

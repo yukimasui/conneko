@@ -35,6 +35,8 @@ export interface PhotoOpts {
   vmax: number;
   /** 出力 1 点の定格電流[A] */
   rated: number;
+  /** 出力の合計の上限[A]（「2 出力合計 100mA」など。出力が 2 つ以上のときだけ使う） */
+  outputTotal?: number;
   params?: ParamDef[];
   loadCurrent?: number;
   /** 上端の見出し */
@@ -143,6 +145,15 @@ export function buildPhoto(o: PhotoOpts): DeviceDefinition {
     terminals,
     ...(pins ? { pins } : {}),
     links,
+    // 出力の合計の上限（出力点のグループとして書く）
+    ...(o.outputTotal !== undefined
+      ? {
+          commonLimits: (p: ParamValues) => {
+            const outs = links(p).filter((l) => l.switch === 'output').map((l) => l.from);
+            return outs.length > 1 ? [{ outputs: outs, current: o.outputTotal!, label: '制御出力の合計' }] : [];
+          },
+        }
+      : {}),
     ...(o.params ? { params: o.params } : {}),
     ...(o.loadCurrent !== undefined ? { loadCurrent: o.loadCurrent } : {}),
     ...(o.bus ? { bus: o.bus } : {}),

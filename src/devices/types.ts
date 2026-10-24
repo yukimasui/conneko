@@ -290,9 +290,17 @@ export interface InternalLink {
 }
 
 /** コモンあたりの電流の上限（出力ユニットの「8A/コモン」など） */
+/**
+ * 出力の電流の上限（合計）。次のどちらかで、合計する出力を決める。
+ * - common: コモン端子ごと。switch: 'output' の経路のうち to がこの端子のものを合計する
+ * - outputs: 出力点のグループ（出力の端子 ID・ピン ID の一覧）。switch: 'output' の経路のうち from がこの一覧にあるものを合計する
+ *   （「8 点で 400mA」「2 出力合計 100mA」のように、コモンとは別に決まる上限）
+ */
 export interface CommonLimit {
-  /** コモン端子のID。switch: 'output' の経路のうち to がこの端子のものを合計する */
-  common: string;
+  common?: string;
+  outputs?: string[];
+  /** 指摘に書くグループの名前（例: '出力 300〜307'）。省略時はコモン端子の名前、または出力の端子の一覧 */
+  label?: string;
   /** 上限電流[A] */
   current: NumOrParam;
 }

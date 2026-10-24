@@ -77,7 +77,8 @@ export function validateDefinition(def: DeviceDefinition, params: ParamValues = 
     if (!n.includes(e.terminals.length)) problems.push(`schematic.elements の ${e.kind} の端子の数が不正: ${e.terminals.join(', ')}`);
   }
   for (const c of r.commonLimits) {
-    if (!ids.has(c.common)) problems.push(`commonLimits に存在しない端子: ${c.common}`);
+    if (!c.common === !c.outputs) problems.push('commonLimits は common か outputs のどちらか一方を書く');
+    for (const id of [...(c.common ? [c.common] : []), ...(c.outputs ?? [])]) if (!ids.has(id)) problems.push(`commonLimits に存在しない端子: ${id}`);
   }
   for (const g of r.safetyChannels) {
     for (const ch of g.channels) {

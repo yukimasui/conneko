@@ -57,8 +57,9 @@ const def: DeviceDefinition = {
   ${ampBody({ x: BX, y: BY, w: BW, h: BH, model: `FS-N43${p.output === 'P' ? 'P' : 'N'}`, top: '9999', bottom: '9999', left: 'fiber', accent: '#d8262a', series: 'FS-N40' })}
   <text x="${W / 2}" y="9" text-anchor="middle" font-family="sans-serif" font-size="4.6" fill="#333">ファイバアンプ 2出力+外部入力・${outName(p)}</text>`,
   terminals: cable.terminals,
-  // 2 出力の合計で 100mA（1 点あたりの上限として 0.1A を書く）
+  // 1 出力 100mA、2 出力の合計でも 100mA
   links: sensorOutputLinks(['BK', 'WH'], 0.1),
+  commonLimits: [{ outputs: ['BK', 'WH'], current: 0.1, label: '制御出力 1・2 の合計' }],
   params: [OUTPUT_PARAM],
   loadCurrent: 0.034,
   // 子機（FS-N42 / FS-N44）を最大 16 台連結できる

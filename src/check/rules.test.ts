@@ -7,6 +7,8 @@ import type { AcceptSpec, DeviceDefinition, TerminalDef } from '../devices/types
 import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 import source3p from '../devices/catalog/power-source-3p200v';
 import link from '../devices/catalog/generic-link';
+import { getDeviceDefinition } from '../devices/registry';
+import { resolveDevice } from '../devices/resolve';
 import { checkDiagram } from './checkDiagram';
 
 const t = (id: string, role: TerminalDef['role'], extra: Partial<TerminalDef> = {}): TerminalDef => ({ id, x: 0, y: 0, side: 'top', role, ...extra });
@@ -294,6 +296,29 @@ describe('接点・出力の開閉', () => {
     const r = rulesOf(d);
     expect(r.filter((x) => x === 'output-overload')).toHaveLength(2);
     expect(r).toContain('common-overload');
+  });
+
+  it('出力点のグループごとの上限（「2 点で 0.3A」など）を超える負荷を警告する（#2）', () => {
+    const grouped: DeviceDefinition = { ...plcOut, type: 't.out-group', commonLimits: [{ outputs: ['Y0', 'Y1'], current: 0.3, label: '出力 Y0・Y1' }] };
+    const lookup2 = (type: string) => (type === grouped.type ? grouped : lookup(type));
+    const d = (current: number): Diagram => ({
+      devices: [dev('PS', 't.psu'), dev('OUT', 't.out-group'), dev('L1', 't.lamp', { params: { current } }), dev('L2', 't.lamp', { params: { current } })],
+      wires: [w('PS.-V', 'OUT.COM'), w('PS.+V', 'L1.X1'), w('PS.+V', 'L2.X1'), w('L1.X2', 'OUT.Y0'), w('L2.X2', 'OUT.Y1')],
+    });
+    const over = checkDiagram(d(0.6), lookup2).filter((i) => i.rule === 'common-overload');
+    expect(over).toHaveLength(1);
+    expect(over[0].message).toContain('OUT の出力 Y0・Y1');
+    expect(over[0].message).toContain('グループの上限 0.3A');
+    expect(checkDiagram(d(0.1), lookup2).filter((i) => i.rule === 'common-overload')).toEqual([]);
+  });
+
+  it('IAI MSEL の標準 I/O の出力は 8 点ごと、KEYENCE の 2 出力アンプは 2 出力の合計に上限がある', () => {
+    const msel = resolveDevice(getDeviceDefinition('iai.msel')!);
+    expect(msel.commonLimits.map((c) => [c.outputs?.length, c.current])).toEqual([[8, 0.4], [8, 0.4]]);
+    const px = resolveDevice(getDeviceDefinition('keyence.px-10')!);
+    expect(px.commonLimits).toEqual([expect.objectContaining({ current: 0.1, outputs: expect.arrayContaining([expect.any(String)]) })]);
+    expect(px.commonLimits[0].outputs).toHaveLength(2);
+    expect(resolveDevice(getDeviceDefinition('keyence.fs-n43')!).commonLimits[0]).toMatchObject({ outputs: ['BK', 'WH'], current: 0.1 });
   });
 });
 

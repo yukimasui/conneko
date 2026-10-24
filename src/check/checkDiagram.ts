@@ -358,16 +358,20 @@ function checkOutputCurrents(m: Model, push: Push) {
     for (const c of r.commonLimits) {
       const limit = resolveNum(c.current, def, device.params);
       if (limit === undefined) continue;
-      const members = outputs.filter((s) => s.link.to === c.common);
+      // コモンごと、または出力点のグループごとに合計する
+      const members = outputs.filter((s) => (c.outputs ? c.outputs.includes(s.link.from) : s.link.to === c.common));
       const total = members.reduce((sum, s) => sum + loads.get(s)!.current, 0);
       if (total > limit + 1e-9) {
+        const where = c.outputs
+          ? `${device.id} の${c.label ?? `出力 ${c.outputs.join('・')}`}: このグループ`
+          : `${terminalName(m, key(device.id, c.common!))}: このコモン`;
         push({
           severity: 'warning',
           rule: 'common-overload',
-          message: `${terminalName(m, key(device.id, c.common))}: このコモンの出力につないだ負荷の合計 ${amp(total)} がコモンあたりの上限 ${amp(limit)} を超えています`,
+          message: `${where}の出力につないだ負荷の合計 ${amp(total)} が${c.outputs ? 'グループの' : 'コモンあたりの'}上限 ${amp(limit)} を超えています`,
           devices: [device.id, ...new Set(members.flatMap((s) => loads.get(s)!.devices))],
           wires: [],
-          key: `common-overload:${device.id}:${c.common}`,
+          key: `common-overload:${device.id}:${c.common ?? c.outputs!.join(',')}`,
         });
       }
     }

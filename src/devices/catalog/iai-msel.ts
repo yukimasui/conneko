@@ -19,7 +19,7 @@ import {
   stopLoop,
 } from '../iai/parts';
 import { pioLinks, pioPins, selPio40, type Polarity } from '../iai/pio';
-import type { DeviceDefinition, InternalLink, ParamValues, PinDef, TerminalDef } from '../types';
+import type { CommonLimit, DeviceDefinition, InternalLink, ParamValues, PinDef, TerminalDef } from '../types';
 
 /**
  * IAI プログラムコントローラー MSEL（ロボシリンダー RCP6/RCP5/RCP4/RCP3/RCP2 用、パルスモーター最大 4 軸）。
@@ -225,6 +225,15 @@ const links = (p: ParamValues): InternalLink[] => {
   ];
 };
 
+/** 標準 I/O の出力 16 点は、8 点ごと（ポート 300〜307・308〜315）に合計 400mA まで */
+const stdOutputGroups = (): CommonLimit[] => {
+  const outs = selPio40('I/O1', 0, 300).filter((pt) => pt.kind === 'out');
+  return [0, 8].map((k) => {
+    const g = outs.slice(k, k + 8);
+    return { outputs: g.map((pt) => pt.id), current: 0.4, label: `出力ポート ${300 + k}〜${300 + k + g.length - 1}` };
+  });
+};
+
 const def: DeviceDefinition = {
   type: 'iai.msel',
   name: 'プログラムコントローラー（ロボシリンダー 4 軸用）',
@@ -246,6 +255,7 @@ const def: DeviceDefinition = {
   terminals,
   pins,
   links,
+  commonLimits: stdOutputGroups(),
   safetyChannels: [stopLoop('EMG', '非常停止（EMGOUT → EMGIN）', 'EMGIN'), stopLoop('ENB', 'イネーブル（ENBOUT → ENBIN）', 'ENBIN')],
   params: [
     {
