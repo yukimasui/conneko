@@ -172,6 +172,11 @@ export function localRow(y: number, rows: number): number {
   return Math.min(rows - 1, Math.max(0, Math.round((y - ROW_TOP) / ROW_PITCH)));
 }
 
+/** 配置の y（下向き）を、いちばん近い段の y にそろえる（母線のある制御回路のシートで、記号を行番号の段に置く） */
+export function snapToRow(y: number, paperHeight: number): number {
+  return ROW_TOP + localRow(y, rowsPerSheet(paperHeight)) * ROW_PITCH;
+}
+
 export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBuild {
   const model = buildModel(diagram, lookup, () => {});
   const schematic = diagram.schematic ?? { sheets: [] };
@@ -362,7 +367,8 @@ export function buildSchematic(diagram: Diagram, lookup: DefLookup): SchematicBu
         }
       }
     });
-    const top = railYs.length ? Math.max(...railYs) + ROW_PITCH / 2 : H - ROW_TOP + ROW_PITCH / 2;
+    // 上端は 1 段目の上に固定する（いちばん上の記号を下へ動かしても、母線の始まりと線番は動かさない）
+    const top = Math.max(H - ROW_TOP + ROW_PITCH / 2, ...railYs.map((y) => y + ROW_PITCH / 2));
     const bottom = railYs.length ? Math.min(...railYs) - ROW_PITCH / 2 : H - ROW_TOP - 2.5 * ROW_PITCH;
     for (const rail of rails) {
       if (!rail.root) continue;
