@@ -217,3 +217,56 @@ export function buildAn(type: string): DeviceDefinition {
     pneumatic: { symbol: 'silencer', ports: { in: 'IN' } },
   };
 }
+
+/** ワンタッチ管継手形サイレンサ AN□-C□（チューブ外径 → 型式）。型式とチューブ外径の対応は推定 */
+const ONE_TOUCH_SILENCERS: Record<string, string> = { '6': 'AN10-C06', '8': 'AN15-C08', '10': 'AN20-C10', '12': 'AN30-C12' };
+
+/** サイレンサ AN□-C□（ワンタッチ管継手形。ワンタッチ管継手の排気ポートに差し込む） */
+export function buildAnC(type: string): DeviceDefinition {
+  const W = 32;
+  const H = 60;
+  const cx = W / 2;
+  const svg = (p: ParamValues) => {
+    const od = Number(p.tubeOD);
+    const bw = 12 + od / 2;
+    const slits = Array.from({ length: 6 }, (_, i) => `<line x1="${cx - bw / 2 + 2}" y1="${22 + i * 4.5}" x2="${cx + bw / 2 - 2}" y2="${22 + i * 4.5}" stroke="#efefe8" stroke-width="1.6"/>`).join('');
+    return `<defs>${SMC_GRADIENTS}</defs>
+  <!-- 差込み側（チューブと同じ外径の管。排気ポートのワンタッチ管継手に差し込む） -->
+  <rect x="${cx - od / 2}" y="2" width="${od}" height="12" fill="url(#smc-metal-{{uid}})" stroke="#6b7177" stroke-width="0.5"/>
+  <rect x="${cx - bw / 2 - 1}" y="13" width="${bw + 2}" height="5" rx="1" fill="#2b2c2e" stroke="#000" stroke-width="0.5"/>
+  <rect x="${cx - bw / 2}" y="18" width="${bw}" height="30" rx="3" fill="#1f2022" stroke="#000" stroke-width="0.6"/>
+  ${slits}
+  ${text(cx, H - 3, `φ${od}`, 5, '#333')}`;
+  };
+  return {
+    type,
+    name: 'サイレンサ（ワンタッチ管継手形）',
+    model: 'AN15-C08',
+    modelOf: (p) => ONE_TOUCH_SILENCERS[String(p.tubeOD)] ?? 'AN15-C08',
+    maker: 'SMC',
+    category: 'air-fitting',
+    description:
+      'SMC の樹脂形サイレンサ AN シリーズのワンタッチ管継手形（AN□-C□）。差込み側の管を、マニホールドの排気 EXH などのワンタッチ管継手に差し込んで排気音を下げる。' +
+      '図では排気ポートと、ポートと同じ外径のチューブでつなぐ。',
+    labelPrefix: 'SL',
+    width: W,
+    height: H,
+    svg,
+    terminals: (p) => [
+      {
+        id: 'IN',
+        label: `φ${p.tubeOD}`,
+        hint: '排気の入口',
+        note: `排気ポートのワンタッチ管継手に差し込む側（φ${p.tubeOD}）`,
+        x: cx,
+        y: 2,
+        side: 'top',
+        role: 'air',
+        air: { kind: 'exhaust', tubeOD: { param: 'tubeOD' } },
+      },
+    ],
+    params: [tubeOdParam('tubeOD', '差込み側の外径', [6, 8, 10, 12], 8)],
+    pneumatic: { symbol: 'silencer', ports: { in: 'IN' } },
+    estimated: '型式（AN10-C06・AN15-C08・AN20-C10・AN30-C12）とチューブ外径の対応は推定',
+  };
+}

@@ -69,6 +69,10 @@ describe('部品表・線番表・I/O 表', () => {
       ['TU0604BU-20', 1],
     ]);
     expect(rows.find((r) => r.model === 'TU0604BU-20')?.spec).toContain('図面上 2 本');
+    // 図面の設定で 100m 巻にできる
+    const roll = bomRows({ ...d, settings: { tubeRoll: 100 as const } }, lookup).find((r) => r.model.startsWith('TU0604BU'))!;
+    expect(roll.model).toBe('TU0604BU-100');
+    expect(roll.spec).toContain('100m 巻');
     // SY の P（M5）に φ6 の継手が 3 個。サイレンサ（直結）の EA には付けない
     expect(rows.find((r) => r.model.startsWith('KQ2H'))).toMatchObject({ model: 'KQ2H06-M5A', qty: 3 });
     const wires = wireRows(d, lookup).rows;

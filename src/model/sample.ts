@@ -83,6 +83,8 @@ const base: Diagram = {
     { id: 'SL3', type: 'smc.an', x: 406, y: 900, params: { thread: '01' }, sheet: 'S5' },
     // 通信タイプのマニホールド（SI ユニット EX260 の EtherNet/IP。ソレノイドは SI ユニットの出力番号で動かす）
     { id: 'J1', type: 'smc.kq2t', x: 560, y: 800, params: { tubeOD: 8 }, sheet: 'S5' },
+    { id: 'SL4', type: 'smc.an-c', x: 1330, y: 990, params: { tubeOD: 8 }, sheet: 'S5' },
+    { id: 'SL5', type: 'smc.an-c', x: 1440, y: 990, params: { tubeOD: 8 }, sheet: 'S5' },
     { id: 'MF2', type: 'smc.ss5y3-10s', x: 1330, y: 760, params: { protocol: 'E', points: 'B' }, sheet: 'S5', note: 'ストッパ用（EtherNet/IP）' },
     { id: 'SOL4', type: 'smc.sy3200-5u1', x: 0, y: 0, mount: { device: 'MF2', slot: 1 }, sheet: 'S5', note: 'ストッパ 上昇 / 下降' },
     { id: 'CY3', type: 'smc.cq2', x: 1580, y: 1080, sheet: 'S5', note: 'ストッパ' },
@@ -147,6 +149,8 @@ const base: Diagram = {
     t('VHS1:OUT', 'J1:A', 8),
     t('J1:B', 'MF1:P', 8),
     t('J1:C', 'MF2:P', 8),
+    t('SL4:IN', 'MF2:EA', 8),
+    t('SL5:IN', 'MF2:EB', 8),
     t('SOL4:A', 'CY3:HEAD', 6),
     t('SOL4:B', 'CY3:ROD', 6),
     t('SOL1:A', 'SC1:IN', 6),

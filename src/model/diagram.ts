@@ -95,6 +95,8 @@ export interface DiagramSettings {
   title?: string;
   author?: string;
   revision?: string;
+  /** 部品表のチューブの巻の長さ[m]（SMC の TU は 20m 巻と 100m 巻）。省略時は 20 */
+  tubeRoll?: 20 | 100;
 }
 
 export interface Diagram {
@@ -272,6 +274,7 @@ export function parseDiagram(input: string | unknown): Diagram {
       const v = raw.settings[k];
       if (typeof v === 'string' && v.trim()) settings[k] = v;
     }
+    if (raw.settings.tubeRoll === 20 || raw.settings.tubeRoll === 100) settings.tubeRoll = raw.settings.tubeRoll;
   }
   // シートは { "id", "name" } の配列。name だけ・文字列だけでも受け付ける
   const sheets: Sheet[] = [];

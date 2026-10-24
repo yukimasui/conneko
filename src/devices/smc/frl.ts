@@ -136,7 +136,14 @@ function moduleSvg(u: FrlUnit, x: number, p: ParamValues, size: string) {
   <rect x="${x}" y="${BODY_Y}" width="${MW}" height="${BODY_H}" rx="2.5" fill="url(#smc-white-{{uid}})" stroke="#8a9096" stroke-width="0.8"/>
   ${flowArrow(x + 6, x + MW - 6, BODY_Y + 5)}`;
   if (isReg(u)) {
-    s += p.gauge === 'E' ? squareGauge(cx, BODY_Y + 26, 28, set) : roundGauge(cx, BODY_Y + 25, 14, set);
+    // 圧力計なし（型式の記号なし）は、圧力計のポートをプラグでふさいだ姿
+    s +=
+      p.gauge === 'E'
+        ? squareGauge(cx, BODY_Y + 26, 28, set)
+        : p.gauge === ''
+          ? `<circle cx="${cx}" cy="${BODY_Y + 25}" r="5" fill="url(#smc-metal-{{uid}})" stroke="#6b7177" stroke-width="0.6"/>` +
+            `<rect x="${cx - 2.6}" y="${BODY_Y + 22.4}" width="5.2" height="5.2" fill="none" stroke="#4d5358" stroke-width="0.7"/>`
+          : roundGauge(cx, BODY_Y + 25, 14, set);
     s += text(cx, BODY_Y + BODY_H - 3, `${u}${size}`, 4.6, '#333');
   } else {
     s += text(cx, BODY_Y + 20, `${u}${size}`, 6.4, '#333');
@@ -242,6 +249,7 @@ export function buildFrl(spec: FrlSpec): DeviceDefinition {
       options: [
         { value: 'G', label: 'G（丸形・リミット表示付き）' },
         { value: 'E', label: 'E（角形埋込形・リミット表示付き）' },
+        { value: '', label: 'なし（プラグ。圧力は別の圧力計で見る）' },
       ],
       default: 'G',
     });
@@ -258,10 +266,13 @@ export function buildFrl(spec: FrlSpec): DeviceDefinition {
     });
   }
 
-  const pneumatic: PneumaticHint =
-    n > 1
-      ? { symbol: 'frl', ports: { in: 'IN', out: 'OUT' }, units: spec.units.map((u) => PNEUMATIC_UNIT[u]), gauge: reg }
-      : { symbol: PNEUMATIC_UNIT[spec.units[0]], ports: { in: 'IN', out: 'OUT' }, ...(reg ? { gauge: true } : {}) };
+  // 圧力計なし（gauge: ''）は空圧回路図の圧力計の記号も描かない
+  const pneumatic = (p: ParamValues): PneumaticHint => {
+    const gauge = reg && p.gauge !== '';
+    return n > 1
+      ? { symbol: 'frl', ports: { in: 'IN', out: 'OUT' }, units: spec.units.map((u) => PNEUMATIC_UNIT[u]), gauge }
+      : { symbol: PNEUMATIC_UNIT[spec.units[0]], ports: { in: 'IN', out: 'OUT' }, ...(gauge ? { gauge: true } : {}) };
+  };
 
   return {
     type: spec.type,
