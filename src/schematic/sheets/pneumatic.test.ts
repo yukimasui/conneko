@@ -258,3 +258,41 @@ describe('空圧回路図の記号をドラッグで動かす', () => {
     ]);
   });
 });
+
+describe('空圧回路図の文字の重なり（#34）', () => {
+  /** サンプル図面の空圧回路図のページ */
+  const samplePage = (paper?: 'A1') => {
+    const sheets = sampleDiagram.schematic!.sheets.map((s) => (s.kind === 'pneumatic' && paper ? { ...s, paper } : s));
+    const b = buildSchematic({ ...sampleDiagram, schematic: { ...sampleDiagram.schematic!, sheets } }, getDeviceDefinition);
+    const id = sheets.find((s) => s.kind === 'pneumatic')!.id;
+    return b.doc.sheets.find((s) => (s.source ?? s.id) === id)!;
+  };
+
+  it('マニホールドの破線の枠は、ソレノイドの名前と弁の型式を囲む', () => {
+    const page = samplePage();
+    const frame = page.polylines.find((p) => p.dashed && p.closed && page.texts.some((t) => t.text.startsWith('SOL1') && inside(t.at, p.points)))!;
+    expect(frame).toBeTruthy();
+    for (const t of page.texts.filter((x) => /^SOL|^SY\d/.test(x.text))) expect(inside(t.at, frame.points), t.text).toBe(true);
+  });
+
+  it('図面枠に区分け（列番号・行記号）を付ける', () => {
+    const page = samplePage();
+    const frameTexts = page.texts.filter((t) => t.layer === 'FRAME').map((t) => t.text);
+    expect(frameTexts).toEqual(expect.arrayContaining(['1', '2', '3', 'A', 'B', 'C']));
+  });
+
+  it('大きい用紙では、記号の並びを用紙の中央に寄せる', () => {
+    const a3 = samplePage();
+    const a1 = samplePage('A1');
+    const xOf = (p: typeof a3) => p.texts.find((t) => t.text === 'AIR1')!.at[0];
+    expect(xOf(a3)).toBeLessThan(60);
+    expect(xOf(a1)).toBeGreaterThan(150);
+  });
+});
+
+/** 点が多角形（軸に平行な四角）の内側にあるか */
+function inside([x, y]: [number, number], pts: [number, number][]): boolean {
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return x > Math.min(...xs) && x < Math.max(...xs) && y > Math.min(...ys) && y < Math.max(...ys);
+}

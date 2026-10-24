@@ -7,7 +7,8 @@ import { getWireColor } from '../data/wires';
 import { instantiateSvg } from '../devices/registry';
 import { linkShape } from '../devices/link';
 import { deviceModel, deviceSize, type DeviceDefinition, type ParamValues } from '../devices/types';
-import { cableStyle } from '../devices/resolve';
+import { cableStyle, resolveDevice } from '../devices/resolve';
+import { labelBelow } from '../editor/DeviceNode';
 import { linkSidesOf, wireLayout, wirePoints } from '../editor/geometry';
 import { DIR, toRoundedPath, type Point } from '../editor/routing';
 import { DIRECT_STROKES, tubeStrokes } from '../editor/tubeStyle';
@@ -71,8 +72,11 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
     // 縦のリンクは、相手のシートを矢印の先（上か下）に縦書きで書く
     const shape = def.netLabel ? linkShape(paramsOf(x.id)) : undefined;
     const vlink = shape?.vertical;
-    grow(x.x, x.y - (vlink ? (shape.side === 'bottom' ? 80 : 4) : def.netLabel ? 4 : LABEL_SPACE + (notes && x.note ? 18 : 0)));
-    grow(x.x + (vlink ? size.width : Math.max(size.width, 120)), x.y + size.height + (vlink ? (shape.side === 'top' ? 80 : 4) : def.netLabel ? 16 : 4));
+    // 端子が上にしかない機器は、機器名・コメントを下に書く
+    const below = !def.netLabel && labelBelow(resolveDevice(def, paramsOf(x.id)).terminals);
+    const labelSpace = LABEL_SPACE + (notes && x.note ? 18 : 0);
+    grow(x.x, x.y - (vlink ? (shape.side === 'bottom' ? 80 : 4) : def.netLabel || below ? 4 : labelSpace));
+    grow(x.x + (vlink ? size.width : Math.max(size.width, 120)), x.y + size.height + (vlink ? (shape.side === 'top' ? 80 : 4) : def.netLabel ? 16 : below ? labelSpace : 4));
   }
   const paths = wires.flatMap((w) => {
     const geo = geometry.get(w.id);
@@ -134,13 +138,16 @@ export function renderSheetSvg(d: Diagram, sheetId: string, lookup: DefLookup, o
       out.push(`<text x="${px}" y="${py - 6}" font-family="sans-serif" font-size="9" font-weight="bold" fill="#111827">${esc(x.id)}</text>`);
       continue;
     }
+    // 端子が上にしかない機器は、画面と同じく機器名を下に書く
+    const below = labelBelow(resolveDevice(def, paramsOf(x.id)).terminals);
     out.push(
-      `<text x="${px}" y="${py - (bus.groups.has(x.id) ? 22 : 8)}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
+      `<text x="${px}" y="${below ? py + height + 14 : py - (bus.groups.has(x.id) ? 22 : 8)}" font-family="sans-serif" font-size="12" font-weight="bold" fill="#111827">${esc(x.id)}<tspan font-size="9" font-weight="normal" fill="#6b7280" dx="6">${esc(deviceModel(def, paramsOf(x.id)))}</tspan></text>`,
     );
     if (notes && x.note) {
       const w = Math.min(240, 14 + x.note.length * 10);
-      out.push(`<rect x="${px}" y="${py - 42}" width="${w}" height="16" rx="8" fill="#fff8db" stroke="#f1d27a"/>`);
-      out.push(`<text x="${px + 8}" y="${py - 30.5}" font-family="sans-serif" font-size="10" font-weight="bold" fill="#713f12">${esc(x.note)}</text>`);
+      const ny = below ? py + height + 20 : py - 42;
+      out.push(`<rect x="${px}" y="${ny}" width="${w}" height="16" rx="8" fill="#fff8db" stroke="#f1d27a"/>`);
+      out.push(`<text x="${px + 8}" y="${ny + 11.5}" font-family="sans-serif" font-size="10" font-weight="bold" fill="#713f12">${esc(x.note)}</text>`);
     }
   }
 

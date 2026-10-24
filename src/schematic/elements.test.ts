@@ -26,7 +26,7 @@ describe('全機器の切り出し', () => {
       expect(ids.length - new Set(ids).size, where).toBe(0);
       // コネクタ・エアのポート以外の端子・ピンはどれかの要素に入る（リンクは要素を持たない）
       if (def.category !== 'link') {
-        const all = [...r.terminals.filter((t) => t.role !== 'connector' && t.role !== 'air'), ...r.pins].map((t) => t.id);
+        const all = [...r.terminals.filter((t) => t.role !== 'connector' && t.role !== 'air'), ...r.pins.filter((p) => p.role !== 'air')].map((t) => t.id);
         expect(all.filter((id) => !ids.includes(id)), where).toEqual([]);
       }
       for (const e of els) {
@@ -136,5 +136,18 @@ describe('PLC の入出力点のラベル', () => {
     ['Y0', 'Y0', 'Y0', 'Y0'],
   ])('%s', (label, id, addr, pin) => {
     expect(splitIoLabel(label, id)).toEqual({ addr, pin });
+  });
+});
+
+describe('エアのポート', () => {
+  it('画面に出さないエアのポート（装着形の電磁弁の P・EA・EB など）は、展開図の要素にしない（#34）', () => {
+    const bad: string[] = [];
+    for (const def of deviceDefinitions) {
+      const r = resolveDevice(def);
+      const air = new Set([...r.terminals, ...r.pins].filter((t) => t.role === 'air').map((t) => t.id));
+      if (!air.size) continue;
+      for (const e of deviceElements(def)) for (const id of Object.keys(e.pinOf)) if (air.has(id)) bad.push(`${def.type}:${id}`);
+    }
+    expect(bad).toEqual([]);
   });
 });

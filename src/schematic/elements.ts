@@ -268,7 +268,8 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
   if (rest.length > 0) add(makeBox(def, 'main', def.model, rest));
   const restPins = new Map<string, PinDef[]>();
   for (const p of r.pins) {
-    if (!free(p.id)) continue;
+    // 画面に出さないエアのポート（装着形の電磁弁の P・EA・EB など）は電気の要素にしない（空圧回路図で描く）
+    if (!free(p.id) || p.role === 'air') continue;
     const cn = p.id.slice(0, p.id.indexOf('#'));
     restPins.set(cn, [...(restPins.get(cn) ?? []), p]);
   }

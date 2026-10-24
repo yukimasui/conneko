@@ -97,6 +97,9 @@ function operator(pen: Pen, op: ValveOperator, x: number, cy: number, dir: -1 | 
 
 const BOX_W = 15;
 const BOX_H = 12;
+/** ソレノイドの名前の行（弁の箱の上端からの高さ。ポート番号の上） */
+const SOL_ROW_A = 4.4;
+const SOL_ROW_B = 7.2;
 
 /** 弁の箱の中の流れ（箱の左上 x, y）。flows は [始点ポート, 終点ポート] の組、blocked は塞がったポート */
 function valveBox(pen: Pen, x: number, y: number, ports: Record<string, XY>, flows: [string, string][], blocked: string[]) {
@@ -149,9 +152,10 @@ function drawValve(pen: Pen, hint: PneumaticHint, cx: number, y: number, solLabe
   const cy = y + BOX_H / 2;
   const left = operator(pen, v.operators.a, x0, cy, -1);
   const right = operator(pen, v.operators.b, x0 + total, cy, 1);
-  // ソレノイドの名前は操作部の真上に（隣の弁の名前とくっつかないよう、箱の外へは出さない）
-  if (solLabel.a) pen.text(x0 - 2.5, y - 2.5, solLabel.a, { align: 'center', layer: 'TAG', height: 2.2 });
-  if (solLabel.b) pen.text(x0 + total + 2.5, y - 2.5, solLabel.b, { align: 'center', layer: 'TAG', height: 2.2 });
+  // ソレノイドの名前は操作部の上に、外側へ向けて書く（a は左の箱の左端まで、b は右の箱の右端から）。
+  // 作業ポート（4・2）の配管とポート番号に重ならず、隣の弁の名前とくっつかないよう、b は a より 1 段上に書く
+  if (solLabel.a) pen.text(x0, y - SOL_ROW_A, solLabel.a, { align: 'right', layer: 'TAG', height: 2.2 });
+  if (solLabel.b) pen.text(x0 + total, y - SOL_ROW_B, solLabel.b, { align: 'left', layer: 'TAG', height: 2.2 });
   // 外部の配管をつなぐ箱
   const bx = x0 + (n === 3 ? BOX_W : BOX_W);
   const pins: Record<string, XY> = {};
@@ -573,14 +577,17 @@ export function pneumaticLayout(
 
   const pressure = airPressures(model);
   const W = paper.width;
-  const top = 32;
+  // 大きい用紙（A2〜A0）では、記号の並びを用紙の中央に寄せる（A3 以下は左上から）
+  const large = paper.width > 420;
+  const contentH = 190;
+  const top = large ? Math.max(32, Math.round((paper.height - contentH) / 2)) : 32;
   const yAct = top + 8;
   const yInline = top + 42;
   const yValve = top + 84;
   const yMain = top + 130;
   const ySupply = top + 162;
-  const left = 30;
-  const colW = Math.max(52, Math.min(80, (W - left - 30) / Math.max(1, columns.length)));
+  const colW = Math.max(52, Math.min(80, (W - 60) / Math.max(1, columns.length)));
+  const left = large ? Math.max(30, Math.round((W - colW * columns.length) / 2)) : 30;
 
   pen.text(left, top - 10, '空圧回路図（JIS B 0125-1 の記号。概念図のエア機器とチューブから自動で作成）', { height: 3 });
 
@@ -759,17 +766,21 @@ export function pneumaticLayout(
   for (const host of new Set([...valveSketches.values()].map((v) => v.host).filter((h): h is string => !!h))) {
     const mounted = [...valveSketches].filter(([, v]) => v.host === host);
     const boxes = mounted.map(([, v]) => v.sketch.drawn.box);
+    // 枠は、弁の記号・ソレノイドの名前・型式・排気の記号まで囲む（文字が破線にかからないように）
+    const inks = mounted.map(([, v]) => sketchBounds(v.sketch));
     const frame = sketch((pen): Drawn => {
-      const x0 = Math.min(...boxes.map((b) => b.x)) - 3;
-      const x1 = Math.max(...boxes.map((b) => b.x + b.w)) + 3;
-      pen.rect(x0, yValve - 4, x1 - x0, BOX_H + 18, { dashed: true });
+      const x0 = Math.min(...boxes.map((b) => b.x - 3), ...inks.map((b) => b.x - 2.5));
+      const x1 = Math.max(...boxes.map((b) => b.x + b.w + 3), ...inks.map((b) => b.x + b.w + 2.5));
+      const top = Math.min(yValve - 4, ...inks.map((b) => b.y - 1.5));
+      const bottom = Math.max(yValve + BOX_H + 14, ...inks.map((b) => b.y + b.h + 1.5));
+      pen.rect(x0, top, x1 - x0, bottom - top, { dashed: true });
       const e = entries.get(host)!;
       // 連数はブランクプレートも数える（型式の連数と合わせる）。主管へ下ろす線に重ならないよう、枠の右下の外に書く
       const stations = [...model.devices.values()].filter((x) => x.device.mount?.device === host).length;
       const blanks = stations - boxes.length;
-      pen.text(x1 + 2, yValve + BOX_H + 10, e.id, { height: 2.4, layer: 'TAG' });
-      pen.text(x1 + 2, yValve + BOX_H + 13.5, `${e.model}（${stations} 連${blanks > 0 ? `、ブランク ${blanks}` : ''}）`, { height: 1.9 });
-      return { pins: {}, box: { x: x0, y: yValve - 4, w: x1 - x0, h: BOX_H + 18 } };
+      pen.text(x1 + 2, bottom - 4, e.id, { height: 2.4, layer: 'TAG' });
+      pen.text(x1 + 2, bottom - 0.5, `${e.model}（${stations} 連${blanks > 0 ? `、ブランク ${blanks}` : ''}）`, { height: 1.9 });
+      return { pins: {}, box: { x: x0, y: top, w: x1 - x0, h: bottom - top } };
     });
     const d = offsetOf(host, frame.drawn.box);
     for (const [id, v] of mounted) {
@@ -808,15 +819,17 @@ export function pneumaticLayout(
     const exhSilencer = !!exh && neighbors(key(e.id, exh)).some((n) => entries.get(owner(n))?.hint.symbol === 'silencer');
     // エア源は型式の代わりに「エア源」と書く（工場エアなどの説明は長いため）
     const sub = e.hint.symbol === 'source' ? 'エア源' : e.model;
+    const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([sy]) => sy === 'out')?.[1] ?? ''));
+    const pressureText =
+      p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator') ? `${p}MPa` : undefined;
     const s = sketch((pen) => {
       const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer });
-      pen.text(d.box.x, ySupply + 12, e.id, { layer: 'TAG', height: 2.4 });
-      pen.text(d.box.x, ySupply + 15.5, sub, { height: 1.8 });
-      const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([sy]) => sy === 'out')?.[1] ?? ''));
-      if (p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator')) {
-        // 3 点セットを囲む破線に重ならないよう、出口の少し右に書く
-        pen.text((d.pins.out?.[0] ?? x + d.width) + 3, ySupply - 3, `${p}MPa`, { height: 2, layer: 'TAG' });
-      }
+      // 名前と型式は記号の下に（残圧排気弁の一次側の配管のように、記号の下を回る配管にかからないよう外形の下から）
+      const ty = Math.max(ySupply + 12, d.box.y + d.box.h + 3);
+      pen.text(d.box.x, ty, e.id, { layer: 'TAG', height: 2.4 });
+      pen.text(d.box.x, ty + 3.5, sub, { height: 1.8 });
+      // 3 点セットを囲む破線に重ならないよう、出口の少し右・配管の上に書く（次の記号はこの文字の右から置く）
+      if (pressureText) pen.text((d.pins.out?.[0] ?? x + d.width) + 2, ySupply - 2.5, pressureText, { height: 2, layer: 'TAG' });
       return d;
     });
     const off = offsetOf(e.id, s.drawn.box);
@@ -826,7 +839,11 @@ export function pneumaticLayout(
     if (last) supplyPipes.push([{ pos: last, dir: RIGHT }, { pos: d.pins.in ?? [d.box.x, d.box.y + d.box.h / 2], dir: LEFT }]);
     last = shiftXY(outAuto, off);
     // 次の記号の自動の位置は、この機器の（自動の位置の）名前・型式の文字に重ならない位置から
-    x = Math.max(outAuto[0] + 8, s.drawn.box.x + Math.max(textWidth(sub, 1.8), textWidth(e.id, 2.4)) + 5);
+    x = Math.max(
+      outAuto[0] + 8,
+      s.drawn.box.x + Math.max(textWidth(sub, 1.8), textWidth(e.id, 2.4)) + 5,
+      pressureText ? outAuto[0] + 2 + textWidth(pressureText, 2) + 4 : 0,
+    );
   }
 
   // --- 配管（記号の位置が決まってから、直角の折れ線で引く） ---
@@ -865,13 +882,21 @@ export function pneumaticLayout(
   // エア源から 3 点セットへ（流れの順）
   supplyPipes.forEach(([a, b], k) => pipe(pipeRoute(a, b, `supply${k}`, bounds, segments), `supply${k}`));
   // 弁の作業ポートから途中の機器を通ってアクチュエータまで（弁の側から引く）
+  // つなぎ先のない作業ポートは短く線を出し、弁ごとに 1 つ「未接続」と書く（4・2 の両方なら間に 1 つ）
+  const open = new Map<string, XY[]>();
   for (const ln of workLines) {
     const from = valveAt.get(ln.valve)?.pins[ln.valvePort];
-    if (!from) continue;
-    if (ln.unconnected) {
-      pen.text(from[0], from[1] - 4, '未接続', { align: 'center', height: 2 });
-      continue;
-    }
+    if (from && ln.unconnected) open.set(ln.valve, [...(open.get(ln.valve) ?? []), from]);
+  }
+  for (const pts of open.values()) {
+    for (const p of pts) pen.line([p, [p[0], p[1] - 3]], { layer: 'WIRE' });
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const top = Math.min(...pts.map((p) => p[1]));
+    pen.text(cx, top - 4.5, '未接続', { align: 'center', height: 2 });
+  }
+  for (const ln of workLines) {
+    const from = valveAt.get(ln.valve)?.pins[ln.valvePort];
+    if (!from || ln.unconnected) continue;
     const ends = [...ln.ends, { pos: from, dir: UP }];
     // 弁のポートからは少し長めに出して曲げる（マニホールドの破線の枠やポート番号から離す）
     for (let k = ends.length - 2; k >= 0; k -= 2) pipe(pipeRoute(ends[k + 1], ends[k], ln.net, bounds, segments, k === ends.length - 2 ? VALVE_STUBS : STUBS), ln.net);
