@@ -1,36 +1,47 @@
-Conneko ライセンス（Conneko License） 第 1.0 版
+Conneko ライセンス（Conneko License） 第 1.1 版
 
 Copyright (c) 2026 yukimasui
 
 このライセンスは、Conneko（ソースコード、ビルドした HTML ファイル、機器の定義データ、ドキュメントを含む。以下「本ソフトウェア」）の
 利用条件を定めるものです。日本語の本文を正とし、末尾の英語の訳は参考です。
 
-本ソフトウェアのソースコードは公開していますが、企業等による業務での利用に作成者の許諾を必要とするため、
+本ソフトウェアのソースコードは公開していますが、企業等による利用（試用・評価を含みます）に作成者の許諾を必要とするため、
 Open Source Initiative の定義する「オープンソース」ライセンスではありません。
 
 第 1 条（定義）
 1. 「作成者」とは、上記の著作権者をいいます。
-2. 「企業等」とは、営利を目的とする法人その他の団体（個人事業者を含む）をいいます。
-3. 「業務利用」とは、企業等またはその役員・従業員・委託先が、その事業のために本ソフトウェアを利用することのうち、
-   次のいずれかにあたるものをいいます。
-   (1) 実際の設備・装置・制御盤などの配線の設計、作図、確認、製作、保守、改造に用いること
-   (2) 本ソフトウェアで作成した図面やデータを、業務の成果物として社内外に提供すること
-   (3) 本ソフトウェアを自社の製品・サービスに組み込み、または本ソフトウェアを用いたサービスを提供すること
-4. 「評価利用」とは、企業等が、本ソフトウェアの導入を検討するために、業務利用にあたらない範囲で試しに使うことをいいます。
+2. 「企業等」とは、営利を目的とする法人その他の団体（個人事業者、グループ会社、官公庁の事業部門を含む）をいいます。
+3. 「企業等による利用」とは、企業等またはその役員・従業員・派遣社員・委託先が、その企業等の事業・業務のために、
+   または企業等の設備・端末・ネットワークで、本ソフトウェアを入手し、使用し、複製し、または他人に提供することをいい、
+   次のものを含みます。
+   (1) 試用、評価、導入の検討、社内での紹介・説明・実演
+   (2) 実際の設備・装置・制御盤などの配線の設計、作図、確認、製作、保守、改造
+   (3) 本ソフトウェアで作成した図面やデータを、業務の成果物として社内外に提供すること
+   (4) 本ソフトウェアを自社の製品・サービスに組み込み、または本ソフトウェアを用いたサービスを提供すること
+4. 企業等の役員・従業員などが、個人の端末で、または勤務時間外に使用する場合でも、その企業等の業務のためであれば、
+   企業等による利用とみなします。
 
 第 2 条（無償で認める利用）
 次の利用は、このライセンスの条件を守る限り、無償で、作成者への連絡なしに行うことができます。
+ただし、企業等による利用にあたるものは除きます。
 1. 個人による利用（趣味、学習、研究を含む）
 2. 教育機関、研究機関、非営利団体による利用
-3. 企業等による評価利用
 
-第 3 条（企業等の業務利用）
-企業等が本ソフトウェアを業務利用する場合は、事前に作成者に連絡し、作成者の許諾（書面または電子メール）を得なければなりません。
-許諾の条件（有償か無償か、期間、範囲など）は、作成者が個別に定めます。
+第 3 条（企業等による利用）
+1. 企業等は、試用・評価を目的とする場合を含め、本ソフトウェアを利用する前に作成者に連絡し、
+   作成者の許諾（書面または電子メール）を得なければなりません。
+2. 許諾の条件（有償か無償か、期間、利用できる部署・人数・用途、再配布の可否など）は、作成者が個別に定めます。
+   作成者は、許諾を与えないこと、許諾の範囲を限ること、または条件を付けることができます。
+3. 許諾を得た企業等も、作成者の書面または電子メールによる同意なく、本ソフトウェアを許諾の範囲を超えて利用し、
+   または第三者（取引先、顧客、グループ会社、委託先を含む）に提供・再配布してはなりません。
+4. 許諾は、作成者がサポート、保守、改修、問い合わせへの対応、または本ソフトウェアの結果についての責任を引き受けることを
+   意味しません。これらは、作成者と企業等が別に書面で合意した場合に限ります。
+5. 個人などから再配布を受けた企業等も、この条に従います。
 連絡先: https://github.com/yukimasui （GitHub の Issues またはプロフィールに記載の連絡方法）
 
 第 4 条（複製・改変・再配布）
-1. 第 2 条または第 3 条により利用できる者は、本ソフトウェアを複製し、改変し、再配布することができます。
+1. 第 2 条により利用できる者は、本ソフトウェアを複製し、改変し、再配布することができます。
+   企業等は、第 3 条の許諾で認められた範囲に限り、これらを行うことができます。
 2. 再配布する場合は、このライセンスの全文と上記の著作権表示を含めなければなりません。改変したものを再配布する場合は、
    改変したことと、その内容がわかるようにしなければなりません。
 3. 本ソフトウェアおよびその改変物は、このライセンスと同じ条件でのみ再配布できます。
@@ -55,34 +66,47 @@ Open Source Initiative の定義する「オープンソース」ライセンス
 第 8 条（ライセンスの終了）
 このライセンスの条件に違反した場合、本ソフトウェアを利用する権利は自動的に終了します。
 
-第 9 条（準拠法）
+第 9 条（版の変更）
+作成者は、このライセンスを新しい版に改めることができます。本ソフトウェアの各版には、その版に含まれるライセンスが適用されます。
+
+第 10 条（準拠法）
 このライセンスは日本法に準拠します。
 
 ----------------------------------------------------------------------
 
-Conneko License, Version 1.0 (English translation for reference; the Japanese text above prevails)
+Conneko License, Version 1.1 (English translation for reference; the Japanese text above prevails)
 
 Copyright (c) 2026 yukimasui
 
 The source code of Conneko (including the source code, the built HTML file, the device definition data and the documentation;
 the "Software") is publicly available, but this is NOT an open source license as defined by the Open Source Initiative,
-because business use by companies requires the author's permission.
+because any use by companies, including trial and evaluation, requires the author's permission.
 
-1. Definitions. "Company" means a for-profit corporation or other organization (including sole proprietors). "Business Use" means
-   use by a Company, or its officers, employees or contractors, for its business, that (1) designs, draws, checks, builds,
-   maintains or modifies the wiring of real equipment, machines or control panels; (2) delivers drawings or data made with the
-   Software as work products inside or outside the Company; or (3) embeds the Software in a product or service, or provides a
-   service using the Software. "Evaluation" means trial use by a Company to consider adopting the Software, excluding Business Use.
-2. Free uses. The following uses are permitted free of charge without contacting the author, subject to this license:
-   (1) use by individuals (including hobby, learning and research); (2) use by educational institutions, research institutions
-   and non-profit organizations; (3) Evaluation by Companies.
-3. Business Use. A Company must contact the author and obtain the author's permission (in writing or by e-mail) before any
-   Business Use. The author determines the terms of permission (paid or free, period, scope, etc.) case by case.
+1. Definitions. "Company" means a for-profit corporation or other organization (including sole proprietors, group companies and
+   business units of public bodies). "Company Use" means obtaining, using, copying or providing the Software to others by a
+   Company, or its officers, employees, temporary staff or contractors, for the Company's business or on the Company's
+   equipment, devices or networks, including (1) trial, evaluation, consideration of adoption, and internal introduction or
+   demonstration; (2) designing, drawing, checking, building, maintaining or modifying the wiring of real equipment, machines
+   or control panels; (3) delivering drawings or data made with the Software as work products inside or outside the Company;
+   and (4) embedding the Software in a product or service, or providing a service using the Software. Use by officers or
+   employees on personal devices or outside working hours is Company Use if it is for the Company's business.
+2. Free uses. The following uses are permitted free of charge without contacting the author, subject to this license,
+   excluding any Company Use: (1) use by individuals (including hobby, learning and research); (2) use by educational
+   institutions, research institutions and non-profit organizations.
+3. Company Use. (1) A Company must contact the author and obtain the author's permission (in writing or by e-mail) before any
+   Company Use, including trial and evaluation. (2) The author determines the terms of permission (paid or free, period,
+   departments, number of users, purposes, redistribution, etc.) case by case, and may refuse, limit or condition permission.
+   (3) A permitted Company must not use the Software beyond the permission, nor provide or redistribute it to any third party
+   (including business partners, customers, group companies and contractors), without the author's written or e-mail consent.
+   (4) Permission does not mean that the author undertakes support, maintenance, modification, inquiries or responsibility for
+   the results of the Software, unless separately agreed in writing. (5) A Company that receives the Software from an
+   individual or anyone else is also subject to this section.
    Contact: https://github.com/yukimasui (GitHub Issues or the contact on the profile).
-4. Copying, modification and redistribution. Anyone permitted to use the Software under section 2 or 3 may copy, modify and
-   redistribute it, provided that redistributions include this license and the copyright notice, modified versions state that
-   and how they were modified, and redistributions are made only under this same license. Third-party software included in the
-   Software is subject to its own license (listed in "About Conneko" in the application).
+4. Copying, modification and redistribution. Anyone permitted to use the Software under section 2 may copy, modify and
+   redistribute it; a Company may do so only within the scope of its permission under section 3. Redistributions must include
+   this license and the copyright notice, modified versions must state that and how they were modified, and redistributions
+   are made only under this same license. Third-party software included in the Software is subject to its own license (listed
+   in "About Conneko" in the application).
 5. Your drawings. Rights in drawings and data created by users with the Software belong to the users.
 6. No warranty; limitation of liability. The Software is provided "AS IS", without warranty of any kind. Check results, device
    data (which include estimated values) and drawings are for reference only and do not guarantee compliance with laws and
@@ -92,4 +116,5 @@ because business use by companies requires the author's permission.
 7. Trademarks. Company and product names in the Software are trademarks or registered trademarks of their respective owners.
    The Software is not affiliated with, endorsed or warranted by any manufacturer.
 8. Termination. Any violation of this license automatically terminates your rights to use the Software.
-9. Governing law. This license is governed by the laws of Japan.
+9. New versions. The author may revise this license. Each version of the Software is governed by the license included in it.
+10. Governing law. This license is governed by the laws of Japan.

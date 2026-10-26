@@ -16,7 +16,7 @@ export default defineConfig({
       transformIndexHtml: (html) =>
         html.replace(
           /(<meta charset="UTF-8" \/>)/i,
-          `$1\n    <!-- Conneko v${pkg.version} / Copyright (c) 2026 yukimasui / Conneko License 1.0（企業の業務利用は作成者の許諾が必要） https://github.com/yukimasui/conneko/blob/main/LICENSE / 同梱の外部ライブラリのライセンスはアプリの「Conneko について」を参照 -->`,
+          `$1\n    <!-- Conneko v${pkg.version} / Copyright (c) 2026 yukimasui / Conneko License 1.1（企業での利用は試用・評価を含め作成者の許諾が必要） https://github.com/yukimasui/conneko/blob/main/LICENSE / 同梱の外部ライブラリのライセンスはアプリの「Conneko について」を参照 -->`,
         ),
     },
   ],
