@@ -21,6 +21,7 @@ import {
   buildModel,
   classifySupplies,
   CONDUCTOR_NAMES,
+  inputLoads,
   key,
   loadCurrentOf,
   protocolNames,
@@ -401,29 +402,37 @@ function checkLoadProtection(m: Model, push: Push, protection: Map<string, numbe
   for (const { device, def, r } of m.devices.values()) {
     const powered = r.terminals.filter((t) => t.role === 'input' && m.potentialOf(key(device.id, t.id)).kind === 'ok');
     if (!powered.length) continue;
-    const worst = Math.max(...powered.map((t) => protection.get(key(device.id, t.id)) ?? Infinity));
+    const prot = (t: { id: string }) => protection.get(key(device.id, t.id)) ?? Infinity;
+    const worst = Math.max(...powered.map(prot));
     if (!Number.isFinite(worst)) {
       push({ severity: 'warning', rule: 'no-protection', message: `${device.id}: 上流に保護機器（ブレーカー・サーキットプロテクタなど）がありません`, devices: [device.id], wires: [], key: `no-protection:${device.id}` });
       continue;
     }
+    // 端子に loadCurrent を書いた別の回路（電磁ブレーキなど）は、その端子の保護と比べる
+    const main = powered.filter((t) => t.loadCurrent === undefined);
     const load = loadCurrentOf(m, m.devices.get(device.id)!);
-    if (load !== undefined && load > worst) {
+    const mainWorst = Math.max(...main.map(prot));
+    if (main.length && load !== undefined && load > mainWorst) {
       const units = fedUnitLoad(m.bus, device.id, def) > 0 ? '（装着したユニットの消費を含む）' : '';
-      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流${units} ${load}A が上流の保護電流 ${worst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
+      push({ severity: 'warning', rule: 'overload', message: `${device.id}: 定格電流${units} ${load}A が上流の保護電流 ${mainWorst}A を超えています（保護機器が動作します）`, devices: [device.id], wires: [], key: `overload:${device.id}` });
+    }
+    for (const t of powered.filter((x) => x.loadCurrent !== undefined && x.loadCurrent > prot(x))) {
+      push({
+        severity: 'warning',
+        rule: 'overload',
+        message: `${device.id}.${t.label ?? t.id}: 定格電流 ${t.loadCurrent}A が上流の保護電流 ${prot(t)}A を超えています（保護機器が動作します）`,
+        devices: [device.id],
+        wires: [],
+        key: `overload:${device.id}:${t.id}`,
+      });
     }
   }
 }
 
 /** 出力点につないだ負荷（受電端子が同じネットにある他の機器）の定格電流の合計 */
 function outputLoad(m: Model, owner: string, point: string): { current: number; devices: string[] } {
-  const ids = new Set<string>();
-  for (const k of m.fixedMembers.get(m.fixed.find(point)) ?? []) {
-    const info = m.terminals.get(k)!;
-    if (info.device.id !== owner && info.terminal.role === 'input') ids.add(info.device.id);
-  }
-  let current = 0;
-  for (const id of ids) current += loadCurrentOf(m, m.devices.get(id)!) ?? 0;
-  return { current, devices: [...ids] };
+  const loads = inputLoads(m, m.fixedMembers.get(m.fixed.find(point)) ?? [], owner);
+  return { current: loads.reduce((s, x) => s + x.current, 0), devices: loads.map((x) => x.id) };
 }
 
 /**
@@ -453,12 +462,7 @@ function checkSupplyCapacity(m: Model, push: Push) {
     if (!limits.length) continue;
     const capacity = Math.max(...limits);
     // この電源から受電している機器（受電端子が同じグループにある、ほかの機器）
-    const fed = new Set<string>();
-    for (const k of m.allMembers.get(root) ?? []) {
-      const info = m.terminals.get(k)!;
-      if (info.device.id !== owner && info.terminal.role === 'input') fed.add(info.device.id);
-    }
-    const loads = [...fed].map((id) => ({ id, current: loadCurrentOf(m, m.devices.get(id)!) ?? 0 })).filter((x) => x.current > 0);
+    const loads = inputLoads(m, m.allMembers.get(root) ?? [], owner);
     // 容量を分け合う内部電源のレール（装着したユニットの消費）
     const railName = specs.find((s) => s.busRail)?.busRail;
     const rail = railName ? m.bus.groups.get(owner)?.rails.find((r) => r.rail === railName) : undefined;
@@ -485,14 +489,8 @@ const amp = (n: number) => `${Math.round(n * 1000) / 1000}A`;
 
 /** fixed のグループにある機器の受電端子（role: 'input'）の機器と、消費電流の合計 */
 function netLoad(m: Model, k: string): { current: number; devices: string[] } {
-  const ids = new Set<string>();
-  for (const x of m.fixedMembers.get(m.fixed.find(k)) ?? []) {
-    const info = m.terminals.get(x)!;
-    if (info.terminal.role === 'input') ids.add(info.device.id);
-  }
-  let current = 0;
-  for (const id of ids) current += loadCurrentOf(m, m.devices.get(id)!) ?? 0;
-  return { current, devices: [...ids] };
+  const loads = inputLoads(m, m.fixedMembers.get(m.fixed.find(k)) ?? []);
+  return { current: loads.reduce((s, x) => s + x.current, 0), devices: loads.map((x) => x.id) };
 }
 
 /**

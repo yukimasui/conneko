@@ -133,7 +133,22 @@ export const FAMILY_RULES: FamilyRule[] = [
   },
   // --- 負荷 ---
   { id: 'motor', name: 'モーター', keywords: ['電動機', '誘導電動機'], test: named(/電動機/) },
-  { id: 'inverter', name: 'インバーター', keywords: ['インバータ', 'VFD'], test: named(/^インバーター/) },
+  {
+    id: 'inverter',
+    name: 'インバーター',
+    keywords: ['インバータ', 'VFD'],
+    test: named(/^インバーター/),
+    default: 'mitsubishi.fr-e820-0.75k',
+    facets: [
+      // 型式の末尾が S（FR-E820S など）は単相 200V 入力
+      { label: '電源', value: (d) => (/^FR-[A-Z]\d{3}S-/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-/.test(d.model) ? '三相 200V' : undefined) },
+      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') },
+    ],
+  },
+  { id: 'servo-amp', name: 'サーボアンプ', keywords: ['サーボ', 'ドライバ', 'MELSERVO'], test: named(/^サーボアンプ/) },
+  { id: 'servo-motor', name: 'サーボモーター', keywords: ['サーボ', 'モータ'], test: named(/^サーボモーター/) },
+  { id: 'stepping-driver', name: 'ステッピングモータードライバー', keywords: ['ステッピング', 'ドライバ', 'パルスモーター'], test: named(/^ステッピングモータードライバー/) },
+  { id: 'stepping-motor', name: 'ステッピングモーター', keywords: ['ステッピング', 'パルスモーター'], test: named(/^ステッピングモーター（/) },
   { id: 'fan', name: '換気ファン', keywords: ['ファン', '盤用換気扇'], test: named(/ファン/, 'load') },
   { id: 'robocylinder', name: 'ロボシリンダー', keywords: ['電動シリンダ', '電動アクチュエータ', 'IAI'], test: named(/^ロボシリンダー/) },
   { id: 'elecylinder', name: 'エレシリンダー', keywords: ['電動シリンダ', 'IAI'], test: named(/^エレシリンダー/) },

@@ -492,6 +492,29 @@ export function loadCurrentOf(m: Model, d: DeviceInfo): number | undefined {
   return Math.round(((own ?? 0) + units) * 10000) / 10000;
 }
 
+/**
+ * 端子の集まり（同電位グループなど）にある受電端子（role: 'input'）から、機器ごとの消費電流を求める（exclude の機器は除く）。
+ * 端子に loadCurrent を書いた端子（電磁ブレーキのコイルなど別の回路）はその値を、ほかの受電端子は機器の消費電流（loadCurrentOf）を
+ * 機器ごとに 1 回だけ数える。消費電流が 0 の機器は除く
+ */
+export function inputLoads(m: Model, keys: Iterable<string>, exclude?: string): { id: string; current: number }[] {
+  const main = new Set<string>();
+  const own = new Map<string, number>();
+  for (const k of keys) {
+    const info = m.terminals.get(k);
+    if (!info || info.device.id === exclude || info.terminal.role !== 'input') continue;
+    const t = info.terminal.loadCurrent;
+    if (t !== undefined) own.set(info.device.id, Math.max(own.get(info.device.id) ?? 0, t));
+    else main.add(info.device.id);
+  }
+  const out: { id: string; current: number }[] = [];
+  for (const id of new Set([...main, ...own.keys()])) {
+    const current = (main.has(id) ? (loadCurrentOf(m, m.devices.get(id)!) ?? 0) : 0) + (own.get(id) ?? 0);
+    if (current > 0) out.push({ id, current: Math.round(current * 10000) / 10000 });
+  }
+  return out;
+}
+
 /** fixed のグループに電線が 1 本でもつながっているか */
 export function netIsWired(m: Model, k: string): boolean {
   return (m.fixedMembers.get(m.fixed.find(k)) ?? []).some((x) => m.wiresAt.has(x));
