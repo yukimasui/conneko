@@ -51,6 +51,10 @@ Conneko の機器（ノード）は `src/devices/catalog/` に1機器1ファイ�
   入力モードの切換などで電圧範囲が変わる場合は `minVoltage: { param: 'キー' }` のようにパラメータを参照できる。
 - モーターの電磁ブレーキ・サーボアンプの制御回路電源のように、機器の主な消費電流（`loadCurrent`）とは別の回路の受電端子には、端子に `loadCurrent`[A] を書く。
   その端子から受電する電源の容量・その端子の上流の保護・その端子を開閉する接点の定格は、機器の `loadCurrent` ではなく端子の値と比べる（[drive-catalog.md](drive-catalog.md)）。
+- 動き始めに大きな電流が流れる機器（直入れのモーターなど）は、`inrush: { ratio, seconds }`（定格電流の何倍が何秒流れるか。概算）を書く。
+  「電流の余裕」のグラフで、工程の切り替わりに動き始める機器の山として描く（汎用の三相モーターは 6 倍・1 秒、単相レバーシブルは 3 倍・0.5 秒）。
+- 遮断器（`category: 'breaker'`、`protectionCurrent` と `protects` の経路）の下流の機器の `loadCurrent` は、工程ごとに足して遮断器の定格と比べる（`breaker-capacity`）。
+  電源ユニットのような機器も、入力電流（概算でよい）を `loadCurrent` に書くと遮断器の電流の合計に入る。
 - 内部で導通する経路は `links` に書く。
   - 保護機器の極は `{ from: 一次側, to: 二次側, directed: true, protects: true }` とし、`protectionCurrent` に定格電流を指定する。
   - 開閉する経路には `switch` を付ける（下の「接点と出力」）。付けない経路は常に導通とみなす。

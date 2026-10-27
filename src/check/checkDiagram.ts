@@ -34,6 +34,7 @@ import {
   type Push,
   type Severity,
 } from './model';
+import { checkBreakerCapacity, computeProtection } from './protection';
 import { checkSafety } from './safety';
 import { checkSignals } from './signals';
 import { checkSwitchStates } from './states';
@@ -70,6 +71,7 @@ export function checkDiagram(diagram: Diagram, lookup: DefLookup): CheckIssue[] 
   checkWireCurrents(m, push, protection);
   checkWireTerminals(m, push, protection);
   checkLoadProtection(m, push, protection);
+  checkBreakerCapacity(m, push, protection);
   checkOutputCurrents(m, push);
   checkContactCurrents(m, push);
   checkSwitchedSystem(m, push);
@@ -278,53 +280,6 @@ function checkDistinctGroups(m: Model, push: Push) {
       }
     }
   }
-}
-
-/**
- * 電源から links の向きに沿ってたどり、各端子の保護電流[A]を求める（接点・出力は閉とみなす）。
- * 保護機器を通っていない端子は Infinity。複数経路がある場合は大きい方（安全側）を採用する。
- */
-function computeProtection(m: Model): Map<string, number> {
-  type Edge = { to: string; protects?: number };
-  const adj = new Map<string, Edge[]>();
-  const add = (a: string, e: Edge) => adj.set(a, [...(adj.get(a) ?? []), e]);
-  for (const w of m.wires) {
-    const a = key(w.from.device, w.from.terminal);
-    const b = key(w.to.device, w.to.terminal);
-    add(a, { to: b });
-    add(b, { to: a });
-  }
-  for (const [a, b] of [...m.cablePairs, ...m.labelLinks]) {
-    add(a, { to: b });
-    add(b, { to: a });
-  }
-  for (const { device, def, r } of m.devices.values()) {
-    const rating = resolveNum(def.protectionCurrent, def, device.params);
-    for (const l of r.links) {
-      const a = key(device.id, l.from);
-      const b = key(device.id, l.to);
-      const e: Edge = { to: b, ...(l.protects && rating !== undefined ? { protects: rating } : {}) };
-      add(a, e);
-      if (!l.directed) add(b, { to: a, ...(e.protects !== undefined ? { protects: e.protects } : {}) });
-    }
-  }
-
-  const result = new Map<string, number>();
-  const queue: [string, number][] = [];
-  for (const [k, s] of m.supplies) {
-    if (s.conductor === 'PE' || m.potentialOf(k).kind !== 'ok') continue;
-    const info = m.terminals.get(k)!;
-    const limit = resolveNum(info.terminal.supply!.limitCurrent, info.def, info.device.params) ?? Infinity;
-    queue.push([k, limit]);
-  }
-  while (queue.length) {
-    const [k, prot] = queue.shift()!;
-    const prev = result.get(k);
-    if (prev !== undefined && prev >= prot) continue;
-    result.set(k, prot);
-    for (const e of adj.get(k) ?? []) queue.push([e.to, e.protects !== undefined ? Math.min(prot, e.protects) : prot]);
-  }
-  return result;
 }
 
 /** 電線の許容電流 */

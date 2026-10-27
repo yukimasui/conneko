@@ -88,6 +88,18 @@ export interface DiagramWire {
 }
 
 /** 図面全体の設定 */
+/**
+ * 運転の工程（同時に使う機器の組）。「電流の余裕」で、遮断器ごとに工程ごとの電流の合計を求めて定格と比べる。
+ * 書いていない機器は動いているとみなす（あとから足した機器も安全側に数える）ので、止まっている機器を off に書く
+ */
+export interface OperationStep {
+  name: string;
+  /** 工程の時間[s]（グラフの横幅） */
+  seconds: number;
+  /** この工程で止まっている機器 ID */
+  off?: string[];
+}
+
 export interface DiagramSettings {
   /** 安全機能に要求するパフォーマンスレベル（ISO 13849-1）。指定すると、それを下回る安全機器を警告する */
   requiredPL?: 'a' | 'b' | 'c' | 'd' | 'e';
@@ -97,6 +109,8 @@ export interface DiagramSettings {
   revision?: string;
   /** 部品表のチューブの巻の長さ[m]（SMC の TU は 20m 巻と 100m 巻）。省略時は 20 */
   tubeRoll?: 20 | 100;
+  /** 運転の工程（同時に使う機器の組）。省略時はすべての機器を同時に使うとみなす */
+  operation?: OperationStep[];
 }
 
 export interface Diagram {
@@ -275,6 +289,8 @@ export function parseDiagram(input: string | unknown): Diagram {
       if (typeof v === 'string' && v.trim()) settings[k] = v;
     }
     if (raw.settings.tubeRoll === 20 || raw.settings.tubeRoll === 100) settings.tubeRoll = raw.settings.tubeRoll;
+    const operation = parseOperation(raw.settings.operation);
+    if (operation.length) settings.operation = operation;
   }
   // シートは { "id", "name" } の配列。name だけ・文字列だけでも受け付ける
   const sheets: Sheet[] = [];
@@ -293,6 +309,28 @@ export function parseDiagram(input: string | unknown): Diagram {
     ...(sheets.length ? { sheets } : {}),
     ...(schematic ? { schematic } : {}),
   };
+}
+
+/** 工程は { "name", "seconds", "off": [機器 ID] } の配列。秒は 0 より大きい数（ないときは 10） */
+function parseOperation(v: unknown): OperationStep[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((x, i) => {
+    if (!isObj(x)) return [];
+    const off = Array.isArray(x.off) ? [...new Set(x.off.filter((d): d is string => typeof d === 'string' && !!d))] : [];
+    return [
+      {
+        name: typeof x.name === 'string' && x.name.trim() ? x.name : `工程${i + 1}`,
+        seconds: typeof x.seconds === 'number' && x.seconds > 0 ? x.seconds : 10,
+        ...(off.length ? { off } : {}),
+      },
+    ];
+  });
+}
+
+/** 機器名を変えたときに、工程の止まっている機器の ID を付け替える */
+export function renameOperationDevice(settings: DiagramSettings, from: string, to: string): DiagramSettings {
+  if (!settings.operation?.some((s) => s.off?.includes(from))) return settings;
+  return { ...settings, operation: settings.operation.map((s) => (s.off?.includes(from) ? { ...s, off: s.off.map((d) => (d === from ? to : d)) } : s)) };
 }
 
 /** mount は { "device": "PLC1", "slot": 1 } のほか "PLC1" や "PLC1#2" の文字列も受け付ける */
