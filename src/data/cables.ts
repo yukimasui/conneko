@@ -43,6 +43,24 @@ export const CABLE_SPECS: CableSpec[] = [
     // B_k（ピン 41−2k）→ MIL 2k、A_k（ピン 42−2k）→ MIL 2k−1。どちらも 41 − ピン番号
     map: (p) => 41 - p,
   },
+  // ファナックのロボット接続ケーブル（ロボットに付属する専用ケーブル。ロボット側のコネクターの defaultCable で選ぶ。
+  // 種類の組は src/devices/fanuc/parts.ts。長さ・非屈曲/屈曲はロボットの注文時に選ぶ）
+  {
+    id: 'fanuc.robot-cable-rm1.lrm200id-mini',
+    name: 'ロボット接続ケーブル RM1（モーター動力・ブレーキ。LR Mate 200iD ⇔ R-30iB Mini Plus）',
+    maker: 'ファナック',
+    model: 'ロボット接続ケーブル RM1',
+    ends: ['FANUC-LRM200ID-RM1', 'FANUC-R30IB-MINI-RM1'],
+    map: (p) => p,
+  },
+  {
+    id: 'fanuc.robot-cable-rp1.lrm200id-mini',
+    name: 'ロボット接続ケーブル RP1（パルスコーダ・ロボット I/O。LR Mate 200iD ⇔ R-30iB Mini Plus）',
+    maker: 'ファナック',
+    model: 'ロボット接続ケーブル RP1',
+    ends: ['FANUC-LRM200ID-RP1', 'FANUC-R30IB-MINI-RP1'],
+    map: (p) => p,
+  },
 ];
 
 export const getCableSpec = (id: string | undefined) => (id ? CABLE_SPECS.find((c) => c.id === id) : undefined);

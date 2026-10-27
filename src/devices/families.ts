@@ -88,6 +88,10 @@ export const FAMILY_RULES: FamilyRule[] = [
     facets: [{ label: '用途', value: (d) => paren(d) ?? '一般' }, { label: '極数', value: poles }, { label: 'シリーズ', value: series }],
   },
   { id: 'cp', name: 'サーキットプロテクタ', keywords: ['CP'], test: named(/^サーキットプロテクタ/), default: 'mitsubishi.cp30-ba.2p', facets: [{ label: '極数', value: poles }] },
+  { id: 'fuse', name: 'ヒューズホルダ', keywords: ['ヒューズ', '筒形ヒューズ', 'FUSE'], test: named(/^ヒューズホルダ/), default: 'generic.fuse-holder.2p', facets: [{ label: '極数', value: poles }] },
+  { id: 'spd', name: 'サージ保護デバイス', keywords: ['SPD', '避雷器', 'サージプロテクタ', 'サージアブソーバ'], test: named(/^サージ保護デバイス/), default: 'generic.spd.1p', facets: [{ label: '相', value: paren }] },
+  { id: 'noise-filter', name: 'ノイズフィルタ', keywords: ['ラインフィルタ', 'EMC フィルタ', 'NF'], test: named(/^ノイズフィルタ/), default: 'generic.noise-filter.1p', facets: [{ label: '相', value: paren }] },
+  { id: 'transformer', name: '制御用トランス', keywords: ['トランス', '変圧器', '操作トランス', '絶縁トランス'], test: named(/^制御用トランス/) },
   // --- 開閉器・リレー ---
   {
     id: 'mc',
@@ -109,7 +113,13 @@ export const FAMILY_RULES: FamilyRule[] = [
   },
   { id: 'safety-relay-fg', name: 'フォースガイドリレー', keywords: ['強制ガイド', 'セーフティリレー'], test: named(/フォースガイドリレー|強制ガイド式リレー/) },
   { id: 'ssr', name: 'ソリッドステートリレー', keywords: ['SSR'], test: named(/ソリッドステート/) },
-  { id: 'timer', name: 'タイマー', test: named(/^タイマー/) },
+  {
+    id: 'timer',
+    name: 'タイマー',
+    test: named(/^タイマー/),
+    default: 'omron.h3y-2.dc24',
+    facets: [{ label: '取付け', value: (d) => (/DIN/.test(d.name) ? 'DIN レール' : /ソケット/.test(d.name) ? 'ソケット' : undefined) }],
+  },
   // --- 電源ユニット ---
   { id: 'dc-psu', name: 'DC24V 電源', keywords: ['スイッチング電源', '直流電源', 'パワーサプライ'], test: named(/スイッチング電源|^DC24V 電源/), default: 'generic.psu.dc24v' },
   { id: 'plc-psu', name: 'PLC 電源ユニット', test: named(/^PLC 電源ユニット/), hidden: true },
@@ -133,15 +143,54 @@ export const FAMILY_RULES: FamilyRule[] = [
   },
   // --- 負荷 ---
   { id: 'motor', name: 'モーター', keywords: ['電動機', '誘導電動機'], test: named(/電動機/) },
-  { id: 'inverter', name: 'インバーター', keywords: ['インバータ', 'VFD'], test: named(/^インバーター/) },
+  {
+    id: 'inverter',
+    name: 'インバーター',
+    keywords: ['インバータ', 'VFD'],
+    test: named(/^インバーター/),
+    default: 'mitsubishi.fr-e820-0.75k',
+    facets: [
+      // 型式の末尾が S（FR-E820S など）は単相 200V 入力
+      { label: '電源', value: (d) => (/^FR-[A-Z]\d{3}S-/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-/.test(d.model) ? '三相 200V' : undefined) },
+      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') },
+    ],
+  },
+  { id: 'servo-amp', name: 'サーボアンプ', keywords: ['サーボ', 'ドライバ', 'MELSERVO'], test: named(/^サーボアンプ/) },
+  { id: 'servo-motor', name: 'サーボモーター', keywords: ['サーボ', 'モータ'], test: named(/^サーボモーター/) },
+  { id: 'stepping-driver', name: 'ステッピングモータードライバー', keywords: ['ステッピング', 'ドライバ', 'パルスモーター'], test: named(/^ステッピングモータードライバー/) },
+  { id: 'stepping-motor', name: 'ステッピングモーター', keywords: ['ステッピング', 'パルスモーター'], test: named(/^ステッピングモーター（/) },
   { id: 'fan', name: '換気ファン', keywords: ['ファン', '盤用換気扇'], test: named(/ファン/, 'load') },
   { id: 'robocylinder', name: 'ロボシリンダー', keywords: ['電動シリンダ', '電動アクチュエータ', 'IAI'], test: named(/^ロボシリンダー/) },
   { id: 'elecylinder', name: 'エレシリンダー', keywords: ['電動シリンダ', 'IAI'], test: named(/^エレシリンダー/) },
+  // 産業用ロボット（垂直多関節・スカラ・パラレルリンクなど。一般名称を「〜ロボット」にする）と、そのコントローラー
+  {
+    id: 'robot',
+    name: 'ロボット',
+    keywords: ['産業用ロボット', '垂直多関節', '多関節ロボット', 'スカラ', 'パラレルリンク', 'マニピュレータ'],
+    test: (d) => d.category === 'load' && /ロボット$/.test(d.name),
+  },
+  { id: 'robot-controller', name: 'ロボットコントローラー', keywords: ['ロボット制御装置', 'コントローラ'], test: named(/^ロボットコントローラー/) },
   // --- 操作・表示 ---
   { id: 'pushbutton', name: '押しボタンスイッチ', keywords: ['PB', '押釦'], test: named(/押しボタンスイッチ/, 'control') },
   { id: 'selector', name: 'セレクタスイッチ', keywords: ['切替スイッチ', 'COS'], test: named(/^セレクタスイッチ/) },
   { id: 'lamp', name: '表示灯', keywords: ['パイロットランプ', 'PL'], test: named(/^表示灯/) },
   { id: 'buzzer', name: 'ブザー', test: named(/^ブザー/) },
+  {
+    id: 'signal-tower',
+    name: '積層信号灯',
+    keywords: ['シグナルタワー', 'パトライト', '積層表示灯', 'タワーライト', '回転灯'],
+    test: named(/^積層信号灯/),
+    default: 'patlite.lr6',
+    facets: [{ label: '大きさ', value: paren }],
+  },
+  { id: 'foot-switch', name: 'フットスイッチ', keywords: ['足踏みスイッチ', 'フットペダル'], test: named(/^フットスイッチ/) },
+  {
+    id: 'temp-controller',
+    name: '温度調節器',
+    keywords: ['温調', '温調器', 'デジタル調節計', 'E5CC'],
+    test: named(/^温度調節器/),
+    facets: [{ label: '制御出力', value: paren }],
+  },
   { id: 'hmi', name: 'タッチパネル', keywords: ['HMI', 'タッチパネルディスプレイ', 'GOT', 'VT'], test: named(/^タッチパネル/) },
   { id: 'iai-position', name: 'ポジションコントローラー（IAI）', keywords: ['ロボシリンダー', 'コントローラー'], test: named(/^ポジションコントローラー|^多軸ポジションコントローラー/) },
   { id: 'iai-runit', name: 'R-unit（IAI）', keywords: ['RCON', 'ロボシリンダー'], test: named(/^R-unit/) },
@@ -160,6 +209,13 @@ export const FAMILY_RULES: FamilyRule[] = [
     keywords: ['シーケンサ', 'PLC', 'CPU', 'KV'],
     test: (d) => d.category === 'plc' && d.maker === 'KEYENCE' && /CPUユニット/.test(d.name),
     default: 'keyence.kv-8000.cpu',
+  },
+  {
+    id: 'plc-cpu-omron',
+    name: 'PLC CPU（オムロン）',
+    keywords: ['シーケンサ', 'PLC', 'CPU', 'NX1P', 'Sysmac'],
+    test: (d) => d.category === 'plc' && d.maker === 'オムロン' && /CPUユニット/.test(d.name),
+    default: 'omron.nx1p2-1140dt',
   },
   { id: 'remote-io', name: 'リモート I/O', keywords: ['EtherCAT', 'カプラ', 'リモートIO', '分散 I/O'], test: named(/通信ユニット（カプラ）/) },
   { id: 'plc-analog', name: 'PLC アナログ・温度ユニット', keywords: ['アナログ', '温調'], test: named(/^PLC .*(アナログ|温度)/), hidden: true },
@@ -211,6 +267,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'amp', name: 'センサアンプ', keywords: ['ファイバ', 'ファイバアンプ', 'アンプ'], test: (d) => d.category === 'sensor' && /アンプ/.test(d.name) },
   { id: 'limit', name: 'リミットスイッチ', keywords: ['LS'], test: named(/^リミットスイッチ/) },
   { id: 'pressure-sensor', name: '圧力センサ', test: named(/^圧力センサ/) },
+  { id: 'temp-sensor', name: '温度センサ', keywords: ['熱電対', '測温抵抗体', 'Pt100', 'K 熱電対', 'TC'], test: named(/^(熱電対|測温抵抗体)/) },
   { id: 'flow-sensor', name: '流量センサ', test: named(/^流量センサ/) },
   { id: 'sensor-cable', name: 'センサーケーブル', keywords: ['M8', 'M12', 'コネクタケーブル'], test: named(/センサー用コネクタケーブル/) },
   // --- 安全機器 ---

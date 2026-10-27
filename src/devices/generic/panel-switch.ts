@@ -59,6 +59,17 @@ export interface PanelSwitchSpec {
   /** 接点の定格（端子の note に付ける） */
   rating?: string;
   estimated?: string;
+  /** 接点ブロックの色（メーカーで違う場合。省略時はオムロン A22N の a 接点 = 青、b 接点 = 橙） */
+  unitColors?: Partial<Record<'NO' | 'NC', UnitColor>>;
+  /** 照光ユニットの印字（省略時は 'DC/AC24V'） */
+  ledCaption?: string;
+}
+
+/** 背面のユニットの色（本体・縁・ラベルの文字） */
+export interface UnitColor {
+  body: string;
+  edge: string;
+  ink: string;
 }
 
 const H = 128;
@@ -72,20 +83,21 @@ const UNIT_PITCH = 36;
 const FIRST_UNIT_X = 118;
 
 /** 接点ブロックの色（オムロン A22N: a 接点 = 青、b 接点 = 橙、照光ユニット = 黒） */
-const UNIT_COLORS = {
-  NO: { body: '#2f68c4', edge: '#1a3f80', title: 'NO' },
-  NC: { body: '#f08a24', edge: '#9a5110', title: 'NC' },
-  led: { body: '#2a2c2f', edge: '#0c0c0d', title: 'LED' },
+const UNIT_COLORS: Record<'NO' | 'NC' | 'led', UnitColor> = {
+  NO: { body: '#2f68c4', edge: '#1a3f80', ink: '#1a3f80' },
+  NC: { body: '#f08a24', edge: '#9a5110', ink: '#b5520b' },
+  led: { body: '#2a2c2f', edge: '#0c0c0d', ink: '#222' },
 };
+const UNIT_TITLES = { NO: 'NO', NC: 'NC', led: 'LED' };
 
 /** 背面のユニットの箱とネジ */
-const unitBox = (x: number, kind: 'NO' | 'NC' | 'led', inner: string, top: string, bottom: string) => {
-  const c = UNIT_COLORS[kind];
+const unitBox = (x: number, kind: 'NO' | 'NC' | 'led', inner: string, top: string, bottom: string, colors?: Partial<Record<'NO' | 'NC', UnitColor>>) => {
+  const c = (kind !== 'led' && colors?.[kind]) || UNIT_COLORS[kind];
   return `
   <rect x="${x - 15}" y="12" width="30" height="104" rx="2" fill="${c.body}" stroke="${c.edge}" stroke-width="0.8"/>
   <rect x="${x - 14}" y="13" width="5" height="102" rx="1.5" fill="#fff" opacity="0.12"/>
   <rect x="${x - 12}" y="40" width="24" height="48" rx="1.5" fill="#f6f3ec" stroke="#a49e90" stroke-width="0.5"/>
-  ${text(x, 48, c.title, 5.2, kind === 'NO' ? '#1a3f80' : kind === 'NC' ? '#b5520b' : '#222')}
+  ${text(x, 48, UNIT_TITLES[kind], 5.2, c.ink)}
   ${inner}
   ${screw(x, TOP_Y, 5, '#d4d6d9')}
   ${screw(x, BOT_Y, 5, '#d4d6d9')}
@@ -168,14 +180,14 @@ export function buildPanelSwitch(s: PanelSwitchSpec): DeviceDefinition {
           return unitBox(
             x,
             'led',
-            `${text(x, 56, 'DC/AC24V', 3.6, '#333', 'normal')}
+            `${text(x, 56, s.ledCaption ?? 'DC/AC24V', 3.6, '#333', 'normal')}
   <circle cx="${x}" cy="70" r="6" fill="none" stroke="#222" stroke-width="0.9"/>
   <path d="M${x - 4.2} ${70 - 4.2} L${x + 4.2} ${70 + 4.2} M${x + 4.2} ${70 - 4.2} L${x - 4.2} ${70 + 4.2}" stroke="#222" stroke-width="0.9"/>`,
             'X1',
             'X2',
           );
         }
-        return unitBox(x, u.kind, u.kind === 'NO' ? noSymbol(x, 54) : ncSymbol(x, 54), u.topLabel ?? u.top, u.bottomLabel ?? u.bottom);
+        return unitBox(x, u.kind, u.kind === 'NO' ? noSymbol(x, 54) : ncSymbol(x, 54), u.topLabel ?? u.top, u.bottomLabel ?? u.bottom, s.unitColors);
       })
       .join('');
     return `
