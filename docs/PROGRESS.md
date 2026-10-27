@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-26（v0.6.34 ライセンス 1.1）
+最終更新: 2026-10-27（v0.6.35 機器の追加 約 70 機種）
 
 ## 現在地
 
+- v0.6.35（#73 の一部）: 盤の電源・保護（docs/power-catalog.md）、表示・操作・制御補助（control-catalog.md）、センサー（sensor-catalog.md）、モーター・駆動（drive-catalog.md）、オムロン PLC・端子台（omron-plc-catalog.md）、ファナック LR Mate 200iD（robot-catalog.md）。端子ごとの消費電流 `TerminalDef.loadCurrent`（`inputLoads`）
 - v0.6.34: ライセンスを Conneko License 1.1 に（企業での利用は試用・評価を含め事前に許諾、許諾を得た企業も第三者への提供は同意が必要、許諾はサポート・責任の引き受けを意味しない）。README・「Conneko について」・HTML のコメントも合わせた
 - v0.6.33: 向かい合う組のない網の幹線（`openTrunk`）と入れ子の L 字（網の順を `nestKey` などで試して交差の少ないもの）、縦向きの端子の分岐（`TAP_STUBS`）、線番を文字・別の網の横の線に重ねない（`wireNoAt` の `avoid`）
 - v0.6.32: 主回路の幹線（`trunks`）を先に引き、分岐は幹線へ T 字に着ける（`tapRoute`）。`spanningTree` に結び済みの組（`linked`）

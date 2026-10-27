@@ -21,7 +21,7 @@
 
 ## できること
 
-- 300 種以上の機器を収録
+- 450 種以上の機器を収録
   - 三菱電機: ブレーカー類（漏電遮断器・ノーヒューズ遮断器 WS-V の NF32/NF63/NF125・NV32/NV63、制御盤用 FA シリーズ NF30-FA/NV30-FA、サーキットプロテクタ CP30-BA）、
     電磁接触器 S-T10〜T32・SD-T、電磁継電器 SR-T5、サーマルリレー TH-T18/T25、インバーター FR-E820、MELSEC iQ-R（ベースユニット含む）/ iQ-F（[一覧](docs/mitsubishi-catalog.md)）
   - KEYENCE: KV-8000 / KV-X と増設ユニット、VT5、光電センサ（PZ-G・PR-G・PZ-V/M・PR-M/F・LR シリーズ・ファイバアンプなど）ほか各種センサー
@@ -32,6 +32,12 @@
   - 制御機器: 汎用リレー（オムロン MY2N/MY4N、IDEC RU・RJ）、タイマー H3Y、SSR G3NA、押しボタン・照光押しボタン・セレクタ・表示灯（オムロン A22N/M22N）、
     ブザー、近接センサ E2E、リミットスイッチ WL、電磁弁（SMC SY）（[一覧](docs/generic-catalog.md)）
   - 汎用品: 一次電源、DC24V電源、端子台、MIL 変換端子台、モーター、ファン、表示灯、産業用スイッチングハブ（5/8/16ポート）
+  - 盤の電源・保護: オムロン S8VK-G・IDEC PS5R-V（DC24V 電源）、制御トランス、ヒューズホルダ、ノイズフィルタ、SPD、盤内照明・コンセント・ドアスイッチ（[一覧](docs/power-catalog.md)）
+  - 表示・操作・制御補助: パトライト LR6/LR4、オムロン H3CR-A8・H3DT・温度調節器 E5CC、熱電対・Pt100、富士電機 AR22/DR22、フットスイッチ（[一覧](docs/control-catalog.md)）
+  - センサー: オムロン E3Z・E2E（M12）・ロータリエンコーダ E6B2、パナソニック CX-400・GX-F/H、SMC PF3W7、フロートスイッチ（[一覧](docs/sensor-catalog.md)）
+  - モーター・駆動: 三菱電機 FR-E820（0.1K〜3.7K）・FR-E820S、サーボ MR-J5-A と HK-KT、オリエンタルモーター AZ シリーズ、ブレーキ付き三相・単相レバーシブルモーター（[一覧](docs/drive-catalog.md)）
+  - オムロン PLC NX1P2 と NX の I/O ユニット、フエニックス・コンタクトの端子台 PT/UT（[一覧](docs/omron-plc-catalog.md)）
+  - ロボット: ファナック LR Mate 200iD・R-30iB Mini Plus・iPendant（[一覧](docs/robot-catalog.md)）
 - MIL コネクタ間は多芯ケーブル、LAN は LAN ケーブル、M8/M12 はセンサーケーブルとして描画し、ピン単位で導通をチェック
 - PLC エディタ（PLC を右クリック）
   - ユニット構成: 増設ユニットの追加・装着・取り外しと、ドラッグでの並べ替え。内部電源の収支とスロット数を表示する。
