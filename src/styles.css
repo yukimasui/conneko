@@ -2464,3 +2464,142 @@ textarea {
   font-size: 15px;
   font-weight: 700;
 }
+
+/* --- 電流の余裕 --- */
+.current-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.current-dialog h3 {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+.current-dialog__table-wrap {
+  overflow-x: auto;
+}
+.current-dialog__table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.current-dialog__table th,
+.current-dialog__table td {
+  border-bottom: 1px solid var(--border);
+  padding: 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.current-dialog__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.current-dialog__step {
+  min-width: 96px;
+}
+.current-dialog__step input {
+  width: 88px;
+  font-size: 12px;
+}
+.current-dialog__seconds {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: normal;
+  color: var(--muted);
+}
+.current-dialog__seconds input {
+  width: 56px;
+}
+.current-dialog__remove {
+  padding: 0 6px;
+  font-size: 11px;
+}
+.current-dialog__cell {
+  text-align: center !important;
+}
+.current-dialog__cell input {
+  width: auto;
+}
+.current-chart {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.current-chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+.current-chart__status {
+  display: inline-flex;
+  gap: 4px;
+}
+.current-chart__status.is-over > span {
+  color: var(--error);
+}
+.current-chart__status.is-tight > span {
+  color: var(--warning);
+}
+.current-chart__status.is-ok > span {
+  color: var(--ok);
+}
+.current-chart__plot {
+  position: relative;
+}
+.current-chart__grid {
+  stroke: #e4e8ee;
+  stroke-width: 1;
+}
+.current-chart__tick,
+.current-chart__label {
+  font-size: 10px;
+  fill: var(--muted);
+}
+.current-chart__area {
+  fill: var(--accent);
+  fill-opacity: 0.1;
+}
+.current-chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.current-chart__rating {
+  stroke: var(--error);
+  stroke-width: 1.5;
+}
+.current-chart__tight {
+  stroke: var(--warning);
+  stroke-width: 1;
+}
+.current-chart__hit {
+  fill: transparent;
+}
+.current-chart__cursor {
+  stroke: var(--muted);
+  stroke-width: 1;
+  pointer-events: none;
+}
+.current-chart__tooltip {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 6px 8px;
+  font-size: 12px;
+  pointer-events: none;
+  max-width: 320px;
+  white-space: normal;
+}
+.current-chart__details table {
+  margin-top: 4px;
+}

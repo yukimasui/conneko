@@ -168,6 +168,8 @@ const def: DeviceDefinition = {
   name: '三相誘導電動機',
   model: '3φ 200V 4P 全閉外扇形',
   category: 'load',
+  // 三相かご形誘導電動機の直入れ始動は定格の 5〜8 倍。代表値 6 倍・1 秒
+  inrush: { ratio: 6, seconds: 1 },
   description:
     '三相かご形誘導電動機（全閉外扇形・脚取付・4極）。端子箱の U/V/W に三相200Vを接続し、接地端子を接地する。出力（kW）は params で選択する。',
   labelPrefix: 'M',

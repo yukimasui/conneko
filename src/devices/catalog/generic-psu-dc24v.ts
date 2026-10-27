@@ -126,7 +126,8 @@ const def: DeviceDefinition = {
   model: 'DC24V DINレール取付',
   category: 'power-supply',
   description:
-    'AC100〜240V を入力し DC24V を出力する DINレール取付のスイッチング電源。PLC・センサー・表示灯などの制御電源に使う。出力 +V / -V はそれぞれ2端子あり内部でつながっている。',
+    'AC100〜240V を入力し DC24V を出力する DINレール取付のスイッチング電源。PLC・センサー・表示灯などの制御電源に使う。出力 +V / -V はそれぞれ2端子あり内部でつながっている。' +
+    '入力電流は AC100V・定格出力時の概算（出力電力 ÷ 効率 0.85 ÷ 力率 0.7 ÷ 100V）として、上流の保護・遮断器の電流の合計に数える。',
   labelPrefix: 'PSU',
   width: W,
   height: H,
@@ -194,6 +195,8 @@ const def: DeviceDefinition = {
     },
   ],
   distinctGroups: [['L', 'N']],
+  // 入力電流の概算（AC100V 入力・定格出力時）。出力 24V × 出力電流 ÷（効率 0.85 × 力率 0.7 × 100V）。AC200V ではおよそ半分
+  loadCurrent: (p) => Math.round(((24 * (Number(p.outputCurrent) || DEFAULT_CURRENT)) / (0.85 * 0.7 * 100)) * 100) / 100,
 };
 
 export default def;

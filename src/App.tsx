@@ -25,6 +25,7 @@ import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
 import { deviceModel, deviceSize, fixUnavailableParams } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
+import { CurrentDialog } from './editor/CurrentDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
 import { bomCsv, ioCsv, wireCsv } from './export/reports';
 import { renderSheetSvg } from './export/sheetSvg';
@@ -62,6 +63,7 @@ import {
   nextDeviceId,
   nextWireId,
   parseDiagram,
+  renameOperationDevice,
   sheetsOf,
   toDiagramFile,
   type Diagram,
@@ -158,6 +160,7 @@ function Editor() {
     { mode: 'add'; familyId: string; initial: string; onChosen: (type: string) => void } | { mode: 'replace'; deviceId: string } | null
   >(null);
   const [printDialog, setPrintDialog] = useState(false);
+  const [currentDialog, setCurrentDialog] = useState(false);
   /** 前に印刷したときの設定（次に印刷ダイアログを開いたときの既定） */
   const [lastPrint, setLastPrint] = useState<PrintOptions | null>(null);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
@@ -770,6 +773,7 @@ function Editor() {
         es.map((e) => ({ ...e, source: e.source === oldId ? newId : e.source, target: e.target === oldId ? newId : e.target })),
       );
       setSchematic((s) => renameSchematicDevice(s, oldId, newId));
+      setSettings((s) => renameOperationDevice(s, oldId, newId));
       return null;
     },
     [nodes, setNodes, setEdges],
@@ -1134,6 +1138,11 @@ function Editor() {
             <button type="button" onClick={() => loadDiagram(sampleDiagram)}>サンプル</button>
           </div>
           <div className="toolbar__group">
+            <button type="button" onClick={() => setCurrentDialog(true)} title="同時に使う機器（工程）を決め、遮断器ごとの電流の合計と余裕をグラフで確かめます">
+              電流の余裕
+            </button>
+          </div>
+          <div className="toolbar__group">
             <button type="button" onClick={copyAiPrompt} title="現在の図面と指示文をコピーします">AI用にコピー</button>
             <button type="button" onClick={() => setModal({ kind: 'paste' })} title="AIが返したJSONを貼り付けて読み込みます">JSONを貼り付け</button>
           </div>
@@ -1335,6 +1344,7 @@ function Editor() {
           }}
         />
       )}
+      {currentDialog && <CurrentDialog diagram={diagram} settings={settings} onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))} onClose={() => setCurrentDialog(false)} />}
       {printing && <PrintView diagram={diagram} issues={issues} options={printing} onDone={() => setPrinting(null)} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {picker && (

@@ -648,6 +648,11 @@ export interface DeviceDefinition {
   /** 負荷の定格電流[A]（モーターなど）。上流の保護機器との整合チェックに使う */
   loadCurrent?: NumOrParam;
   /**
+   * 動き始めの電流（モーターの始動電流など）。定格電流（loadCurrent）の ratio 倍が seconds 秒ほど流れるとみなす（概算）。
+   * 「電流の余裕」のグラフで、工程の切り替わりに動き始める機器の山として描く
+   */
+  inrush?: { ratio: number; seconds: number };
+  /**
    * 互いに異なる導体で給電されるべき端子のグループ。
    * 例: 三相モーター [['U','V','W']]、単相入力 [['L','N']]
    */

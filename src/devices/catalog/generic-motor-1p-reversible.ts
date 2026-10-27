@@ -124,6 +124,8 @@ const def: DeviceDefinition = {
   model: '1φ レバーシブルモーター',
   modelOf: (p) => `1φ${volt(p)}V ${ratingOf(p).w}W レバーシブルモーター`,
   category: 'load',
+  // 小形の単相コンデンサ誘導電動機の始動電流。代表値 3 倍・0.5 秒
+  inrush: { ratio: 3, seconds: 0.5 },
   description:
     '単相のレバーシブルモーター（コンデンサ運転形の誘導電動機、ギヤヘッド付き）。COM を電源の N 側、L 側を正転なら CW、逆転なら CCW へつなぎ替えて回す。' +
     '運転用のコンデンサ（付属品）は CW-CCW 間につないだ状態で描いている。CW と CCW に同時に電源を入れてはいけない（切り換えのリレー・電磁接触器にはインタロックを取る）。' +
