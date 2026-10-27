@@ -162,6 +162,14 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'fan', name: '換気ファン', keywords: ['ファン', '盤用換気扇'], test: named(/ファン/, 'load') },
   { id: 'robocylinder', name: 'ロボシリンダー', keywords: ['電動シリンダ', '電動アクチュエータ', 'IAI'], test: named(/^ロボシリンダー/) },
   { id: 'elecylinder', name: 'エレシリンダー', keywords: ['電動シリンダ', 'IAI'], test: named(/^エレシリンダー/) },
+  // 産業用ロボット（垂直多関節・スカラ・パラレルリンクなど。一般名称を「〜ロボット」にする）と、そのコントローラー
+  {
+    id: 'robot',
+    name: 'ロボット',
+    keywords: ['産業用ロボット', '垂直多関節', '多関節ロボット', 'スカラ', 'パラレルリンク', 'マニピュレータ'],
+    test: (d) => d.category === 'load' && /ロボット$/.test(d.name),
+  },
+  { id: 'robot-controller', name: 'ロボットコントローラー', keywords: ['ロボット制御装置', 'コントローラ'], test: named(/^ロボットコントローラー/) },
   // --- 操作・表示 ---
   { id: 'pushbutton', name: '押しボタンスイッチ', keywords: ['PB', '押釦'], test: named(/押しボタンスイッチ/, 'control') },
   { id: 'selector', name: 'セレクタスイッチ', keywords: ['切替スイッチ', 'COS'], test: named(/^セレクタスイッチ/) },
