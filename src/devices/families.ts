@@ -161,6 +161,13 @@ export const FAMILY_RULES: FamilyRule[] = [
     test: (d) => d.category === 'plc' && d.maker === 'KEYENCE' && /CPUユニット/.test(d.name),
     default: 'keyence.kv-8000.cpu',
   },
+  {
+    id: 'plc-cpu-omron',
+    name: 'PLC CPU（オムロン）',
+    keywords: ['シーケンサ', 'PLC', 'CPU', 'NX1P', 'Sysmac'],
+    test: (d) => d.category === 'plc' && d.maker === 'オムロン' && /CPUユニット/.test(d.name),
+    default: 'omron.nx1p2-1140dt',
+  },
   { id: 'remote-io', name: 'リモート I/O', keywords: ['EtherCAT', 'カプラ', 'リモートIO', '分散 I/O'], test: named(/通信ユニット（カプラ）/) },
   { id: 'plc-analog', name: 'PLC アナログ・温度ユニット', keywords: ['アナログ', '温調'], test: named(/^PLC .*(アナログ|温度)/), hidden: true },
   {
