@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-27（v0.6.36 電流の余裕）
+最終更新: 2026-10-27（v0.6.37 LR Mate 200iD の絵）
 
 ## 現在地
 
+- v0.6.37: ファナック LR Mate 200iD の絵を描き直し（関節の印をやめ、ボルト付きのカバー・円筒の陰影・付け根の陰・フランジ下向き）
 - v0.6.36: 電流の余裕（`settings.operation` の工程、src/check/protection.ts の `protectors`・`currentProfile`・`breaker-capacity`、`DeviceDefinition.inrush`、src/editor/CurrentDialog.tsx のグラフ）。`computeProtection` を protection.ts へ移した
 - v0.6.35（#73 の一部）: 盤の電源・保護（docs/power-catalog.md）、表示・操作・制御補助（control-catalog.md）、センサー（sensor-catalog.md）、モーター・駆動（drive-catalog.md）、オムロン PLC・端子台（omron-plc-catalog.md）、ファナック LR Mate 200iD（robot-catalog.md）。端子ごとの消費電流 `TerminalDef.loadCurrent`（`inputLoads`）
 - v0.6.34: ライセンスを Conneko License 1.1 に（企業での利用は試用・評価を含め事前に許諾、許諾を得た企業も第三者への提供は同意が必要、許諾はサポート・責任の引き受けを意味しない）。README・「Conneko について」・HTML のコメントも合わせた
