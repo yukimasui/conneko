@@ -37,7 +37,8 @@ Conneko の機器（ノード）は `src/devices/catalog/` に1機器1ファイ�
 - `x, y` は端子ネジの中心。`side` はそこから電線が出ていく向き（上の端子なら `top`）。
 - `id` はなるべく実機の端子印字に合わせる（JSON で AI が参照するため、分かりやすく安定した名前にする）。
 - `role` と電気的仕様:
-  - 電源の出力: `role: 'supply'` + `supply`
+  - 電源の出力: `role: 'supply'` + `supply`。一次側と絶縁された電源（トランスの二次・スイッチング電源の出力など）は `supply.isolated: true` を書く
+    （片側の導体を PE に接地する片側接地を地絡のエラーにしない。docs/power-catalog.md の「片側接地」）
   - 電力を受け取る端子（コイル、モーター、電源ユニット入力など）: `role: 'input'` + `accepts`
   - 保護機器・開閉器の一次側/二次側: `line` / `load`
   - 端子台など向きのない中継: `pass`

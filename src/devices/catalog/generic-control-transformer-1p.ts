@@ -121,7 +121,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: TY,
       side: 'top',
       role: 'supply',
-      supply: { system: 'AC', voltage: 100, conductor: 'N' },
+      supply: { system: 'AC', voltage: 100, conductor: 'N', isolated: true },
     },
     {
       id: 'OUT100',
@@ -132,7 +132,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: TY,
       side: 'top',
       role: 'supply',
-      supply: { system: 'AC', voltage: 100, conductor: 'L' },
+      supply: { system: 'AC', voltage: 100, conductor: 'L', isolated: true },
     },
     {
       id: 'OUT110',
@@ -143,7 +143,7 @@ const terminals = (p: ParamValues): TerminalDef[] => {
       y: TY,
       side: 'top',
       role: 'supply',
-      supply: { system: 'AC', voltage: 110, conductor: 'L' },
+      supply: { system: 'AC', voltage: 110, conductor: 'L', isolated: true },
     },
   ];
 };

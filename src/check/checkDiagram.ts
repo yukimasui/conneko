@@ -207,6 +207,17 @@ function checkSupplyConflicts(m: Model, push: Push): Set<string> {
     if (c.kind === 'conflict') {
       conflictRoots.add(g);
       push({ severity: 'error', rule: c.rule, message: c.message, devices: c.devices, wires, key: `${c.rule}:${g}` });
+    } else if (c.kind === 'ok' && c.bonded) {
+      // 絶縁された電源の片側接地（機能接地）。エラーにはせず知らせる
+      const names = [...new Set(c.bonded.map((s) => terminalName(m, s.terminal)))];
+      push({
+        severity: 'info',
+        rule: 'one-side-ground',
+        message: `片側接地: ${names.join('・')}（${[...new Set(c.bonded.map(supplyLabel))].join('・')}）を接地(PE)につないでいます（絶縁された電源の機能接地）`,
+        devices: [...new Set(c.bonded.map((s) => s.device))],
+        wires,
+        key: `one-side-ground:${g}`,
+      });
     } else if (c.kind === 'ok' && c.parallel.length > 1) {
       push({ severity: 'warning', rule: 'parallel-source', message: `複数の電源（${c.parallel.join(', ')}）の出力が並列につながっています`, devices: c.parallel, wires, key: `parallel-source:${g}` });
     }
@@ -224,7 +235,8 @@ function checkInputs(m: Model, push: Push) {
     const p = m.potentialOf(k);
     const wires = (m.wiresAt.get(k) ?? []).map((w) => w.id);
     if (t.role === 'ground') {
-      if (p.kind === 'ok' && p.supply.conductor !== 'PE') {
+      // 片側接地したグループ（bonded）の接地端子は、絶縁された電源の接地した導体とつながっていてよい
+      if (p.kind === 'ok' && p.supply.conductor !== 'PE' && !p.bonded) {
         push({ severity: 'error', rule: 'ground-fault', message: `地絡: ${device.id} の接地端子 ${t.id} が ${supplyLabel(p.supply)} につながっています`, devices: [device.id], wires, key: `ground-live:${k}` });
       } else if (p.kind === 'none') {
         push({ severity: 'warning', rule: 'ground-floating', message: `${device.id}: 接地端子 ${t.id} が電源の接地(PE)までつながっていません`, devices: [device.id], wires, key: `ground-floating:${k}` });
@@ -238,15 +250,17 @@ function checkInputs(m: Model, push: Push) {
       continue;
     }
     if (p.kind === 'conflict') continue;
-    const s = p.supply;
-    if (s.conductor === 'PE') {
+    if (p.supply.conductor === 'PE') {
       push({ severity: 'error', rule: 'ground-fault', message: `${where} が接地(PE)につながっています`, devices: [device.id], wires, key: `input-pe:${k}` });
       continue;
     }
     // 複数の受電条件（AC/DC 両用など）は、いずれかを満たせばよい。満たさない場合は種別の合うものとの違いを示す
-    const fits = (a: (typeof info.accepts)[number]) =>
-      a.system === s.system && s.voltage >= a.minVoltage && s.voltage <= a.maxVoltage && (a.conductors ?? DEFAULT_CONDUCTORS[a.system]).includes(s.conductor);
-    if (info.accepts.some(fits)) continue;
+    const fitsWith = (x: typeof p.supply) => (a: (typeof info.accepts)[number]) =>
+      a.system === x.system && x.voltage >= a.minVoltage && x.voltage <= a.maxVoltage && (a.conductors ?? DEFAULT_CONDUCTORS[a.system]).includes(x.conductor);
+    // 片側接地したグループには、接地した複数の電源の導体（トランスの二次の 0 と DC 電源の 0V など）が来ている。どれかに合えばよい
+    const candidates = p.bonded ?? [p.supply];
+    if (candidates.some((x) => info.accepts.some(fitsWith(x)))) continue;
+    const s = candidates.find((x) => info.accepts.some((a) => a.system === x.system)) ?? p.supply;
     const a = info.accepts.find((x) => x.system === s.system);
     const range = (x: (typeof info.accepts)[number]) => `${x.system}${x.minVoltage}〜${x.maxVoltage}V`;
     if (!a) {
@@ -289,6 +303,8 @@ function checkWireCurrents(m: Model, push: Push, protection: Map<string, number>
     const kt = key(w.to.device, w.to.terminal);
     const p = m.potentialOf(kf);
     if (p.kind !== 'ok' || p.supply.conductor === 'PE') continue;
+    // 片側接地したグループの接地線（接地端子・PE につながる電線）は、負荷電流の流れる電線ではないので確かめない
+    if (p.bonded && [w.from, w.to].some((r) => isEarth(m, key(r.device, r.terminal)))) continue;
     const prot = Math.max(protection.get(kf) ?? -1, protection.get(kt) ?? -1);
     if (!Number.isFinite(prot) || prot < 0) continue;
     const allowable = allowableCurrent(w.wireType, w.sizeSq);
@@ -355,8 +371,14 @@ function checkWireTerminals(m: Model, push: Push, protection: Map<string, number
 /** 負荷電流と保護 */
 function checkLoadProtection(m: Model, push: Push, protection: Map<string, number>) {
   for (const { device, def, r } of m.devices.values()) {
-    const powered = r.terminals.filter((t) => t.role === 'input' && m.potentialOf(key(device.id, t.id)).kind === 'ok');
-    if (!powered.length) continue;
+    const all = r.terminals.filter((t) => t.role === 'input' && m.potentialOf(key(device.id, t.id)).kind === 'ok');
+    if (!all.length) continue;
+    // 片側接地した導体（トランスの二次の 0・DC 電源の 0V）につながる端子は、保護しなくてよい（ほかの端子があればそちらで比べる）
+    const bonded = (t: { id: string }) => {
+      const p = m.potentialOf(key(device.id, t.id));
+      return p.kind === 'ok' && !!p.bonded;
+    };
+    const powered = all.some((t) => !bonded(t)) ? all.filter((t) => !bonded(t)) : all;
     const prot = (t: { id: string }) => protection.get(key(device.id, t.id)) ?? Infinity;
     const worst = Math.max(...powered.map(prot));
     if (!Number.isFinite(worst)) {
@@ -541,6 +563,12 @@ function checkOutputCurrents(m: Model, push: Push) {
   }
 }
 
+/** 接地端子、または接地(PE)の電源出力の端子 */
+function isEarth(m: Model, k: string): boolean {
+  const t = m.terminals.get(k)?.terminal;
+  return t?.role === 'ground' || m.supplies.get(k)?.conductor === 'PE';
+}
+
 /** 電線色（回路の種類ごとの慣例） */
 function checkWireColors(m: Model, push: Push) {
   // 電線だけでつながった端子の集まり（ネット）単位で、制御回路かどうかを判定する
@@ -573,10 +601,17 @@ function checkWireColors(m: Model, push: Push) {
     const k = key(w.from.device, w.from.terminal);
     const p = m.potentialOf(k);
     let circuit: CircuitKind | undefined;
+    // 片側接地したグループでは、接地線の色と、接地した電源の回路の色のどちらでもよい
+    const alts: CircuitKind[] = [];
+    const circuitOf = (x: { system: string }): CircuitKind => (x.system === 'DC' ? 'dc-control' : controlNets.has(find(k)) ? 'ac-control' : 'ac-main');
     if (p.kind === 'ok') {
       if (p.supply.conductor === 'PE') circuit = 'ground';
-      else if (p.supply.system === 'DC') circuit = 'dc-control';
-      else circuit = controlNets.has(find(k)) ? 'ac-control' : 'ac-main';
+      else circuit = circuitOf(p.supply);
+      if (p.bonded) {
+        const earth = [w.from, w.to].some((r) => isEarth(m, key(r.device, r.terminal)));
+        if (earth) circuit = 'ground';
+        alts.push('ground', ...p.bonded.map(circuitOf));
+      }
     } else {
       const toGround = [w.from, w.to].some((r) => m.terminals.get(key(r.device, r.terminal))?.terminal.role === 'ground');
       if (toGround) circuit = 'ground';
@@ -584,6 +619,7 @@ function checkWireColors(m: Model, push: Push) {
     if (!circuit) continue;
     const rule = CIRCUIT_COLOR_RULES.find((r) => r.circuit === circuit);
     if (!rule || rule.colors.length === 0 || rule.colors.includes(w.color)) continue;
+    if (alts.some((c) => CIRCUIT_COLOR_RULES.find((r) => r.circuit === c)?.colors.includes(w.color))) continue;
     const expected = rule.colors.map((c) => getWireColor(c)?.name ?? c).join('または');
     const actual = getWireColor(w.color)?.name ?? w.color;
     push({

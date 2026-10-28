@@ -274,14 +274,14 @@ export function buildFx5u32m(o: Fx5u32mOptions): DeviceDefinition {
           ...base,
           label: '24V', note: 'サービス電源 +24V（400mA。増設ユニットの消費分と共用）',
           role: 'supply' as TerminalRole,
-          supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.4, busRail: '24V' },
+          supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: 0.4, busRail: '24V', isolated: true },
         };
       case '0V':
         return {
           ...base,
           label: '0V', note: 'サービス電源 0V',
           role: 'supply' as TerminalRole,
-          supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: 0.4 },
+          supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: 0.4, isolated: true },
         };
       case 'S/S':
         return { ...base, label: 'S/S', note: '入力コモン（24V につなぐとシンク入力、0V につなぐとソース入力）', role: 'input' as TerminalRole, accepts: accepts24, optional: true };
