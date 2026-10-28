@@ -116,5 +116,6 @@ export function buildFuseHolder(n: 1 | 2): DeviceDefinition {
       },
     ],
     protectionCurrent: { param: 'ratedCurrent' },
+    schematic: { fuse: true },
   };
 }

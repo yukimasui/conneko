@@ -94,7 +94,7 @@ DXF
 | `contact-{no,nc,c}-{pushbutton,emergency,pull,limit}-do` | 直接開路動作の印（破線の左の丸に矢印）つきの接点。`links` の `directOpening: true` から決まる（v0.6.27） |
 | `coil` / `lamp` / `buzzer` | コイル（四角）/ 表示灯 / ブザー（半円） |
 | `motor-3p` / `motor-1p` | 電動機 |
-| `breaker-Np` / `elb-Np` / `contactor-Np` / `thermal-Np`（N = 1〜4） | 遮断器 / 漏電遮断器 / 電磁接触器の主接点 / 熱動素子 |
+| `breaker-Np` / `elb-Np` / `contactor-Np` / `thermal-Np` / `fuse-Np`（N = 1〜4） | 遮断器 / 漏電遮断器 / 電磁接触器の主接点 / 熱動素子 / ヒューズ（ヒューズホルダ。機器定義の `schematic.fuse`） |
 | `source-Np`（N = 2〜4） | 一次電源（R・S・T などの ○ の端子） |
 | 上の主回路の記号と電動機の `…-v` | 縦向き（主回路用）。上から下へ流れ、極は左から右へ 7.5mm 間隔。横向きの図形を y = −x の直線で映して作るので、接点の傾きは JIS の縦向きの形になり、文字は横書きのまま |
 | `terminal` / `ground` | 端子 / 接地 |

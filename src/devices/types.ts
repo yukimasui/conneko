@@ -60,6 +60,12 @@ export interface SupplySpec {
    * FX5U の DC24V サービス電源のように、端子から取り出す電流と装着したユニットの消費を合わせて容量と比べる
    */
   busRail?: string;
+  /**
+   * 一次側（商用電源）と絶縁された電源出力（制御用トランスの二次、スイッチング電源・PLC 電源ユニットのサービス電源の出力など）。
+   * 絶縁された電源の片側の導体（トランスの二次の 0、DC 電源の 0V など）を PE につなぐ片側接地（機能接地）は、地絡のエラーにしない
+   * （同じ電源の 2 つの導体をどちらも接地すると短絡のエラー）。省略時は絶縁されていない電源（商用電源など）として、接地すると地絡のエラー
+   */
+  isolated?: boolean;
 }
 
 /** 受電できる電源の条件（role: 'input' の端子に指定） */
@@ -817,6 +823,8 @@ export interface SchematicHint {
   actuator?: ContactActuator;
   /** 遮断器の極に漏電検出を付けて描く（漏電遮断器） */
   earthLeakage?: boolean;
+  /** 保護の経路（protects）をヒューズの記号で描く（ヒューズホルダ。分類は breaker のまま） */
+  fuse?: boolean;
   /** 明示する要素（コイル・表示灯・電動機・ブザー）。ここに書いた端子は自動の切り出しに使わない */
   elements?: { kind: 'coil' | 'lamp' | 'motor' | 'buzzer'; terminals: string[] }[];
 }

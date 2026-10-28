@@ -145,7 +145,7 @@ const def: DeviceDefinition = {
       y: OUT_Y,
       side: 'bottom',
       role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: { param: 'outputCurrent' } },
+      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: { param: 'outputCurrent' }, isolated: true },
     },
     {
       id: '+V2',
@@ -155,7 +155,7 @@ const def: DeviceDefinition = {
       y: OUT_Y,
       side: 'bottom',
       role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: { param: 'outputCurrent' } },
+      supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: { param: 'outputCurrent' }, isolated: true },
       optional: true,
     },
     {
@@ -166,7 +166,7 @@ const def: DeviceDefinition = {
       y: OUT_Y,
       side: 'bottom',
       role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: { param: 'outputCurrent' } },
+      supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: { param: 'outputCurrent' }, isolated: true },
     },
     {
       id: '-V2',
@@ -176,7 +176,7 @@ const def: DeviceDefinition = {
       y: OUT_Y,
       side: 'bottom',
       role: 'supply',
-      supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: { param: 'outputCurrent' } },
+      supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: { param: 'outputCurrent' }, isolated: true },
       optional: true,
     },
   ],

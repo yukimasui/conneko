@@ -46,8 +46,8 @@ export function buildPsa24(fan: boolean): DeviceDefinition {
   const ac = { system: 'AC' as const, minVoltage: 90, maxVoltage: 253 };
   const terminals: TerminalDef[] = ids.map((id, i): TerminalDef => {
     const base = { id, x: tx, y: n2(y0 + i * pitch), side: 'left' as const };
-    if (id.startsWith('+V')) return { ...base, label: '+24V', note: `24V 出力（1・2 は内部で接続。連続 ${current}A）`, role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: current }, ...(id === '+V2' ? { optional: true } : {}) };
-    if (id.startsWith('-V')) return { ...base, label: '0V', note: '0V 出力（3・4 は内部で接続）', role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: current }, ...(id === '-V2' ? { optional: true } : {}) };
+    if (id.startsWith('+V')) return { ...base, label: '+24V', note: `24V 出力（1・2 は内部で接続。連続 ${current}A）`, role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: current, isolated: true }, ...(id === '+V2' ? { optional: true } : {}) };
+    if (id.startsWith('-V')) return { ...base, label: '0V', note: '0V 出力（3・4 は内部で接続）', role: 'supply', supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: current, isolated: true }, ...(id === '-V2' ? { optional: true } : {}) };
     if (id === 'FG') return { ...base, label: 'FG', note: 'フレームグラウンド（機能接地）', role: 'ground' };
     return { ...base, label: id === 'N' ? 'AC(N)' : 'AC(L)', note: id === 'N' ? 'AC 入力ニュートラル（接地側）' : 'AC 入力ライブ（非接地側）', role: 'input', accepts: ac };
   });

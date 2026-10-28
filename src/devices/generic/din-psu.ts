@@ -117,7 +117,7 @@ function terminals(spec: DinPsuSpec, p: ParamValues): TerminalDef[] {
       y: outY,
       side: outSide,
       role: 'supply' as const,
-      supply: { system: 'DC' as const, voltage: 24, conductor: plus ? ('+' as const) : ('-' as const), limitCurrent: { param: 'outputCurrent' } },
+      supply: { system: 'DC' as const, voltage: 24, conductor: plus ? ('+' as const) : ('-' as const), limitCurrent: { param: 'outputCurrent' }, isolated: true },
       // 2 組目は渡り配線用なので未接続でも警告しない
       ...(id.endsWith('2') ? { optional: true } : {}),
     };

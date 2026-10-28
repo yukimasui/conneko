@@ -33,13 +33,13 @@ export interface WsvBreakerSpec {
   voltageText: string;
   /** 主端子ネジの半径[px]（M5 は 7、M8 は 8.5 程度） */
   screwR?: number;
+  /** 外形の高さ[mm]（省略時は 130。225/250A フレームは 165）。主端子ネジは上下の端から 9mm */
+  heightMm?: number;
   description: string;
   estimated?: string;
 }
 
-const H = 260;
 const TY_LINE = 18;
-const TY_LOAD = 242;
 
 /** XML として安全な文字列にする（パラメータ値を SVG に埋め込む用） */
 const esc = (v: unknown) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -133,6 +133,11 @@ const specLines = (x: number, y0: number, w: number, n: number) =>
 
 export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   const W = spec.widthMm * 2;
+  const H = (spec.heightMm ?? 130) * 2;
+  const TY_LOAD = H - 18;
+  // 高さ 130mm の配置で描いた前面（ハンドル・銘板）を、高い外形では上下の中央へずらす
+  const dy = (H - 260) / 2;
+  const shift = (body: string) => (dy ? `<g transform="translate(0 ${dy})">${body}</g>` : body);
   const pitch = spec.pitch * 2;
   const r = spec.screwR ?? 7;
   const lineIds = spec.poles === 3 ? ['1', '3', '5'] : ['1', '3'];
@@ -183,14 +188,14 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   <text x="${W - 8}" y="40" text-anchor="end" font-family="sans-serif" font-size="7" fill="#555">LINE</text>
   <text x="${W - 8}" y="${H - 34}" text-anchor="end" font-family="sans-serif" font-size="7" fill="#555">LOAD</text>
   <!-- 前面カバー（銘板・ハンドル部） -->
-  <rect x="6" y="46" width="${W - 12}" height="168" rx="4" fill="url(#face-{{uid}})" stroke="#a7a399" stroke-width="1"/>`;
+  <rect x="6" y="46" width="${W - 12}" height="${H - 92}" rx="4" fill="url(#face-{{uid}})" stroke="#a7a399" stroke-width="1"/>`;
 
     if (spec.poles === 2) {
       // 2極: ハンドルは左寄り、銘板・定格表示は右側（NF32-SV 2P と同じ配置）
       const hx = 28;
       const rx = 51;
       const rw = W - rx - 11;
-      return `${common}
+      return common + shift(`
   ${handle(hx)}
   <g stroke="#b3afa5" stroke-width="0.8"><path d="M14 180 H42 M14 186 H38 M14 192 H42"/></g>
   ${logo(56, 59, 0.87)}
@@ -207,7 +212,7 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   <text x="${rx}" y="179" font-family="sans-serif" font-size="${fitSize(spec.voltageText, rw, 4.2, 0.55)}" fill="#555">${esc(spec.voltageText)}</text>
   ${specLines(rx, 185, rw, 3)}
   <text x="${rx}" y="207" font-family="sans-serif" font-size="4.2" fill="#666">MADE IN JAPAN</text>
-`;
+`);
     }
 
     // 3極: ハンドルは中央、左に銘板、右に定格表示（NV は右上にテスト・漏電表示ボタン、定格表示は左下）
@@ -226,7 +231,7 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   <text x="11" y="137" font-family="sans-serif" font-size="4.4" fill="#555">PUSH TO TRIP</text>
   <text x="11" y="206" font-family="sans-serif" font-size="4.2" fill="#666">MADE IN JAPAN</text>`;
     if (elb) {
-      return `${common}
+      return common + shift(`
   ${handle(hx)}
   ${left}
   ${ratingBox(10, 148, Math.min(lw, 50), 42, rating, sens)}
@@ -237,9 +242,9 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   ${specLines(rx, 160, rw, 5)}
   <rect x="${W - 33}" y="190" width="18" height="18" rx="9" fill="none" stroke="#777" stroke-width="0.9"/>
   <text x="${W - 24}" y="202" text-anchor="middle" font-family="sans-serif" font-size="5.5" font-weight="bold" fill="#666">CCC</text>
-`;
+`);
     }
-    return `${common}
+    return common + shift(`
   ${handle(hx)}
   ${left}
   ${specLines(11, 176, lw, 4)}
@@ -251,7 +256,7 @@ export function buildWsvBreaker(spec: WsvBreakerSpec): DeviceDefinition {
   ${specLines(rx, 136, rw, 8)}
   <rect x="${W - 33}" y="190" width="18" height="18" rx="9" fill="none" stroke="#777" stroke-width="0.9"/>
   <text x="${W - 24}" y="202" text-anchor="middle" font-family="sans-serif" font-size="5.5" font-weight="bold" fill="#666">CCC</text>
-`;
+`);
   };
 
   const params: ParamDef[] = [
