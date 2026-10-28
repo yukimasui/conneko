@@ -26,6 +26,9 @@ export interface MsoTSpec {
 const LOAD_IDS = ['2/T1', '4/T2', '6/T3'];
 const LINE_IDS = ['1/L1', '3/L2', '5/L3'];
 
+/** サーマルリレーの補助接点を動かすもの（過負荷のトリップ）。コイルの動作とは別に切り換える */
+const THERMAL = 'thermal';
+
 /** サーマルリレーの絵の id を、電磁接触器の絵の id と重ならないように変える */
 const renameIds = (svg: string) => svg.replace(/-\{\{uid\}\}/g, '-th{{uid}}');
 
@@ -70,7 +73,8 @@ export function buildMsoT(spec: MsoTSpec): DeviceDefinition {
   const links: InternalLink[] = [
     ...mainLinks.map((l) => ({ ...l, protects: true })),
     ...mc.links.filter((l) => !mainLinks.includes(l)),
-    ...th.links.filter((l) => !l.protects),
+    // サーマルリレーの補助接点（95-96・97-98）は過負荷のトリップで切り換わる。コイルを入れても切り換わらないよう、別の動作の単位にする
+    ...th.links.filter((l) => !l.protects).map((l) => (l.switch ? { ...l, actor: THERMAL } : l)),
   ];
 
   const heater = spec.thermal.params?.find((p) => p.key === 'heater');
@@ -87,6 +91,7 @@ export function buildMsoT(spec: MsoTSpec): DeviceDefinition {
     svg,
     terminals,
     links,
+    internalLoads: [{ id: THERMAL, label: 'サーマルリレー（過負荷のトリップ）', terminals: ['95', '96'] }],
     params: heater ? [heater] : [],
     protectionCurrent: { param: 'heater' },
     loadCurrent: spec.contactor.loadCurrent,

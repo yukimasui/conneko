@@ -146,4 +146,15 @@ describe('三菱電機の主幹・電磁開閉器の定義', () => {
     expect(els.map((e) => e.kind)).toEqual(expect.arrayContaining(['coil', 'contactor', 'contact']));
     expect(els.find((e) => e.kind === 'contactor')?.pinOf).toMatchObject({ '1/L1': '1', '2/T1': '2' });
   });
+
+  it('MSO-T のサーマルリレーの接点（95-96・97-98）はコイルではなく過負荷のトリップで切り換わる（別の動作の単位）', () => {
+    const r = resolveDevice(getDeviceDefinition('mitsubishi.mso-t21.ac200v')!);
+    const thermal = r.links.filter((l) => ['95', '97'].includes(l.from));
+    expect(thermal.map((l) => [l.from, l.to, l.switch, l.actor])).toEqual([
+      ['95', '96', 'NC', 'thermal'],
+      ['97', '98', 'NO', 'thermal'],
+    ]);
+    // 電磁接触器の補助接点はコイルで切り換わる（actor なし）
+    expect(r.links.filter((l) => l.switch && !['95', '97'].includes(l.from)).every((l) => !l.actor)).toBe(true);
+  });
 });
