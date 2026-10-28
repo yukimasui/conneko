@@ -26,6 +26,7 @@ import { deviceModel, deviceSize, fixUnavailableParams } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { CurrentDialog } from './editor/CurrentDialog';
+import { BulkConnectDialog } from './editor/BulkConnectDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
 import { bomCsv, ioCsv, wireCsv } from './export/reports';
 import { renderSheetSvg } from './export/sheetSvg';
@@ -161,6 +162,9 @@ function Editor() {
   >(null);
   const [printDialog, setPrintDialog] = useState(false);
   const [currentDialog, setCurrentDialog] = useState(false);
+  /** まとめてつなぐ: 1 台目を選んで相手のクリックを待っている機器と、確認ダイアログを開いている 2 台 */
+  const [bulkFrom, setBulkFrom] = useState<string | null>(null);
+  const [bulk, setBulk] = useState<{ a: string; b: string } | null>(null);
   /** 前に印刷したときの設定（次に印刷ダイアログを開いたときの既定） */
   const [lastPrint, setLastPrint] = useState<PrintOptions | null>(null);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
@@ -881,6 +885,14 @@ function Editor() {
     [edges, nodes, setNodes, setEdges, showSheet],
   );
 
+  // まとめてつなぐの相手を待っているときは、Esc でやめる
+  useEffect(() => {
+    if (!bulkFrom) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setBulkFrom(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bulkFrom]);
+
   // --- 右クリックメニュー ---
   const onNodeContextMenu = useCallback(
     (e: React.MouseEvent, node: DeviceFlowNode) => {
@@ -893,6 +905,9 @@ function Editor() {
       const linkIds = def?.netLabel ? (node.selected ? nodes.filter((n) => n.selected).map((n) => n.id) : [node.id]) : [];
       const vertical = linkIds.every((id) => linkShape(nodes.find((n) => n.id === id)?.data.params).vertical);
       const counts = verticalLinkCounts(diagram, node.id, getDeviceDefinition);
+      // 2 台を選んでいれば、その 2 台をまとめてつなぐ
+      const picked = nodes.filter((n) => n.selected && !getDeviceDefinition(n.data.deviceType)?.netLabel).map((n) => n.id);
+      const selectedPair = picked.length === 2 ? picked : undefined;
       const items: MenuItem[] = [
         ...(plcDevices.has(node.id) ? [{ label: 'PLC エディタ（ユニット構成）…', onClick: () => openPlc(node.id, 'rack') }] : []),
         ...(ioDevices.has(node.id) ? [{ label: 'I/O 割付・接続を編集…', onClick: () => openPlc(node.id, 'io') }] : []),
@@ -925,6 +940,11 @@ function Editor() {
         ...(linkIds.length
           ? [{ label: vertical ? '↔ 横向きにする' : '↕ 縦向きにする', hint: 'V', onClick: () => toggleLinkOrientation(linkIds) }]
           : []),
+        ...(def?.netLabel
+          ? []
+          : selectedPair && selectedPair.includes(node.id)
+            ? [{ label: '選んだ 2 台をまとめてつなぐ…', separator: true, onClick: () => setBulk({ a: selectedPair[0], b: selectedPair[1] }) }]
+            : [{ label: 'ほかの機器とまとめてつなぐ…', separator: true, hint: '相手をクリック', onClick: () => setBulkFrom(node.id) }]),
         {
           label: node.data.mount ? '別のシートへ移動（親と一緒に）' : '別のシートへ移動',
           children: [
@@ -1237,6 +1257,11 @@ function Editor() {
             onConnectEnd={onConnectEnd}
             isValidConnection={isValidConnection}
             onNodeContextMenu={onNodeContextMenu}
+            onNodeClick={(_, node) => {
+              if (!bulkFrom || node.id === bulkFrom) return;
+              setBulk({ a: bulkFrom, b: node.id });
+              setBulkFrom(null);
+            }}
             onEdgeContextMenu={onEdgeContextMenu}
             onPaneContextMenu={onPaneContextMenu}
             connectionMode={ConnectionMode.Loose}
@@ -1258,6 +1283,14 @@ function Editor() {
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => (context.deviceSeverity.get(n.id) === 'error' ? '#ef4444' : '#94a3b8')} />
           </ReactFlow>
           {toast && <div className="toast">{toast}</div>}
+          {bulkFrom && (
+            <div className="toast is-sticky">
+              {bulkFrom} とまとめてつなぐ相手の機器をクリックしてください
+              <button type="button" onClick={() => setBulkFrom(null)}>
+                やめる（Esc）
+              </button>
+            </div>
+          )}
           </div>
         </main>
         <Inspector
@@ -1342,6 +1375,19 @@ function Editor() {
             setLastPrint(o);
             setPrinting(o);
           }}
+        />
+      )}
+      {bulk && (
+        <BulkConnectDialog
+          diagram={diagram}
+          a={bulk.a}
+          b={bulk.b}
+          wireDefaults={wireDefaults}
+          onApply={(next, message) => {
+            applyDiagram(next, message);
+            setBulk(null);
+          }}
+          onClose={() => setBulk(null)}
         />
       )}
       {currentDialog && <CurrentDialog diagram={diagram} settings={settings} onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))} onClose={() => setCurrentDialog(false)} />}

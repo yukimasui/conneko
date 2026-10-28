@@ -2603,3 +2603,65 @@ textarea {
 .current-chart__details table {
   margin-top: 4px;
 }
+
+/* --- まとめてつなぐ --- */
+.toast.is-sticky {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.toast.is-sticky button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+.bulk-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.bulk-dialog__dir {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 8px;
+  font-size: 14px;
+}
+.bulk-dialog__table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+.bulk-dialog__table th,
+.bulk-dialog__table td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.bulk-dialog__table th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: normal;
+}
+.bulk-dialog__table input {
+  width: auto;
+}
+.bulk-dialog__table tr.is-off td {
+  opacity: 0.45;
+}
+.bulk-dialog__wire {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bulk-dialog__swatch {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.bulk-dialog__empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px 0;
+}
