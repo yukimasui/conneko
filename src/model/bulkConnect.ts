@@ -6,6 +6,9 @@
  * - 端子の組: 相（R/L1/U/1・2 → 1 相目、S/L2/V/3・4 → 2 相目、T/L3/W/5・6 → 3 相目）、単相の L・N、DC の +・-、接地 PE で合わせる。
  *   出す側の相は、電源が来ていればその電位（R・S・T など）で決める。単相の L・N と相が合わないときは、並び順で合わせる
  *   （S・T 相から取ったブレーカーの二次側 → 電源ユニットの L・N など）
+ * - 電源の種類・電圧: 出す側に電源が来ていれば、受ける側の受電の条件（AC/DC・電圧の範囲・導体）に合う組だけにする。
+ *   名前で極の分からない受電端子（表示灯の X1・X2、コイルの A1・A2）は、条件に合う別々の導体を並び順でつなぐ。
+ *   単相 2 線の出力から電磁接触器へは、主接点ではなくコイルへつなぐ
  * - コネクタ: 同じ種類（または変換ケーブルが使える）コネクタどうしをケーブルでつなぐ
  * - すでに電線のある受ける側の端子にはつながない
  * - 電線の色は回路（主回路・操作回路・DC・接地）に合わせ、太さは出す側の上流の保護電流に合わせる
@@ -14,7 +17,8 @@ import { buildModel, key, type Model } from '../check/model';
 import { computeProtection } from '../check/protection';
 import { allowableCurrent, WIRE_TYPES, type CircuitKind } from '../data/wires';
 import { connectorsMate } from '../devices/resolve';
-import type { Conductor, DeviceDefinition, TerminalDef } from '../devices/types';
+import type { ResolvedAccept } from '../devices/resolve';
+import type { Conductor, DeviceDefinition, PowerSystem, TerminalDef } from '../devices/types';
 import { CABLE_WIRE_TYPE, nextWireId, type Diagram, type DiagramWire, type TerminalRef } from './diagram';
 import type { WireAttrs } from './ops';
 import { wireFor } from './suggest';
@@ -80,6 +84,19 @@ interface End {
   slot?: Slot;
   /** 並び順（左から、同じなら上から） */
   order: number;
+  /** 出す側: 来ている（出している）電源の種類・電圧・導体。電源が来ていなければ省略 */
+  pot?: { system: PowerSystem; voltage: number; conductor: Conductor };
+  /** 受ける側: 受電できる電源の条件 */
+  accepts: ResolvedAccept[];
+}
+
+const DEFAULT_CONDUCTORS: Record<PowerSystem, Conductor[]> = { AC: ['R', 'S', 'T', 'L', 'N'], DC: ['+', '-'] };
+
+/** 出す側の電源が、受ける側の受電の条件（電源の種類・電圧・導体）に合うか。どちらかが分からなければ合うとみなす */
+function fits(o: End, i: End): boolean {
+  if (!o.pot || !i.accepts.length || o.pot.conductor === 'PE') return true;
+  const { system, voltage, conductor } = o.pot;
+  return i.accepts.some((a) => a.system === system && voltage >= a.minVoltage && voltage <= a.maxVoltage && (a.conductors ?? DEFAULT_CONDUCTORS[a.system]).includes(conductor));
 }
 
 const OUT_ROLES = new Set(['supply', 'load', 'pass']);
@@ -99,18 +116,24 @@ function ends(m: Model, device: string, side: 'out' | 'in'): End[] {
     // 受ける側は、まだ電線のない端子だけ
     if (side === 'in' && (m.wiresAt.get(k) ?? []).length) continue;
     let slot: Slot | undefined;
+    let pot: End['pot'];
+    if (side === 'out') {
+      const sp = m.supplies.get(k);
+      const p = m.potentialOf(k);
+      const s = sp ?? (p.kind === 'ok' ? p.supply : undefined);
+      if (s) pot = { system: s.system, voltage: s.voltage, conductor: s.conductor };
+    }
     if (isGround) slot = 'PE';
     else if (t.role === 'supply' && t.supply) slot = fromConductor(t.supply.conductor);
     else if (side === 'out') {
-      const p = m.potentialOf(k);
-      if (p.kind === 'ok') slot = fromConductor(p.supply.conductor);
+      if (pot) slot = fromConductor(pot.conductor);
     } else {
       // 受電の条件が DC の片側の極だけなら、その極
       const cs = [...new Set(m.terminals.get(k)?.accepts.flatMap((a) => (a.system === 'DC' ? (a.conductors ?? []) : ['AC'])) ?? [])];
       if (cs.length === 1 && (cs[0] === '+' || cs[0] === '-')) slot = cs[0];
     }
     slot ??= slotFromName(t);
-    out.push({ ref: { device, terminal: t.id }, terminal: t, slot, order: t.x * 1000 + t.y });
+    out.push({ ref: { device, terminal: t.id }, terminal: t, slot, order: t.x * 1000 + t.y, ...(pot ? { pot } : {}), accepts: side === 'in' ? (m.terminals.get(k)?.accepts ?? []) : [] });
   }
   return out.sort((a, b) => a.order - b.order);
 }
@@ -126,7 +149,13 @@ function circuitOf(slot: Slot, target: DeviceDefinition | undefined): CircuitKin
 
 function plan(m: Model, source: string, target: string, protection: Map<string, number>): BulkProposal[] {
   const outs = ends(m, source, 'out');
-  const ins = ends(m, target, 'in');
+  let ins = ends(m, target, 'in');
+  // 出す側の交流の導体が受ける側の一次側（主接点など）より少なく、受電の条件で合わせられる端子（コイルなど）があれば、そちらへつなぐ
+  // （単相 2 線のサーキットプロテクタ → 電磁接触器は、主接点ではなくコイル A1・A2 へ）
+  const acOuts = new Set(outs.filter((o) => o.pot?.system === 'AC' && o.slot && PHASE_ORDER.includes(o.slot)).map((o) => o.slot));
+  const lines = ins.filter((i) => i.terminal.role === 'line' && i.slot && PHASE_ORDER.includes(i.slot));
+  const coils = ins.filter((i) => i.terminal.role === 'input' && !i.slot && i.accepts.some((a) => a.system === 'AC'));
+  if (acOuts.size && acOuts.size < lines.length && coils.length && coils.length <= acOuts.size) ins = ins.filter((i) => i.terminal.role !== 'line');
   const proposals: BulkProposal[] = [];
   const usedIn = new Set<End>();
   const usedOut = new Set<End>();
@@ -151,7 +180,7 @@ function plan(m: Model, source: string, target: string, protection: Map<string, 
   // 1. 同じ鍵どうし（出す側のまだ使っていない端子、電線の少ない端子を先に使う）
   for (const i of ins) {
     if (!i.slot) continue;
-    const same = outs.filter((o) => o.slot === i.slot).sort((x, y) => wireCount(x) - wireCount(y));
+    const same = outs.filter((o) => o.slot === i.slot && fits(o, i)).sort((x, y) => wireCount(x) - wireCount(y));
     const o = same.find((x) => !usedOut.has(x)) ?? (i.slot === 'PE' || i.slot === '+' || i.slot === '-' ? same[0] : undefined);
     if (o) push(o, i, i.slot, SLOT_NAME[i.slot]);
   }
@@ -162,7 +191,36 @@ function plan(m: Model, source: string, target: string, protection: Map<string, 
     const byPhase = (a: End, b: End) => PHASE_ORDER.indexOf(a.slot!) - PHASE_ORDER.indexOf(b.slot!) || a.order - b.order;
     restOut.sort(byPhase);
     restIn.sort(byPhase);
-    restIn.forEach((i, n) => push(restOut[n], i, i.slot!, `${SLOT_NAME[restOut[n].slot!]} → ${i.terminal.label ?? i.terminal.id}`));
+    if (restIn.every((i, n) => fits(restOut[n], i))) restIn.forEach((i, n) => push(restOut[n], i, i.slot!, `${SLOT_NAME[restOut[n].slot!]} → ${i.terminal.label ?? i.terminal.id}`));
+  }
+  // 2a. 名前で極・相の分からない受電端子（表示灯の X1・X2、コイルの A1・A2 など）は、出す側の電源の種類・電圧で合わせる。
+  // 2 端子で受ける負荷（distinctGroups の組、なければ残りの受電端子）には、条件に合う別々の導体を並び順で（DC は + を先に）
+  // 主接点（一次側）につないだときは、コイルへはつながない（コイルは操作回路から）
+  const mainUsed = [...usedIn].some((i) => i.terminal.role === 'line');
+  const loose = mainUsed ? [] : ins.filter((i) => !usedIn.has(i) && !i.slot && i.terminal.role === 'input' && i.accepts.length);
+  if (loose.length) {
+    const groups = (targetDef?.distinctGroups ?? [])
+      .map((g) => g.map((id) => loose.find((i) => i.ref.terminal === id)).filter((i): i is End => !!i))
+      .filter((g) => g.length >= 2);
+    const grouped = new Set(groups.flat());
+    const rest = loose.filter((i) => !grouped.has(i));
+    if (rest.length >= 2) groups.push(rest);
+    const rank = (o: End) => ['p1', 'p2', 'p3', 'L', 'N', '+', '-'].indexOf(o.slot ?? '') * 100 + wireCount(o);
+    for (const g of groups) {
+      const chosen: End[] = [];
+      for (const i of g) {
+        const o = outs
+          .filter((x) => x.pot && x.slot !== 'PE' && fits(x, i) && !chosen.some((c) => c.pot!.conductor === x.pot!.conductor))
+          .sort((x, y) => Number(usedOut.has(x)) - Number(usedOut.has(y)) || rank(x) - rank(y))[0];
+        if (!o) break;
+        chosen.push(o);
+      }
+      if (chosen.length !== g.length) continue;
+      g.forEach((i, n) => {
+        const o = chosen[n];
+        push(o, i, o.slot!, `${o.pot!.system}${o.pot!.voltage}V ${o.pot!.conductor === '+' ? '+' : o.pot!.conductor === '-' ? '−' : o.pot!.conductor} → ${i.terminal.label ?? i.terminal.id}`);
+      });
+    }
   }
   // 2b. 受ける側が端子台（上下の端子が導通する組）なら、残った交流の端子を、空いている組の片側へ並び順で
   const left = outs.filter((o) => !usedOut.has(o) && o.slot && PHASE_ORDER.includes(o.slot));

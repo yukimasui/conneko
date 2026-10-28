@@ -98,4 +98,45 @@ describe('まとめてつなぐの接続案', () => {
   it('向きを決めて出すこともできる（fixed）', () => {
     expect(proposeConnections({ devices, wires: [] }, 'M1', 'MC1', lookup, true).proposals).toEqual([]);
   });
+
+});
+
+describe('電源の種類・電圧から推定する', () => {
+  const devices: Diagram['devices'] = [
+    { id: 'SRC', type: 'generic.power-source.3p200v', x: 0, y: 0 },
+    { id: 'CP1', type: 'mitsubishi.cp30-ba.2p', x: 0, y: 0 },
+    { id: 'MC1', type: 'mitsubishi.s-t12.ac200v', x: 0, y: 0 },
+    { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+    { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 0, y: 0 },
+    { id: 'CR1', type: 'omron.my2n.ac100', x: 0, y: 0 },
+    { id: 'CR2', type: 'omron.my2n.dc24', x: 0, y: 0 },
+  ];
+  const fed: Diagram = { devices, wires: [w('SRC.S', 'CP1.1'), w('SRC.T', 'CP1.3')] };
+
+  it('単相 2 線のサーキットプロテクタから電磁接触器へは、主接点ではなくコイル A1・A2 へ', () => {
+    expect(pairs(fed, 'CP1', 'MC1').pairs).toEqual(['CP1.2-MC1.A1', 'CP1.4-MC1.A2']);
+  });
+
+  it('DC24V 電源から表示灯へは、名前で極の分からない X1・X2 に + と − を並び順で', () => {
+    expect(pairs(fed, 'PSU1', 'PL1').pairs).toEqual(['PSU1.+V1-PL1.X1', 'PSU1.-V1-PL1.X2']);
+  });
+
+  it('電圧・種類の合わない組は出さない（AC200V → AC100V のコイル、DC24V → AC200V のコイル）', () => {
+    expect(pairs(fed, 'CP1', 'CR1').pairs).toEqual([]);
+    expect(pairs(fed, 'PSU1', 'MC1').pairs).toEqual([]);
+    expect(pairs(fed, 'PSU1', 'CR2').pairs.length).toBe(2);
+  });
+
+  it('推定した電線をつないだ図面は、電圧・極性・同相のエラーにならない', () => {
+    let d = fed;
+    for (const [a, b] of [
+      ['CP1', 'MC1'],
+      ['PSU1', 'PL1'],
+      ['PSU1', 'CR2'],
+    ]) {
+      d = applyProposals(d, proposeConnections(d, a, b, lookup).proposals, base);
+    }
+    const rules = checkDiagram(d, lookup).filter((i) => i.severity === 'error').map((i) => i.rule);
+    expect(rules).toEqual([]);
+  });
 });
