@@ -96,10 +96,15 @@ export const FAMILY_RULES: FamilyRule[] = [
   {
     id: 'mc',
     name: '電磁接触器',
-    keywords: ['マグネットスイッチ', 'マグネット', 'MC', 'コンタクタ'],
-    test: named(/^電磁接触器/),
+    keywords: ['マグネットスイッチ', 'マグネット', 'MC', 'コンタクタ', 'MSO', '電磁開閉器'],
+    // 電磁開閉器（電磁接触器にサーマルリレーを直結した MSO-T）も同じファミリーに入れ、「サーマルリレー」の観点で分ける
+    test: named(/^電磁(接触器|開閉器)/),
     default: 'mitsubishi.s-t21.ac200v',
-    facets: [{ label: '操作コイル', value: coil }, { label: 'フレーム', value: series }],
+    facets: [
+      { label: '操作コイル', value: coil },
+      { label: 'サーマルリレー', value: (d) => (/^電磁開閉器/.test(d.name) ? '付き（電磁開閉器）' : 'なし') },
+      { label: 'フレーム', value: series },
+    ],
   },
   { id: 'thr', name: 'サーマルリレー', keywords: ['THR', '過負荷'], test: named(/^サーマルリレー/), default: 'mitsubishi.th-t18' },
   { id: 'contactor-relay', name: 'コンタクタリレー', keywords: ['電磁継電器'], test: named(/^電磁継電器/), facets: [{ label: '操作コイル', value: coil }] },

@@ -184,7 +184,7 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
         y: SVC_Y[0],
         side: 'left',
         role: 'supply',
-        supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: o.serviceOutputA },
+        supply: { system: 'DC', voltage: 24, conductor: '+', limitCurrent: o.serviceOutputA, isolated: true },
       },
       {
         id: '24G',
@@ -193,7 +193,7 @@ export function buildRPowerSupply(o: RPowerSupplyOptions): DeviceDefinition {
         y: SVC_Y[1],
         side: 'left',
         role: 'supply',
-        supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: o.serviceOutputA },
+        supply: { system: 'DC', voltage: 24, conductor: '-', limitCurrent: o.serviceOutputA, isolated: true },
       },
     );
   }

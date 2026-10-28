@@ -175,6 +175,7 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
     const pairs = protectLinks.map((l) => [l.from, l.to] as [string, string]);
     const n = pairs.length;
     if (thermal) add(poles('thermal', `thermal-${n}p`, `熱動素子（${n} 極）`, pairs));
+    else if (hint.fuse) add(poles('breaker', `fuse-${n}p`, `ヒューズ（${n} 極）`, pairs));
     else
       add(poles('breaker', `${hint.earthLeakage ? 'elb' : 'breaker'}-${n}p`, `${hint.earthLeakage ? '漏電遮断器' : '遮断器'}（${n} 極）`, pairs));
   }

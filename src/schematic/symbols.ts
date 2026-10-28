@@ -238,6 +238,23 @@ function thermalElement(poles: number, pitch = POLE): SymbolDef {
   };
 }
 
+/** ヒューズ（多極。JIS C 0617 の長方形の中を電路が通る記号） */
+function fuseElement(poles: number, pitch = POLE): SymbolDef {
+  const primitives: Primitive[] = [];
+  for (let i = 0; i < poles; i++) {
+    const y = -i * pitch;
+    primitives.push(line([0, y], [LEN, y]), rect(2.5, y - 1, 7.5, y + 1));
+  }
+  const bottom = -(poles - 1) * pitch;
+  const { pins, attributes } = polePins(poles, pitch);
+  return {
+    description: `ヒューズ（${poles} 極）`,
+    primitives,
+    pins,
+    attributes: [...attributes, attr('TAG', [LINK_X, bottom - 4], TAG_TEXT)],
+  };
+}
+
 // ---- コイル・負荷 ----
 
 function coil(): SymbolDef {
@@ -525,8 +542,8 @@ export const LIBRARY_SYMBOL_IDS: string[] = [
   'motor-1p',
   'motor-3p-v',
   'motor-1p-v',
-  ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p`, `elb-${n}p`, `contactor-${n}p`, `thermal-${n}p`]),
-  ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p-v`, `elb-${n}p-v`, `contactor-${n}p-v`, `thermal-${n}p-v`]),
+  ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p`, `elb-${n}p`, `contactor-${n}p`, `thermal-${n}p`, `fuse-${n}p`]),
+  ...[1, 2, 3, 4].flatMap((n) => [`breaker-${n}p-v`, `elb-${n}p-v`, `contactor-${n}p-v`, `thermal-${n}p-v`, `fuse-${n}p-v`]),
   ...[2, 3, 4].flatMap((n) => [`source-${n}p`, `source-${n}p-v`]),
   'terminal',
   'ground',
@@ -560,11 +577,16 @@ function buildSymbol(id: string): SymbolDef | undefined {
     if (c[1] === 'c') return changeover(actuator, direct);
     return contact(c[1] === 'no' ? 'NO' : 'NC', actuator, direct);
   }
-  const p = /^(breaker|elb|contactor|thermal)-([1-4])p(-v)?$/.exec(id);
+  const p = /^(breaker|elb|contactor|thermal|fuse)-([1-4])p(-v)?$/.exec(id);
   if (p) {
     const n = Number(p[2]);
     const pitch = p[3] ? POLE_V : POLE;
-    const def = p[1] === 'thermal' ? thermalElement(n, pitch) : switchPoles(n, p[1] === 'contactor' ? 'contactor' : 'breaker', p[1] === 'elb', pitch);
+    const def =
+      p[1] === 'thermal'
+        ? thermalElement(n, pitch)
+        : p[1] === 'fuse'
+          ? fuseElement(n, pitch)
+          : switchPoles(n, p[1] === 'contactor' ? 'contactor' : 'breaker', p[1] === 'elb', pitch);
     return p[3] ? vertical(def) : def;
   }
   const src = /^source-([1-4])p(-v)?$/.exec(id);

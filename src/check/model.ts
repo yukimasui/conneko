@@ -83,10 +83,15 @@ export interface Supply {
   /** 電源出力の端子キー */
   terminal: string;
   kind: 'power' | 'ossd' | 'test';
+  /** 一次側と絶縁された電源出力（片側接地してよい。SupplySpec.isolated） */
+  isolated: boolean;
 }
 
-/** グループの電源状態 */
-export type Potential = { kind: 'none' } | { kind: 'ok'; supply: Supply } | { kind: 'conflict' };
+/**
+ * グループの電源状態。bonded は、絶縁された電源の片側の導体が接地(PE)につながった（片側接地した）グループで、
+ * 接地につながっている電源出力（PE を除く）。supply はその先頭（接地端子は地絡とせず、受電端子は bonded のどれかに合えばよい）
+ */
+export type Potential = { kind: 'none' } | { kind: 'ok'; supply: Supply; bonded?: Supply[] } | { kind: 'conflict' };
 
 /** 開閉する内部経路 */
 export interface SwitchLink {
@@ -168,7 +173,7 @@ export function terminalName(m: Model, k: string): string {
 
 export type Classified =
   | { kind: 'none' }
-  | { kind: 'ok'; supply: Supply; parallel: string[] }
+  | { kind: 'ok'; supply: Supply; parallel: string[]; bonded?: Supply[] }
   | { kind: 'conflict'; rule: string; message: string; devices: string[] };
 
 /** 同じグループにある電源出力の組み合わせから、電位と短絡などの矛盾を判定する */
@@ -180,7 +185,7 @@ export function classifySupplies(supplies: Supply[], name: (k: string) => string
   const hasPE = supplies.some((s) => s.conductor === 'PE');
   const nonPE = supplies.filter((s) => s.conductor !== 'PE');
   const safety = supplies.filter((s) => s.kind !== 'power');
-  if (hasPE && nonPE.length) return conflict('ground-fault', `地絡: 接地(PE)と ${supplyLabel(nonPE[0])} がつながっています`);
+  if (hasPE && nonPE.length) return classifyGrounded(nonPE, conflict);
   if (supplies.some((s) => s.system !== first.system)) return conflict('mixed-system', '混触: 交流(AC)と直流(DC)の電源がつながっています');
   if (supplies.some((s) => s.conductor !== first.conductor)) {
     if (safety.length) {
@@ -212,6 +217,26 @@ export function classifySupplies(supplies: Supply[], name: (k: string) => string
   }
   const powerDevices = [...new Set(supplies.filter((s) => s.conductor !== 'PE').map((s) => s.device))];
   return { kind: 'ok', supply: first, parallel: hasPE ? [] : powerDevices.length > 1 ? powerDevices : [] };
+}
+
+/**
+ * 接地(PE)と電源出力がつながったグループ。絶縁された電源（isolated）の片側の導体だけなら片側接地（機能接地）として電位を持ち、
+ * 絶縁されていない電源（商用電源の R・S・T・L・N など）・安全出力・テスト出力が含まれれば地絡、
+ * 同じ電源の別の導体（+ と -、0 と 100 など）が接地を通してつながれば短絡とする
+ */
+function classifyGrounded(nonPE: Supply[], conflict: (rule: string, message: string) => Classified): Classified {
+  const live = nonPE.find((s) => !s.isolated || s.kind !== 'power');
+  if (live) return conflict('ground-fault', `地絡: 接地(PE)と ${supplyLabel(live)} がつながっています`);
+  const byDevice = new Map<string, Supply[]>();
+  for (const s of nonPE) byDevice.set(s.device, [...(byDevice.get(s.device) ?? []), s]);
+  for (const [device, list] of byDevice) {
+    const kinds = [...new Map(list.map((s) => [`${s.conductor}:${s.voltage}`, s])).values()];
+    if (kinds.length > 1) {
+      return conflict('short-circuit', `短絡: ${device} の ${kinds.map(supplyLabel).join(' と ')} が接地(PE)を通してつながっています（片側接地は 1 つの導体だけにします）`);
+    }
+  }
+  // 電位の代表は DC の導体を先にする（PLC の入力のコモンの極性などは DC の 0V で判定する）
+  return { kind: 'ok', supply: nonPE.find((s) => s.system === 'DC') ?? nonPE[0], parallel: [], bonded: nonPE };
 }
 
 function kindName(s: Supply): string {
@@ -441,6 +466,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
       device: info.device.id,
       terminal: k,
       kind: t.supply.kind ?? 'power',
+      isolated: !!t.supply.isolated,
     });
   }
 
@@ -471,7 +497,7 @@ export function buildModel(diagram: Diagram, lookup: DefLookup, push: Push): Mod
       let p = potentials.get(g);
       if (!p) {
         const c = classifySupplies((allMembers.get(g) ?? []).flatMap((m) => supplies.get(m) ?? []), name);
-        p = c.kind === 'ok' ? { kind: 'ok', supply: c.supply } : c;
+        p = c.kind === 'ok' ? { kind: 'ok', supply: c.supply, ...(c.bonded ? { bonded: c.bonded } : {}) } : c;
         potentials.set(g, p.kind === 'conflict' ? { kind: 'conflict' } : p);
       }
       return p.kind === 'conflict' ? { kind: 'conflict' } : p;

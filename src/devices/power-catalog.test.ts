@@ -7,6 +7,8 @@ import type { Diagram, DiagramDevice, DiagramWire } from '../model/diagram';
 import { familyOf } from './families';
 import { getDeviceDefinition } from './registry';
 import { deviceModel, deviceSize } from './types';
+import { deviceElements } from '../schematic/elements';
+import { librarySymbol } from '../schematic/symbols';
 
 let seq = 0;
 const w = (from: string, to: string, sizeSq = 1.25): DiagramWire => {
@@ -185,6 +187,17 @@ describe('制御盤の電源・保護機器の電気チェック', () => {
 });
 
 describe('制御盤の電源・保護機器の定義', () => {
+  it('ヒューズホルダは展開図でヒューズの記号（fuse-Np）になる', () => {
+    for (const [type, n] of [['generic.fuse-holder.1p', 1], ['generic.fuse-holder.2p', 2]] as const) {
+      const el = deviceElements(getDeviceDefinition(type)!).find((e) => e.kind === 'breaker');
+      expect(el?.symbol, type).toBe(`fuse-${n}p`);
+      expect(el?.name).toContain('ヒューズ');
+    }
+    for (const id of ['fuse-1p', 'fuse-2p', 'fuse-3p-v']) expect(librarySymbol(id)?.description, id).toMatch(/^ヒューズ/);
+    // 遮断器は今までどおり遮断器の記号
+    expect(deviceElements(getDeviceDefinition('mitsubishi.cp30-ba.2p')!).find((e) => e.kind === 'breaker')?.symbol).toBe('breaker-2p');
+  });
+
   it('スイッチング電源の容量で大きさと型式が変わる', () => {
     const s8vk = getDeviceDefinition('omron.s8vk-g.dc24v')!;
     expect(deviceSize(s8vk, { outputCurrent: 0.65 })).toEqual({ width: 45, height: 180 });

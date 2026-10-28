@@ -96,6 +96,10 @@ export function protectors(m: Model, protection: Map<string, number>): Protector
     }
   }
 
+  const bondedAt = (k: string) => {
+    const p = m.potentialOf(k);
+    return p.kind === 'ok' && !!p.bonded;
+  };
   const out: Protector[] = [];
   const order = [...m.devices.keys()];
   for (const { device, def, r } of m.devices.values()) {
@@ -123,6 +127,8 @@ export function protectors(m: Model, protection: Map<string, number>): Protector
         }
         for (const e of adj.get(k) ?? []) {
           if (e.owner === device.id || seen.has(e.to)) continue;
+          // 片側接地した導体（接地を通してほかの電源の回路ともつながる）には進まない（その極の負荷は電圧側の極で数える）
+          if (bondedAt(e.to)) continue;
           seen.add(e.to);
           queue.push(e.to);
         }
