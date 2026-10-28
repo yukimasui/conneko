@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-28（v0.6.38 片側接地・三菱の主幹と開閉器）
+最終更新: 2026-10-28（v0.6.39 まとめてつなぐ）
 
 ## 現在地
 
+- v0.6.39: まとめてつなぐ（src/model/bulkConnect.ts の `proposeConnections`・`applyProposals`・`proposalWire`、src/editor/BulkConnectDialog.tsx、右クリックと相手のクリック）
 - v0.6.38（#74 の一部・#73 の一部）: `SupplySpec.isolated` と片側接地（`one-side-ground`、`classifyGrounded`）、三菱 NV125/NF250/NV250-SV・S-T35〜T100・MSO-T・UT-AX、ヒューズの記号（`fuse-Np`）。MSO-T のサーマルの接点は `actor: 'thermal'`
 - v0.6.37: ファナック LR Mate 200iD の絵を描き直し（関節の印をやめ、ボルト付きのカバー・円筒の陰影・付け根の陰・フランジ下向き）
 - v0.6.36: 電流の余裕（`settings.operation` の工程、src/check/protection.ts の `protectors`・`currentProfile`・`breaker-capacity`、`DeviceDefinition.inrush`、src/editor/CurrentDialog.tsx のグラフ）。`computeProtection` を protection.ts へ移した
