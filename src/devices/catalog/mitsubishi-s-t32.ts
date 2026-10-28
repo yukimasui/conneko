@@ -1,11 +1,12 @@
-import type { DeviceDefinition } from '../types';
-import { COIL_AC200V, coilBlock, defs, logo, mark, screw, slot } from '../mitsubishi/ms-t';
+import type { DeviceDefinition, InternalLink, ParamValues, TerminalDef } from '../types';
+import { auxTerminal, COIL_AC200V, coilBlock, defs, logo, mark, screw, slot } from '../mitsubishi/ms-t';
 
 /**
  * 三菱電機 電磁接触器 S-T32（MS-T シリーズ、操作コイル AC200V、補助接点なし）。
  * 外形は 幅43 × 高さ81 × 奥行81mm（1mm ≒ 2px）。端子位置はカタログ L(NA)02030ENG-K p.59 の外形図による。
  * 上部の一段高いブロックに操作コイル端子 A2・A1、本体に主回路端子（M4）上 1/L1・3/L2・5/L3、下 2/T1・4/T2・6/T3。
- * 補助接点は標準で付かない（前面に UT-AX2 / UT-AX4 を取り付ける。この定義では表さない）。
+ * 補助接点は標準で付かない。前面に付ける補助接点ユニット UT-AX2（1a1b）・UT-AX4（2a2b）を params の auxUnit で選べる
+ * （ユニットの端子番号 53-54・61-62・71-72・83-84 と位置は推定。部品表にはユニットを別の行で載せる）。
  */
 
 const W = 86;
@@ -16,6 +17,49 @@ const MAIN_BOT = 141;
 const COIL_Y = 14;
 const A2_X = 28;
 const A1_X = 58.5;
+
+/** 前面の補助接点ユニット（UT-AX2 1a1b / UT-AX4 2a2b）の接点。a 接点 53-54・83-84、b 接点 61-62・71-72（端子番号は推定） */
+const AUX_UNITS: Record<string, { model: string; contacts: { a: string; b: string; kind: 'NO' | 'NC' }[] }> = {
+  'ut-ax2': {
+    model: 'UT-AX2 1a1b',
+    contacts: [
+      { a: '53', b: '54', kind: 'NO' },
+      { a: '61', b: '62', kind: 'NC' },
+    ],
+  },
+  'ut-ax4': {
+    model: 'UT-AX4 2a2b',
+    contacts: [
+      { a: '53', b: '54', kind: 'NO' },
+      { a: '61', b: '62', kind: 'NC' },
+      { a: '71', b: '72', kind: 'NC' },
+      { a: '83', b: '84', kind: 'NO' },
+    ],
+  },
+};
+const UNIT_TOP = 76;
+const UNIT_BOT = 106;
+const unitOf = (p: ParamValues) => AUX_UNITS[String(p.auxUnit)];
+const unitXs = (n: number) => (n === 2 ? [30, 56] : [19, 35, 51, 67]);
+
+/** 前面に付けた補助接点ユニットの絵 */
+const unitSvg = (p: ParamValues) => {
+  const u = unitOf(p);
+  if (!u) return '';
+  const xs = unitXs(u.contacts.length);
+  return `
+  <!-- 補助接点ユニット ${u.model} -->
+  <rect x="10" y="${UNIT_TOP - 12}" width="${W - 20}" height="${UNIT_BOT - UNIT_TOP + 24}" rx="2.5" fill="url(#body-{{uid}})" stroke="#8e897c" stroke-width="0.9"/>
+  ${xs.map((x) => screw(x, UNIT_TOP, 4.4) + screw(x, UNIT_BOT, 4.4)).join('')}
+  ${u.contacts
+    .map(
+      (c, i) => `
+  <text x="${xs[i]}" y="${UNIT_TOP + 10.5}" text-anchor="middle" font-family="sans-serif" font-size="3.6" font-weight="bold" fill="#222">${c.a}</text>
+  <text x="${xs[i]}" y="${UNIT_BOT - 7}" text-anchor="middle" font-family="sans-serif" font-size="3.6" font-weight="bold" fill="#222">${c.b}</text>`,
+    )
+    .join('')}
+  <text x="${W / 2}" y="${(UNIT_TOP + UNIT_BOT) / 2 + 1.5}" text-anchor="middle" font-family="sans-serif" font-size="3.6" font-weight="bold" fill="#555">${u.model}</text>`;
+};
 
 const svg = `${defs}
   <!-- 背面の黒いベース -->
@@ -46,12 +90,12 @@ const def: DeviceDefinition = {
   category: 'contactor',
   description:
     '三菱電機 MS-T シリーズの電磁接触器（AC-3 220〜240V 7.5kW / 32A、操作コイル AC200V: 200〜240V）。幅43mm の小形の 32A 級で、補助接点は標準で付かない。' +
-    'A1-A2 にコイル電圧を加えると主接点 3 極が閉じる。自己保持・インタロック用の補助接点は前面に補助接点ユニット（UT-AX2・UT-AX4）を付けて取る（この定義には含まない）。',
+    'A1-A2 にコイル電圧を加えると主接点 3 極が閉じる。自己保持・インタロック用の補助接点は前面に補助接点ユニット（UT-AX2 1a1b・UT-AX4 2a2b）を付けて取る（パラメータ「補助接点ユニット」で選ぶ）。',
   labelPrefix: 'MC',
   width: W,
   height: H,
-  svg,
-  terminals: [
+  svg: (p) => svg + unitSvg(p),
+  terminals: (p): TerminalDef[] => [
     { id: '1/L1', hint: '一次側', x: MAIN_XS[0], y: MAIN_TOP, side: 'top', role: 'line' },
     { id: '3/L2', hint: '一次側', x: MAIN_XS[1], y: MAIN_TOP, side: 'top', role: 'line' },
     { id: '5/L3', hint: '一次側', x: MAIN_XS[2], y: MAIN_TOP, side: 'top', role: 'line' },
@@ -60,13 +104,40 @@ const def: DeviceDefinition = {
     { id: '6/T3', hint: '二次側', x: MAIN_XS[2], y: MAIN_BOT, side: 'bottom', role: 'load' },
     { id: 'A1', hint: 'コイル', x: A1_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
     { id: 'A2', hint: 'コイル', x: A2_X, y: COIL_Y, side: 'top', role: 'input', accepts: COIL_AC200V },
+    ...(() => {
+      const u = unitOf(p);
+      if (!u) return [];
+      const xs = unitXs(u.contacts.length);
+      const note = (k: 'NO' | 'NC') => `${k === 'NO' ? '補助 a 接点' : '補助 b 接点'}（${u.model}。端子番号は推定）`;
+      return u.contacts.flatMap((c, i) => [
+        { ...auxTerminal(c.a, xs[i], UNIT_TOP, 'top', c.kind, false, i + 1), note: note(c.kind) },
+        { ...auxTerminal(c.b, xs[i], UNIT_BOT, 'bottom', c.kind, false, i + 1), note: note(c.kind) },
+      ]);
+    })(),
   ],
   // 主接点の ratedCurrent は AC-3（AC220〜240V）の定格使用電流 32A
-  links: [
+  links: (p): InternalLink[] => [
     { from: '1/L1', to: '2/T1', directed: true, switch: 'NO', ratedCurrent: 32 },
     { from: '3/L2', to: '4/T2', directed: true, switch: 'NO', ratedCurrent: 32 },
     { from: '5/L3', to: '6/T3', directed: true, switch: 'NO', ratedCurrent: 32 },
+    ...(unitOf(p)?.contacts.map((c) => ({ from: c.a, to: c.b, switch: c.kind })) ?? []),
   ],
+  params: [
+    {
+      key: 'auxUnit',
+      label: '補助接点ユニット',
+      options: [
+        { value: 'none', label: 'なし' },
+        { value: 'ut-ax2', label: 'UT-AX2 1a1b' },
+        { value: 'ut-ax4', label: 'UT-AX4 2a2b' },
+      ],
+      default: 'none',
+    },
+  ],
+  accessories: (p) => {
+    const u = unitOf(p);
+    return u ? [{ model: u.model, name: '補助接点ユニット', spec: 'S-T32 の前面に取付', estimated: true }] : [];
+  },
   distinctGroups: [['A1', 'A2']],
   // コイル保持 4.5VA / 200V
   loadCurrent: 0.023,

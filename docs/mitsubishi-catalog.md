@@ -17,6 +17,9 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
 | `mitsubishi.nf125-sv.3p` | NF125-SV 3P | ノーヒューズ遮断器 WS-V 汎用品 100AF（125A は 125AF） | 90×130 | 15〜125A | 1/3/5・2/4/6（M8） | [B1] p.26、[B2] p.21 |
 | `mitsubishi.nv32-sv.3p` | NV32-SV 3P | 漏電遮断器 WS-V 汎用品 32AF | 75×130 | 5〜32A、感度 15/30/100・200・500mA | 1/3/5・2/4/6 | [B1] p.24 |
 | `mitsubishi.nv63-cv.3p` | NV63-CV 3P | 漏電遮断器 WS-V 経済品 50AF | 75×130 | 5〜63A、感度 30 / 100・200・500mA 切換 | 1/3/5・2/4/6 | [B1] p.24、[B2] p.28 |
+| `mitsubishi.nv125-sv.3p` | NV125-SV 3P | 漏電遮断器 WS-V 汎用品 100AF（125A は 125AF）。主幹用 | 90×130 | 15〜125A、感度 30 / 100・200・500mA 切換 | 1/3/5・2/4/6（M8） | [B5]、NF125-SV と同じ外形 [B1] p.26 |
+| `mitsubishi.nf250-sv.3p` | NF250-SV 3P | ノーヒューズ遮断器 WS-V 汎用品 225AF（250A は 250AF）。主幹用 | 105×165 | 125〜250A | 1/3/5・2/4/6。極間ピッチ 35mm・端子の位置は推定 | [B5] |
+| `mitsubishi.nv250-sv.3p` | NV250-SV 3P | 漏電遮断器 WS-V 汎用品 225AF（250A は 250AF）。主幹用 | 105×165 | 125〜250A、感度 30 / 100・200・500mA 切換 | 1/3/5・2/4/6。極間ピッチ 35mm・端子の位置は推定 | [B5] |
 | `mitsubishi.nf30-fa.2p` | NF30-FA 2P | 制御盤用ノーヒューズ遮断器（FA シリーズ）30AF、AC/DC 共用 | 40×72 | 5〜30A | 1/3・2/4（推定） | [B3] p.7・p.11 |
 | `mitsubishi.nf30-fa.3p` | NF30-FA 3P | 同上 | 60×72 | 5〜30A | 1/3/5・2/4/6 | [B3] p.3・p.7・p.11 |
 | `mitsubishi.nv30-fa.2p` | NV30-FA 2P | 制御盤用漏電遮断器（FA シリーズ）30AF、1φ2W | 40×72 | 5〜30A、感度 15/30mA | 1/3・2/4（推定） | [B3] p.7・p.11 |
@@ -34,7 +37,16 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
 | `mitsubishi.s-t20.ac200v` | S-T20 AC200V 1a1b | 電磁接触器（AC-3 18A）。S-T12 と同じ外形 | 44×75 | S-T12 と同じ | [K1] p.18・p.57 |
 | `mitsubishi.s-t21.ac200v` | S-T21 AC200V 2a2b | 電磁接触器（AC-3 25A） | 63×81 | 主回路は中央、補助は左 13・21 / 22・14、右 43・31 / 32・44 | [K1] p.18・p.58 |
 | `mitsubishi.s-t25.ac200v` | S-T25 AC200V 2a2b | 電磁接触器（AC-3 30A）。S-T21 と同じ外形 | 63×81 | S-T21 と同じ | [K1] p.19・p.58 |
-| `mitsubishi.s-t32.ac200v` | S-T32 AC200V | 電磁接触器（AC-3 32A）。補助接点なし | 43×81 | 1/L1 3/L2 5/L3 / 2/T1 4/T2 6/T3、A2・A1 | [K1] p.19・p.59 |
+| `mitsubishi.s-t32.ac200v` | S-T32 AC200V | 電磁接触器（AC-3 32A）。補助接点は標準でなし。前面の補助接点ユニット UT-AX2 1a1b・UT-AX4 2a2b をパラメータで選べる | 43×81 | 1/L1 3/L2 5/L3 / 2/T1 4/T2 6/T3、A2・A1。ユニットは 53-54・61-62（・71-72・83-84） | [K1] p.19・p.59、[K3] |
+| `mitsubishi.s-t35.ac200v` | S-T35 AC200V 2a2b | 電磁接触器 中容量（AC-3 220V 35A、コイル保持 10VA）。補助接点の端子番号・位置は推定 | 75×89 | S-T21 と同じ端子 ID（主回路は中央、補助は左 13・21 / 22・14、右 43・31 / 32・44） | [K4]・[K5] |
+| `mitsubishi.s-t50.ac200v` | S-T50 AC200V 2a2b | 電磁接触器 中容量（AC-3 220V 50A）。外形・コイル保持は S-T35 と同じとした推定 | 75×89 | 同上 | [K4]・[K5] |
+| `mitsubishi.s-t65.ac200v` | S-T65 AC200V 2a2b | 電磁接触器 中容量（AC-3 220V 65A）。コイル保持 14VA は推定 | 88×106 | 同上 | [K4]・[K5] |
+| `mitsubishi.s-t80.ac200v` | S-T80 AC200V 2a2b | 電磁接触器 中容量（AC-3 220V 80A）。コイル保持 14VA は推定 | 88×106 | 同上 | [K4]・[K5] |
+| `mitsubishi.s-t100.ac200v` | S-T100 AC200V 2a2b | 電磁接触器 中容量（AC-3 220V 100A）。外形は S-T80 と同じとした推定、コイル保持 18VA も推定 | 88×106 | 同上 | [K4] |
+| `mitsubishi.mso-t10.ac200v` | MSO-T10 AC200V | 電磁開閉器（盤組込用）= S-T10（1a）+ TH-T18 | 45×127（絵） | S-T10 の一次側・コイル・補助、TH-T18 の二次側・95-96・97-98 | [K1]、[K5] |
+| `mitsubishi.mso-t20.ac200v` | MSO-T20 AC200V | 電磁開閉器 = S-T20（1a1b）+ TH-T18 | 53×129（絵） | 同上（S-T20 + TH-T18） | [K1]、[K5] |
+| `mitsubishi.mso-t21.ac200v` | MSO-T21 AC200V | 電磁開閉器 = S-T21（2a2b）+ TH-T25。TH-T25 の補助接点の位置は推定 | 75×118（絵。実機 63×128） | 同上（S-T21 + TH-T25） | [K1]、[K5] |
+| `mitsubishi.mso-t25.ac200v` | MSO-T25 AC200V | 電磁開閉器 = S-T25（2a2b）+ TH-T25。TH-T25 の補助接点の位置は推定 | 75×118（絵） | 同上（S-T25 + TH-T25） | [K1]、[K5] |
 | `mitsubishi.sd-t12.dc24v` | SD-T12 DC24V 1a1b | 直流操作形電磁接触器 | 44×75 | S-T12 と同じ、A1(+)・A2(−) | [K1]（safety-catalog.md） |
 | `mitsubishi.sd-t20.dc24v` | SD-T20 DC24V 1a1b | 直流操作形電磁接触器（AC-3 18A、コイル 2.2W） | 44×75 | S-T20 と同じ、A1(+)・A2(−) | [K1] p.20・p.23・p.63 |
 | `mitsubishi.sd-t21.dc24v` | SD-T21 DC24V 2a2b | 直流操作形電磁接触器 | 63×81 | S-T21 と同じ、A1(+)・A2(−) | [K1]（safety-catalog.md） |
@@ -67,6 +79,14 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
   接点配列で端子番号が変わる（a 接点 13-14 と b 接点 11-12 など）ので、配列ごとに別の type にした（`buildSrT5`）。
 - **サーマルリレー**: S-T21 / S-T25 と組み合わせる TH-T25 を追加。
 - **インバーター**: 小形の汎用インバーターの代表として FR-E800 の三相 200V 0.75kW 標準品（国内向けの FM 出力タイプ -1）。
+- **主幹の大容量の遮断器**: 100A を超える盤の主幹として NV125-SV（NF125-SV と同じ外形）、225A フレームの NF250-SV・NV250-SV。
+  `buildWsvBreaker` に外形の高さ（`heightMm`）を足し、高さ 165mm の外形では前面（ハンドル・銘板）を上下の中央へずらして描く。
+- **中容量の電磁接触器**: S-T35・S-T50・S-T65・S-T80・S-T100（補助接点 2a2b 標準）。共通部品 `buildMsTMid`（`src/devices/mitsubishi/ms-t-mid.ts`）。
+  端子 ID は S-T21 と同じなので、「電磁接触器」のファミリーで機種を変えても電線はつながったまま。
+- **補助接点ユニット**: S-T32（補助接点なし）に前面の UT-AX2（1a1b）・UT-AX4（2a2b）をパラメータ「補助接点ユニット」で付けられる。
+  ユニットの接点は S-T32 のコイルで動く接点として表し（自己保持・インタロックに使える）、部品表にはユニットを付属品（`accessories`）として別の行で載せる。
+- **電磁開閉器 MSO-T**: MSO-T10・T20・T21・T25（盤組込用）。収録済みの電磁接触器とサーマルリレーの定義を組み合わせる共通部品 `buildMsoT`
+  （`src/devices/mitsubishi/mso-t.ts`）で作る。「電磁接触器」のファミリーに入れ、観点「サーマルリレー」（付き／なし）で選ぶ。
 
 ## 3. 電気的な表現
 
@@ -79,6 +99,9 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
   `loadCurrent` はコイルの保持電流（AC は保持 VA ÷ 200V、DC は消費電力 ÷ 24V）。
 - **電磁継電器 SR-T5**: 接点は `signal` + `switch: 'NO'` / `'NC'`（強制ガイドの指定はしていない）。接点定格は AC-15 AC240V 3A・DC-13 DC24V 3A。
 - **サーマルリレー**: 主回路は `protects: true`（`protectionCurrent` はヒーター呼び）、95-96 は `switch: 'NC'`、97-98 は `switch: 'NO'`。
+- **電磁開閉器 MSO-T**: 主回路は 1/L1 → 2/T1 などを「主接点とヒーターの直列」1 本の経路（`switch: 'NO'` + `protects: true`、`ratedCurrent` は接触器の AC-3、
+  `protectionCurrent` はヒーター呼び）で表す。展開図では主接点の記号になり、熱動素子の記号は出ない。サーマルリレーの 95-96・97-98 は接触器の補助接点と同じく、
+  機器が動作した状態（コイルに通電）で切り換わる接点として扱う（短絡の状態検査の上の簡略化）。
 - **インバーター**（category は `load`）:
   - R/L1・S/L2・T/L3 は `input`（AC170〜264V、`distinctGroups`）、`loadCurrent` は定格入力電流 7.0A（DC リアクトルなし・ND）。
   - U・V・W は `supply`（AC200V、R/S/T、`limitCurrent` は定格出力電流 5.0A）。モーターの端子をつなぐと電源が届くとみなす。
@@ -95,19 +118,27 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
 | `mitsubishi.nf30-fa.2p` / `mitsubishi.nv30-fa.2p` | 2 極品の端子記号（1/3・2/4）。3 極品の写真（[B3] p.3 の NF50-FAU、上 1・3・5、下 2・4・6）から推定 |
 | `mitsubishi.cp30-ba.3p` | 端子記号（1/3/5・2/4/6）。収録済みの 1P（1・2）・2P（1/3・2/4）の定義にそろえた |
 | `mitsubishi.th-t25` | 補助接点 98・97 の位置（96・95 の下側）。外形図の引出線から推定 |
+| `mitsubishi.nf250-sv.3p` / `mitsubishi.nv250-sv.3p` | 極間ピッチ 35mm と主端子ネジの位置（上下の端から 9mm）。外形 W105×H165 は販売店の仕様表 |
+| `mitsubishi.s-t35.ac200v` | 補助接点の端子番号（13-14・21-22・31-32・43-44）と位置、主回路・コイル端子の位置。外形・2a2b・コイル保持 10VA は販売店の仕様表 |
+| `mitsubishi.s-t50.ac200v` | 外形（S-T35 と同じ 75×89 とした）、コイル保持 10VA、補助接点の端子番号と位置 |
+| `mitsubishi.s-t65.ac200v` / `mitsubishi.s-t80.ac200v` | コイル保持 14VA、補助接点の端子番号と位置。外形 88×106・2a2b は販売店の仕様表 |
+| `mitsubishi.s-t100.ac200v` | 外形（S-T80 と同じとした）、コイル保持 18VA、補助接点の端子番号と位置 |
+| `mitsubishi.mso-t21.ac200v` / `mitsubishi.mso-t25.ac200v` | TH-T25 の補助接点 98・97 の位置（TH-T25 と同じ） |
 | `mitsubishi.fr-e820-0.75k` | 制御回路端子の位置。実機はカバー内のばね式端子台（[V1] 2.6.5）だが、図面で配線しやすいよう左右の縁に並べた。SD は 3 か所を 2 つ（SD・SD2）にまとめた |
+
+補助接点ユニット UT-AX2・UT-AX4 の端子番号（a 接点 53-54・83-84、b 接点 61-62・71-72）は資料で確かめられず推定
+（S-T32 の端子の説明と部品表の付属品に推定と出る。ユニットを付けないときの S-T32 は推定を含まない）。
 
 外形・端子の位置は外形図から 1mm = 2px で読み取った（読み取りの誤差は ±1px 程度）。
 
 ## 5. 表せなかったもの・収録しなかったもの
 
-- **補助接点ユニット UT-AX2 / UT-AX4 / UT-AX11**（電磁接触器・電磁継電器の前面・側面に付ける）: 接点の開閉が取り付けた接触器のコイルに連動するが、
-  今の仕組みでは別の機器の接点を「この機器のコイルで動く」と表せない（単独の機器にすると、短絡チェックの「1 台ずつ動作」で別の機器として扱われる）。
-  S-T32 は補助接点が標準で付かないので、自己保持などの補助接点が要る図面では表しきれない。
+- **補助接点ユニット UT-AX2 / UT-AX4 / UT-AX11**（電磁接触器・電磁継電器の前面・側面に付ける）: 接点の開閉が取り付けた接触器のコイルに連動するので、
+  単独の機器ではなく接触器のパラメータとして付ける。今は補助接点が標準で付かない S-T32 だけに付けられる（S-T10〜S-T50 の他の機種・UT-AX11 は未対応）。
 - **コイル電圧の違い**（AC24V・AC100V・AC400V、DC12V・DC100V など）: type に AC200V / DC24V を含めた。`loadCurrent` がパラメータの関数にできないため、
   コイル電圧をパラメータにするとコイル電流を正しく書けない。必要な電圧は `buildMsT20Frame` などで type を増やせる。
 - **NV32-SV 2P**: WS-V の NV32-SV は 3 極品だけ（単相 2 線も 3 極品で使う。[B2] p.30）なので作っていない。NV63-CV の 2 極品（1φ2W）は外形図を確認できず未収録。
-- **可逆形（S-2×T□）・開放形電磁開閉器（MSO-T□）**: 接触器とサーマルリレーを別々に置いて表す。機械的インタロック（UT-ML）は表せない。
+- **可逆形（S-2×T□）**: 接触器を 2 台置いて表す。機械的インタロック（UT-ML）は表せない。開放形電磁開閉器は MSO-T10〜T25 を収録した（T35 以上は未収録）。
 - **サーマルリレーと接触器の直結**: TH-T18 / TH-T25 を接触器の二次側に直結する場合も、図面では電線でつなぐ。
 - **インバーターの機能**: 入力端子の機能の割付け（Pr.178〜）、シンク/ソースの切換、電圧/電流入力の切換スイッチ、安全停止（STO）の 2 チャンネル入力の安全チェックは表していない。
 
@@ -122,6 +153,13 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
 - [B4] 三菱サーキットプロテクタ Y-0573 https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvcb/yn-c-0573/y0573k1603.pdf （p.4 仕様、p.8 外形図）
 - [K1] MS-T シリーズ カタログ L(NA)02030ENG-K https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l02030/L(NA)02030ENG-K.pdf
   （p.8 コイル呼び、p.18〜20 仕様一覧、p.23 直流操作コイル、p.33 ヒーター呼び、p.34・35 電磁継電器、p.57〜59・p.63 接触器の外形図、p.69 電磁継電器の外形図、p.70 サーマルリレーの外形図）
+- [B5] 三菱電機 FA 低圧遮断器の仕様ページ（NV125-SV・NF250-SV・NV250-SV）https://www.mitsubishielectric.co.jp/fa/products/faspec/detail.page?kisyu=/lvcb&formNm=NF-S_NF250-SV_5275&category=ex&id=spec
+  と販売店の仕様表（外形 W×H×D: NV125-SV 90×130×90、NF250-SV・NV250-SV 105×165×92、定格電流・定格感度電流）
+- [K3] UT-AX2 / UT-AX4 補助接点ユニット取扱要領書 https://www.mitsubishielectric.co.jp/fa/products/lvd/lvsw/support/QR/pdf/utax2utax4.pdf （接点構成。端子番号は確かめられなかった）
+- [K4] 三菱電機 低圧開閉器 製品特長・形式一覧 https://www.mitsubishielectric.co.jp/fa/products/lvd/lvsw/pmerit/lvmc/lineup.html （AC-3 220V の定格使用電流の区分 35〜100A）、
+  MS-T シリーズ中容量機種のお知らせ https://www.mitsubishielectric.co.jp/fa/document/sales/lvsw/108/108.pdf
+- [K5] 販売店の仕様表（S-T35 75×89×91mm・2a2b・S-2×T35 のコイル 常時 10VA、S-T65・S-T80 88×106mm・2a2b、MSO-T21 63×128×82mm、MSO-T10 1a・MSO-T20 1a1b・MSO-T21/T25 2a2b）、
+  MS-T 技術資料集 SH-020005（MSO-T の構成: T10・T20 は TH-T18、T21・T25 は TH-T25）
 - [K2] MS-T 技術資料 L(NA)02031ENG（ミラー接点）https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l02031eng/L(NA)02031ENG-L_21B.pdf
 - [V1] FR-E800 Instruction Manual (Connection) IB-0600865ENG-C https://eu-assets.contentstack.com/v3/assets/blt5412ff9af9aef77f/blt45e2f3922a086c8e/6172b59eb04cff6af9e6a2aa/6442e518-18ed-11eb-901c-b8ca3a62a094_ib0600865engc.pdf
   （2.4 端子接続図、2.5 主回路端子、2.6 制御回路端子、4.1 定格、4.4 外形寸法図）
