@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-10-28（v0.6.39 まとめてつなぐ）
+最終更新: 2026-10-28（v0.6.40 まとめてつなぐの電圧の推定）
 
 ## 現在地
 
+- v0.6.40: まとめてつなぐで電源の種類・電圧から推定（`fits`、名前で極の分からない受電端子・distinctGroups、単相 2 線 → 電磁接触器はコイルへ）
 - v0.6.39: まとめてつなぐ（src/model/bulkConnect.ts の `proposeConnections`・`applyProposals`・`proposalWire`、src/editor/BulkConnectDialog.tsx、右クリックと相手のクリック）
 - v0.6.38（#74 の一部・#73 の一部）: `SupplySpec.isolated` と片側接地（`one-side-ground`、`classifyGrounded`）、三菱 NV125/NF250/NV250-SV・S-T35〜T100・MSO-T・UT-AX、ヒューズの記号（`fuse-Np`）。MSO-T のサーマルの接点は `actor: 'thermal'`
 - v0.6.37: ファナック LR Mate 200iD の絵を描き直し（関節の印をやめ、ボルト付きのカバー・円筒の陰影・付け根の陰・フランジ下向き）
