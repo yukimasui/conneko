@@ -823,6 +823,8 @@ export interface SchematicHint {
   actuator?: ContactActuator;
   /** 遮断器の極に漏電検出を付けて描く（漏電遮断器） */
   earthLeakage?: boolean;
+  /** 保護の経路（protects）をヒューズの記号で描く（ヒューズホルダ。分類は breaker のまま） */
+  fuse?: boolean;
   /** 明示する要素（コイル・表示灯・電動機・ブザー）。ここに書いた端子は自動の切り出しに使わない */
   elements?: { kind: 'coil' | 'lamp' | 'motor' | 'buzzer'; terminals: string[] }[];
 }
