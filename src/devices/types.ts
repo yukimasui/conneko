@@ -450,8 +450,9 @@ export type SafetyInputMode = 'nc-nc' | 'nc-no' | 'ossd';
  * - kv: KEYENCE のリレー番号（16点 = 1チャネル。例: R000、R1015）
  * - hex: 16進（三菱 iQ-R・Q。例: X00、Y1F）
  * - octal: 8進（三菱 FX。例: X0、Y17）
+ * - omron: オムロンのチャネル.ビット（CIO。16点 = 1チャネル。例: 0.00、101.03）。入力と出力を別々に数える
  */
-export type IoFormat = 'kv' | 'hex' | 'octal';
+export type IoFormat = 'kv' | 'hex' | 'octal' | 'omron';
 
 /**
  * 増設ユニットの連結・ベースユニットへの装着（バス）。
@@ -478,7 +479,7 @@ export interface BusSpec {
     slotRoles?: Record<number, string>;
     /** 入出力番号の割付け */
     numbering?: {
-      /** 'shared': 入力と出力で同じ番号の並び（KV・iQ-R）、'separate': 入力と出力を別々に数える（FX5） */
+      /** 'shared': 入力と出力で同じ番号の並び（KV・iQ-R）、'separate': 入力と出力を別々に数える（FX5・オムロン CP） */
       mode: 'shared' | 'separate';
       /** 1 ユニットが占有する点数の単位（KV・iQ-R は 16、FX5 は 8） */
       unit: number;

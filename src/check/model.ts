@@ -150,6 +150,9 @@ const PROTOCOL_NAMES: Record<string, string> = {
   usb: 'USB',
   devicenet: 'DeviceNet',
   'cc-link': 'CC-Link',
+  'cc-link-ie-control': 'CC-Link IE Control',
+  'rs-422': 'RS-422',
+  'io-link': 'IO-Link',
 };
 export const protocolNames = (ps: string[]) => ps.map((p) => PROTOCOL_NAMES[p] ?? p).join('・');
 

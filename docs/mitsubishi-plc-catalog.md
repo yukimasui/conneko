@@ -251,3 +251,86 @@ https://dl.mitsubishielectric.com/dl/fa/document/manual/plcf/sh082452eng/sh08245
 - FX5U の入力電流（loadCurrent 0.5A）は消費電力 30W と力率からの概算。iQ-R 電源ユニットは最大入力皮相電力 ÷ 電圧の目安（パラメータで 100V/200V を選択）。
 - iQ-R 電源ユニットの規格値は第三者サイトに掲載された Module Configuration Manual の写しによる（三菱の公式ダウンロード URL を特定できなかった）。
 - FCN40↔MIL40 のピン対応はミスミの圧接フラットケーブル品の結線図による。メーカー・製品によっては異なる結線のケーブルもある。
+
+## 追加: インテリジェント機能ユニット・ネットワークユニット・コネクタ式 CPU・GOT（issue #75）
+
+生産技術の図面でよく使う iQ-R のユニット（Ethernet・CC-Link IE フィールド・アナログ入出力・高速カウンタ・位置決め）、
+iQ-F のアナログ入力ユニットとコネクタ式の CPU、タッチパネル GOT2000 を追加した。調査は 2026-11 時点。
+メーカーのサイト・PDF は直接取得できなかったため、検索で確かめられた製品ページ・マニュアルの記載と、Q シリーズとの互換の並びによる。
+確かめられなかった値は機器定義の `estimated` に書き、下の表の「推定」の列に書いた。
+
+| type | 型式 | 種類 | 主な仕様 | 推定 |
+|---|---|---|---|---|
+| `mitsubishi.rj71en71` | RJ71EN71 | iQ-R Ethernet インタフェースユニット | RJ-45 × 2（P1・P2、1000BASE-T）、32 点占有、DC5V 0.82A | なし |
+| `mitsubishi.rj71gf11-t2` | RJ71GF11-T2 | iQ-R CC-Link IE フィールド マスタ・ローカルユニット | RJ-45 × 2（P1・P2）、32 点占有、DC5V 0.82A | なし |
+| `mitsubishi.r60ad4` | R60AD4 | iQ-R アナログ入力 4ch | DC−10〜10V / 0〜20mA、18 点ネジ端子台（V+・V−・I+・SLD × 4、A.G.、FG）、16 点占有 | 推定: DC5V 0.23A |
+| `mitsubishi.r60da4` | R60DA4 | iQ-R アナログ出力 4ch | DC−10〜10V / 0〜20mA、外部供給 DC24V 0.14A、DC5V 0.16A、16 点占有 | 推定: 端子台の並び |
+| `mitsubishi.rd62p2` | RD62P2 | iQ-R 高速カウンタ 2ch（DC 入力・シンク出力） | 200kpps、40 ピンコネクタ、DC5V 0.11A、16 点占有 | 推定: ピン配置（QD62 互換の並び）、一致出力 0.5A/点 |
+| `mitsubishi.rd75p4` | RD75P4 | iQ-R 位置決め 4 軸（オープンコレクタ） | 40 ピンコネクタ × 2（軸 1・2 / 軸 3・4）、32 点占有 | 推定: ピンの 01〜11 番の並び、DC5V 0.6A |
+| `mitsubishi.fx5-4ad` | FX5-4AD | iQ-F アナログ入力 4ch（増設ケーブルタイプ） | DC−10〜10V / −20〜20mA、80µs/ch、DC5V 100mA・DC24V 40mA、X/Y は割り付けない | 推定: 端子台の上での並び |
+| `mitsubishi.fx5uc-32mt-d` | FX5UC-32MT/D | iQ-F コネクタ式 CPU（DC 電源、入力 16・シンク出力 16） | MIL 20 極 × 2、Y0〜Y3 0.3A・Y4〜 0.1A、Ethernet | 推定: コネクタのピン配置、8 点ごとの合計 0.8A、内部電源の容量、消費電流 |
+| `mitsubishi.gt2510-vtbd` | GT2510-VTBD | GOT2000 GT25 10.4 型タッチパネル | DC24V（+25%/−20%）約 12W、Ethernet・RS-232・RS-422/485・USB | なし（背面のインタフェースの並びは概念図） |
+
+### 共通部品
+
+- `src/devices/mitsubishi/iqr-parts.ts`: iQ-R のユニットの描画部品（本体と LED 表示部 `iqrBody`、18 点ネジ端子台 `tb18` / `tb18Svg`、
+  40 ピンコネクタ `fcn40Svg`、RJ-45 `rj45Svg`、三菱のピン番号からピンID `fcnPin`）。18 点ネジ端子台・40 ピンコネクタの寸法と番号は
+  既存の入出力ユニット（RX40C7・RX41C4）にそろえた（40 ピンのピンID は FCN40↔MIL40 変換ケーブルの千鳥番号、上の「FCN40 ↔ MIL40 の対応」）。
+- `buildIqrNetworkUnit`（`mitsubishi-rj71en71.ts`）: RJ-45 を 2 個持つ iQ-R のネットワークユニット。
+
+### 入出力番号の占有（インテリジェント機能ユニット・ネットワークユニット）
+
+- iQ-R のインテリジェント機能ユニット・ネットワークユニットは、外部端子が X/Y ではないが入出力番号を占有する（ユニットの X/Y はユニットレディなどの内部の信号）。
+  そこで `bus.io` を `{ reserve: 点数, format: 'hex' }` にした（R60AD4・R60DA4・RD62P2 は 16 点、RJ71EN71・RJ71GF11-T2・RD75P4 は 32 点）。
+  後ろのユニットの先頭番号は、この点数のぶんずれる（テストで確認: RX40C7・R60AD4・RJ71EN71・RD75P4・RX40C7 の順なら最後の RX40C7 は X60）。
+- iQ-F（FX5）のインテリジェント機能ユニットは X/Y の番号を割り付けない（占有点数 8 点は入出力点数の上限の計算にだけ数える）ので、FX5-4AD は `bus.io` を持たない。
+  増設ケーブルでつなぐユニットとして DC5V・DC24V の内部電源の消費（`bus.load`）だけを書いた。
+- FX5UC-32MT/D は FX5U と同じく増設ユニットの親（`numbering: { mode: 'separate', unit: 8 }`）。実機では FX5-C 形の増設ユニットを直接、
+  増設ケーブルタイプ（FX5-16EX/ES など）はコネクタ変換ユニット FX5-CNV-IFC を介してつなぐが、変換ユニットは描かない（説明に書いた）。
+
+### 電気的な表現
+
+- **アナログ入力**（R60AD4・FX5-4AD）: 電圧の + 端子（V+）に `signal: { dir: 'in', kind: 'analog-v', ref: 'CHnV-' }`、電流の + 端子（I+）に
+  `analog-i`。`ref` は信号の基準（R60AD4 は V−、FX5-4AD は COM）。基準が未配線・出力の基準とつながっていなければ `analog-return`、
+  電圧と電流の取り違えは `signal-kind` で指摘する（テストで確認）。電流入力のときに V+ と I+ を短絡する配線は、利用者が電線で描く。
+- **アナログ出力**（R60DA4）: V+ に `{ dir: 'out', kind: 'analog-v', ref: 'CHnCOM' }`、I+ に `analog-i`。外部供給電源 +24V・24G は `input`。
+- I/O 表（`src/model/io.ts`）は、これまで「開閉する出力（`switch: 'output'`）」だけを出力点にしていたが、アナログ出力（`signal.dir: 'out'` で `analog-v` / `analog-i`）も
+  出力点として出すようにした（KEYENCE の KV-SDA04・KV-AM40V の出力も出るようになる）。
+- **高速カウンタ**（RD62P2）: パルス入力・プリセット・ファンクションスタートは 24V・12V・5V の 3 ピンから入力電圧に合うものを使う。
+  I/O 表・展開図の入力点（`signal`）は 24V のピンだけに付け、12V・5V のピンは信号の種類なしの `signal` 端子にした。コモン ABCOM・CTRLCOM は +/− 共用の `input`。
+  一致出力 EQU1・EQU2 はシンクのトランジスタ出力（`switch: 'output'`、0V へ）、外部供給電源 12/24V・0V は `input`。ラベルは `CH1-ΦA 24V (B20)` のように
+  チャネル・信号・三菱のピン番号（I/O 表の番号の欄は `CH1-ΦA`）。
+- **位置決め**（RD75P4）: PULSE F・PULSE R（オープンコレクタ、50mA）と CLEAR（100mA）は PULSE COM・CLEAR COM（0V）への `switch: 'output'`（`npn`）。
+  FLS・RLS・DOG・STOP・CHG・PG0（24V）・READY は DC 入力（コモンは COM・PG0 COM・RDY COM、+/− 共用）。ラベルは `AX1-PULSE F (1A15)`。
+- **ネットワーク**: RJ71EN71 のポートは `['ethernet', 'slmp', 'cc-link-ie-control', 'cc-link-ie-field']`（ネットワークの種類をパラメータで切り換えるため）、
+  RJ71GF11-T2 は `['cc-link-ie-field']`、GOT の Ethernet は `['ethernet', 'slmp', 'ethernet-ip', 'modbus-tcp']`、RS-232 は `rs-232c`、RS-422/485 は `rs-422`・`rs-485`
+  （D-sub 9 ピン、`kind: 'DSUB9'`）。チェック結果の表示名に CC-Link IE Control・RS-422・IO-Link を足した（`src/check/model.ts`）。
+- **FX5UC-32MT/D**: 入力はシンク入力（/D 形）なので、入力コネクタの COM は DC24V の + だけを受ける（`conductors: ['+']`、NPN センサー用）。
+  出力はシンクのトランジスタで COM0（0V）へ。8 点ごとの合計電流は `commonLimits` の `outputs` で書いた（推定）。
+- **GOT2000**: VT5 と同じく正面図と背面のインタフェースの概念図。電源端子 +24V・0V・FG。分類は `control`、一般名称を「タッチパネルディスプレイ」にして既存のファミリー（`hmi`）に入れた。
+
+### 出典（検索で確かめた範囲）
+
+- RJ71EN71・RJ71GF11-T2: 三菱電機 FA 製品の仕様検索（占有入出力点数 32 点、内部消費電流 DC5V 0.82A）
+  - https://www.mitsubishielectric.com/fa/products/faspec/detail.page?kisyu=%2Fplcr&formNm=RJ71EN71_RJ71EN71_3359&lang=2&category=ex&id=spec
+  - https://www.mitsubishielectric.com/fa/products/faspec/detail.page?kisyu=%2Fplcr&formNm=RJ71GF11-T2_RJ71GF11-T2_3360&lang=2&category=ex&id=spec
+- R60AD4: MELSEC iQ-R Analog-Digital Converter Module User's Manual (Startup) SH-081232ENG（18 点端子台、SLD は 4・8・12・16 番、電流入力は V+ と I+ を短絡、A.G.・FG）
+  - https://dl.mitsubishielectric.com/dl/fa/document/manual/plc/sh081232eng/sh081232enge.pdf
+- R60DA4: MELSEC iQ-R Digital-Analog Converter Module User's Manual (Startup) SH-081235ENG（外部供給電源 DC24V +20%/−15% 0.14A、内部消費電流 DC5V 0.16A、+24V・24G・COM）
+  - https://dl.mitsubishielectric.com/dl/fa/document/manual/plc/sh081235eng/sh081235engd.pdf
+- RD62P2: MELSEC iQ-R High-Speed Counter Module User's Manual (Startup) SH-081239ENG（200kpps、DC5V 0.11A）
+- RD75P4・QD75P: MELSEC iQ-R Positioning Module User's Manual (Startup) SH-081243ENG、Type QD75P/QD75D Positioning Module User's Manual (Hardware)
+  （40 ピンコネクタ 2 個、A6CON1・2・4、1A12 RDY COM・1A13 CLEAR・1A14 CLEAR COM・1A15 PULSE F・1A16 PULSE COM・1A17 PULSE R・1A18 PULSE COM）
+- FX5-4AD: FX5-4AD Hardware Manual IB(NA)-0800574（4ch、80µs/ch、DC5V 100mA・DC24V 40mA、占有 8 点）、設置マニュアル（1 チャネル V+・I+・COM・空き）
+- FX5UC-32MT/D: MELSEC iQ-F FX5UC User's Manual (Hardware)（入力 DC24V 5.3mA、シンク、16 点 1 コモンの出力）
+- GT2510-VTBD: 三菱電機 GOT2000 製品ページ・セレクションガイド（DC24V +25%/−20%、Ethernet・RS-232（D-sub 9 ピン オス）・RS-422/485（D-sub 9 ピン メス）・USB、外形 W303 × H218 × D52mm）
+
+### 確かめられなかったこと・簡略化
+
+- R60DA4 の端子台の並び（1 チャネル V+・COM・I+・空き、17・18 が外部供給電源）、R60AD4 の DC5V 消費電流 0.23A は推定。
+- RD62P2 のピン配置は QD62（Q シリーズの高速カウンタ）の並びを当てはめた推定。一致出力の定格 0.5A/点も推定。
+- RD75P4 のピン 01〜11 番（外部入力・零点信号・READY）の並び、手動パルサ入力（19・20 番）は推定・省略。DC5V 0.6A も推定。
+- FX5-4AD の端子台の上での並び、FX5UC-32MT/D のコネクタのピン配置・内部電源・消費電流は推定。
+- CC-Link IE フィールドのリモート I/O（NZ2GF 形）は、端子台の配列を確かめられなかったため見送った（RJ71GF11-T2 の相手として次の候補）。
+- アナログ入出力のレンジ（4〜20mA・1〜5V など）はパラメータにせず、説明に書いた（チェックは電圧/電流の区別まで）。
+- RJ71EN71 のネットワークの種類の切り換えは、ポートの `protocols` に全部を並べて表した（設定による違いは区別しない）。
