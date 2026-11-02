@@ -124,7 +124,7 @@ describe('センサー（KEYENCE 以外）の機器定義', () => {
     expect(familyOf('panasonic.gx-f-h')?.name).toBe('近接センサ');
     expect(familyOf('omron.e2e-x.m12')?.name).toBe('近接センサ');
     expect(familyOf('smc.pf3w7')?.name).toBe('流量センサ');
-    expect(familyOf('omron.e6b2-cwz1x')?.members.map((m) => m.type).sort()).toEqual(['omron.e6b2-cwz1x', 'omron.e6b2-cwz6c']);
+    expect(familyOf('omron.e6b2-cwz1x')?.members.map((m) => m.type).sort()).toEqual(['omron.e6b2-cwz1x', 'omron.e6b2-cwz3e', 'omron.e6b2-cwz5b', 'omron.e6b2-cwz6c']);
   });
 });
 
