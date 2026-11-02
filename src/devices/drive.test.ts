@@ -75,12 +75,13 @@ describe('インバーター FR-E820 / FR-E820S', () => {
     expect(electrical(d)).toEqual([]);
   });
 
-  it('ファミリー「インバーター」で電源と容量を絞り込める', () => {
+  it('ファミリー「インバーター」でメーカー・シリーズ・電源・容量を絞り込める', () => {
     const f = familyOf('mitsubishi.fr-e820-1.5k')!;
     expect(f.name).toBe('インバーター');
-    expect(f.facets.map((x) => x.label)).toEqual(['電源', '容量']);
+    // FR-A800（三菱電機）・GA500（安川電機）が同じファミリーに入ったので、メーカーとシリーズの観点が加わる
+    expect(f.facets.map((x) => x.label)).toEqual(['メーカー', 'シリーズ', '電源', '容量']);
     const def = getDeviceDefinition('mitsubishi.fr-e820s-0.75k')!;
-    expect(f.facets.map((x) => x.value(def))).toEqual(['単相 200V', '0.75kW']);
+    expect(f.facets.map((x) => x.value(def))).toEqual(['三菱電機', 'FR-E800', '単相 200V', '0.75kW']);
   });
 });
 

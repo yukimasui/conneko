@@ -66,6 +66,8 @@ function connectorPins(d: DeviceDefinition): string | undefined {
   return n ? `${n} 極` : undefined;
 }
 /** 操作コイルの電圧（AC200V・DC24V など） */
+/** 安川電機 GA500 三相 200V の容量コード → 重負荷（HD）の適用モーター容量[kW] */
+const GA500_KW: Record<string, string> = { '001': '0.1', '002': '0.2', '004': '0.4', '006': '0.75', '010': '1.5', '012': '2.2', '021': '3.7' };
 const coil = (d: DeviceDefinition) => /\b(AC|DC)\s?(\d+)/.exec(d.model)?.slice(1, 3).join('').concat('V');
 
 export const FAMILY_RULES: FamilyRule[] = [
@@ -157,8 +159,15 @@ export const FAMILY_RULES: FamilyRule[] = [
     default: 'mitsubishi.fr-e820-0.75k',
     facets: [
       // 型式の末尾が S（FR-E820S など）は単相 200V 入力
-      { label: '電源', value: (d) => (/^FR-[A-Z]\d{3}S-/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-/.test(d.model) ? '三相 200V' : undefined) },
-      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') },
+      // 同じ容量の FR-E800 と FR-A800 を分ける
+      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
+      // 安川電機 GA500 は CIPR-GA50A2□□□（三相 200V）/ GA50AB□□□（単相 200V）
+      {
+        label: '電源',
+        value: (d) =>
+          /^FR-[A-Z]\d{3}S-|^CIPR-GA50AB/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-|^CIPR-GA50A2/.test(d.model) ? '三相 200V' : undefined,
+      },
+      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') ?? GA500_KW[/^CIPR-GA50A2(\d{3})/.exec(d.model)?.[1] ?? '']?.concat('kW') },
     ],
   },
   { id: 'servo-amp', name: 'サーボアンプ', keywords: ['サーボ', 'ドライバ', 'MELSERVO'], test: named(/^サーボアンプ/) },
