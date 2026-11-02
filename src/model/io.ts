@@ -75,7 +75,12 @@ export function compareAddress(a: string, b: string): number {
 export function hasIo(def: DeviceDefinition | undefined, params?: Record<string, number | string>): boolean {
   if (!def || def.category !== 'plc') return false;
   const r = resolveDevice(def, params);
-  return [...r.terminals, ...r.pins].some((t) => t.signal?.dir === 'in') || r.links.some((l) => l.switch === 'output');
+  return [...r.terminals, ...r.pins].some((t) => t.signal?.dir === 'in' || isAnalogOut(t)) || r.links.some((l) => l.switch === 'output');
+}
+
+/** アナログ出力の端子・ピン（出力ユニットの電圧・電流の + 側）。開閉する出力（switch: 'output'）と同じく I/O 点として数える */
+function isAnalogOut(t: { signal?: { dir: string; kind: SignalKind } }): boolean {
+  return t.signal?.dir === 'out' && (t.signal.kind === 'analog-v' || t.signal.kind === 'analog-i');
 }
 
 /** 指定した機器を含む PLC（親と装着したユニット）の I/O 一覧 */
@@ -93,7 +98,7 @@ export function ioSystem(d: Diagram, id: string, lookup: DefLookup): IoSystem | 
     const outputs = new Set(r.links.filter((l) => l.switch === 'output').map((l) => l.from));
     const points: IoPoint[] = [];
     for (const t of [...r.terminals, ...r.pins]) {
-      const dir = t.signal?.dir === 'in' ? 'in' : outputs.has(t.id) ? 'out' : undefined;
+      const dir = t.signal?.dir === 'in' ? 'in' : outputs.has(t.id) || isAnalogOut(t) ? 'out' : undefined;
       if (!dir || functionsOf(t).length) continue;
       const label = t.label ?? t.id;
       const k = key(dev.id, t.id);

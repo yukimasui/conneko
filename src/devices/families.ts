@@ -66,6 +66,8 @@ function connectorPins(d: DeviceDefinition): string | undefined {
   return n ? `${n} 極` : undefined;
 }
 /** 操作コイルの電圧（AC200V・DC24V など） */
+/** 安川電機 GA500 三相 200V の容量コード → 重負荷（HD）の適用モーター容量[kW] */
+const GA500_KW: Record<string, string> = { '001': '0.1', '002': '0.2', '004': '0.4', '006': '0.75', '010': '1.5', '012': '2.2', '021': '3.7' };
 const coil = (d: DeviceDefinition) => /\b(AC|DC)\s?(\d+)/.exec(d.model)?.slice(1, 3).join('').concat('V');
 
 export const FAMILY_RULES: FamilyRule[] = [
@@ -90,6 +92,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'cp', name: 'サーキットプロテクタ', keywords: ['CP'], test: named(/^サーキットプロテクタ/), default: 'mitsubishi.cp30-ba.2p', facets: [{ label: '極数', value: poles }] },
   { id: 'fuse', name: 'ヒューズホルダ', keywords: ['ヒューズ', '筒形ヒューズ', 'FUSE'], test: named(/^ヒューズホルダ/), default: 'generic.fuse-holder.2p', facets: [{ label: '極数', value: poles }] },
   { id: 'spd', name: 'サージ保護デバイス', keywords: ['SPD', '避雷器', 'サージプロテクタ', 'サージアブソーバ'], test: named(/^サージ保護デバイス/), default: 'generic.spd.1p', facets: [{ label: '相', value: paren }] },
+  { id: 'surge-killer', name: 'サージキラー', keywords: ['サージ吸収器', 'スパークキラー', 'CR', 'ダイオード', 'コイルサージ'], test: named(/^サージキラー/), default: 'generic.surge-killer.cr', facets: [{ label: '種類', value: paren }] },
   { id: 'noise-filter', name: 'ノイズフィルタ', keywords: ['ラインフィルタ', 'EMC フィルタ', 'NF'], test: named(/^ノイズフィルタ/), default: 'generic.noise-filter.1p', facets: [{ label: '相', value: paren }] },
   { id: 'transformer', name: '制御用トランス', keywords: ['トランス', '変圧器', '操作トランス', '絶縁トランス'], test: named(/^制御用トランス/) },
   // --- 開閉器・リレー ---
@@ -156,8 +159,15 @@ export const FAMILY_RULES: FamilyRule[] = [
     default: 'mitsubishi.fr-e820-0.75k',
     facets: [
       // 型式の末尾が S（FR-E820S など）は単相 200V 入力
-      { label: '電源', value: (d) => (/^FR-[A-Z]\d{3}S-/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-/.test(d.model) ? '三相 200V' : undefined) },
-      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') },
+      // 同じ容量の FR-E800 と FR-A800 を分ける
+      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
+      // 安川電機 GA500 は CIPR-GA50A2□□□（三相 200V）/ GA50AB□□□（単相 200V）
+      {
+        label: '電源',
+        value: (d) =>
+          /^FR-[A-Z]\d{3}S-|^CIPR-GA50AB/.test(d.model) ? '単相 200V' : /^FR-[A-Z]\d{3}-|^CIPR-GA50A2/.test(d.model) ? '三相 200V' : undefined,
+      },
+      { label: '容量', value: (d) => /-(\d+(?:\.\d+)?)K\b/.exec(d.model)?.[1]?.concat('kW') ?? GA500_KW[/^CIPR-GA50A2(\d{3})/.exec(d.model)?.[1] ?? '']?.concat('kW') },
     ],
   },
   { id: 'servo-amp', name: 'サーボアンプ', keywords: ['サーボ', 'ドライバ', 'MELSERVO'], test: named(/^サーボアンプ/) },
@@ -315,7 +325,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     facets: [
       { label: '切換え', value: (d) => paren(d) },
       { label: '取付け', value: (d) => d.name.split('・')[1] ?? '単体（ボディ配管）' },
-      { label: 'シリーズ', value: (d) => /^SY\d/.exec(d.model)?.[0]?.concat('000') },
+      { label: 'シリーズ', value: (d) => /^SY\d/.exec(d.model)?.[0]?.concat('000') ?? /^(4GA\d|F\d{2}|VX\d{2})/.exec(d.model)?.[1] },
     ],
   },
   {
@@ -326,7 +336,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     default: 'smc.ss5y3-41',
     facets: [
       { label: '配線', value: (d) => (d.bus?.host?.serial ? '通信（SI ユニット付き）' : '個別配線') },
-      { label: 'シリーズ', value: (d) => /^SS5Y(\d)/.exec(d.model)?.[1]?.replace(/^(\d)$/, 'SY$1000') },
+      { label: 'シリーズ', value: (d) => /^SS5Y(\d)/.exec(d.model)?.[1]?.replace(/^(\d)$/, 'SY$1000') ?? /^M(4GA\d)/.exec(d.model)?.[1] },
     ],
   },
   { id: 'manifold-blank', name: 'ブランクプレート（マニホールド用）', test: named(/^ブランクプレート/), hidden: true },

@@ -86,7 +86,8 @@ function withIoDefaults(def: DeviceDefinition, p: ParamValues): ParamValues {
   const io = def.bus?.io;
   if (!io || (p.ioIn !== undefined && p.ioOut !== undefined)) return p;
   const ioIn = Number(p.ioIn ?? 0) || 0;
-  const shared = io.format !== 'octal';
+  // 入力と出力を別々に数える表記（FX の 8 進・オムロンのチャネル）は、出力も 0 から
+  const shared = io.format !== 'octal' && io.format !== 'omron';
   const ioOut = p.ioOut !== undefined ? p.ioOut : shared ? ioIn + Math.ceil(((io.inputs ?? 0) + (io.reserve ?? 0)) / 16) * 16 : 0;
   return { ...p, ioIn, ioOut };
 }
@@ -193,17 +194,26 @@ export function cableStyle(c: ConnectorSpec): NonNullable<ConnectorSpec['style']
  * - kv: R + チャネル番号 + 2 桁のビット番号（n = 37 → 'R205'）
  * - hex: X/Y + 2 桁以上の 16 進（n = 31 → 'X1F'）
  * - octal: X/Y + 8 進（n = 15 → 'X17'）
+ * - omron: チャネル.ビット（n = 1621 → '101.05'。入力・出力で同じ書き方）
  */
 export function ioName(format: IoFormat, dir: 'in' | 'out', n: number): string {
   if (format === 'kv') return `R${Math.floor(n / 16)}${String(n % 16).padStart(2, '0')}`;
+  if (format === 'omron') return `${Math.floor(n / 16)}.${String(n % 16).padStart(2, '0')}`;
   const prefix = dir === 'in' ? 'X' : 'Y';
   if (format === 'hex') return prefix + n.toString(16).toUpperCase().padStart(2, '0');
   return prefix + n.toString(8);
 }
 
-/** ioName の逆変換（'R1000' → 160、'X20' → 32（hex）/ 16（octal））。読めなければ undefined */
+/** ioName の逆変換（'R1000' → 160、'X20' → 32（hex）/ 16（octal）、'102.00' → 1632（omron））。読めなければ undefined */
 export function parseIoName(format: IoFormat, text: string): number | undefined {
   const s = text.trim().toUpperCase();
+  if (format === 'omron') {
+    // チャネルだけ（'102'）はそのチャネルの 00 ビット
+    const m = /^(?:CIO\s*)?(\d+)(?:\.(\d{1,2}))?$/.exec(s);
+    if (!m) return undefined;
+    const bit = Number(m[2] ?? 0);
+    return bit < 16 ? Number(m[1]) * 16 + bit : undefined;
+  }
   if (/^\d+$/.test(s) && format !== 'kv') return parseInt(s, format === 'hex' ? 16 : 8);
   if (format === 'kv') {
     const m = /^R?(\d*?)(\d{1,2})$/.exec(s);

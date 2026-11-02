@@ -8,6 +8,11 @@
  *     出力 印加電圧 DC30V 以下・シンク電流 35mA 以下・残留電圧 0.4V 以下（35mA 時）、最高応答周波数 100kHz、逆接・負荷短絡保護付
  *   E6B2-CWZ1X（ラインドライバ出力）: 電源 DC5V ±5%、消費電流 160mA 以下、出力 RS-422A 準拠のラインドライバ（AM26LS31 相当。受信側は AM26LS32 相当）
  *   線色: 茶 = 電源（+Vcc）、黒 = A 相、白 = B 相、橙 = Z 相、青 = 0V（COMMON）。ラインドライバの反転出力は 黒/赤 = /A、白/赤 = /B、橙/赤 = /Z
+ *   E6B2-CWZ5B（PNP オープンコレクタ出力）: 電源 DC12V −10%〜24V +15%、消費電流 80mA 以下、
+ *     出力 印加電圧 DC30V 以下・ソース電流 35mA 以下・残留電圧 0.4V 以下（35mA 時）
+ *   E6B2-CWZ3E（電圧出力。出力抵抗 2kΩ のプルアップ付き NPN）: 電源 DC5V −5%〜12V +10%、消費電流 100mA 以下、
+ *     出力 シンク電流 20mA 以下・残留電圧 0.4V 以下（20mA 時）
+ *   （CWZ5B・CWZ3E の消費電流は資料の表の並びから読み取った値 = 推定。ソース電流・残留電圧も CWZ6C と同じ並びから読み取った）
  *   電源投入時に約 9A の突入電流（約 0.3ms）が流れる
  * 外形は正面（軸側）から見た姿を 1mm ≒ 1.6px で描き、ケーブルは本体の側面（図の下）から出る。
  */
@@ -16,7 +21,7 @@ import type { Lead } from '../keyence/sensor-parts';
 import { colorCable, striped, type ColorLead } from './parts';
 import { WIRE_HEX } from '../keyence/sensor-parts';
 
-export type E6b2Output = 'open-collector' | 'line-driver';
+export type E6b2Output = 'open-collector' | 'line-driver' | 'pnp' | 'voltage';
 
 const W = 110;
 const H = 178;
@@ -63,22 +68,97 @@ function body(model: string, res: number | string) {
   <text x="${CX}" y="${CY + 23.5}" text-anchor="middle" font-family="sans-serif" font-size="3" fill="#333">${res}P/R</text>`;
 }
 
-/** E6B2-C の機器定義（output: NPN オープンコレクタの E6B2-CWZ6C / ラインドライバの E6B2-CWZ1X） */
+interface E6b2Spec {
+  series: string;
+  type: string;
+  outName: string;
+  short: string;
+  vmin: number;
+  vmax: number;
+  supply: string;
+  current: number;
+  /** 出力 1 点の定格電流[A]（ラインドライバは undefined） */
+  rated?: number;
+  phaseNote: (ph: string) => string;
+  usage: string;
+}
+
+const SPECS: Record<E6b2Output, E6b2Spec> = {
+  'open-collector': {
+    series: 'E6B2-CWZ6C',
+    type: 'omron.e6b2-cwz6c',
+    outName: 'NPN オープンコレクタ出力',
+    short: 'NPN OC',
+    vmin: 4.75,
+    vmax: 27.6,
+    supply: 'DC5〜24V',
+    current: 0.08,
+    rated: 0.035,
+    phaseNote: (ph) => `${ph} 相 出力（NPN オープンコレクタ、シンク 35mA 以下）`,
+    usage:
+      '電源 DC5〜24V（茶 +・青 0V）、消費電流 80mA 以下。黒 A 相・白 B 相・橙 Z 相は NPN オープンコレクタ（印加電圧 DC30V 以下、シンク 35mA 以下、残留電圧 0.4V 以下）で、PLC の高速カウンタ入力（プラスコモン）につなぐ。',
+  },
+  pnp: {
+    series: 'E6B2-CWZ5B',
+    type: 'omron.e6b2-cwz5b',
+    outName: 'PNP オープンコレクタ出力',
+    short: 'PNP OC',
+    vmin: 10.8,
+    vmax: 27.6,
+    supply: 'DC12〜24V',
+    current: 0.08,
+    rated: 0.035,
+    phaseNote: (ph) => `${ph} 相 出力（PNP オープンコレクタ、ソース 35mA 以下）`,
+    usage:
+      '電源 DC12〜24V（茶 +・青 0V。5V では動かない）、消費電流 80mA 以下（推定）。黒 A 相・白 B 相・橙 Z 相は PNP オープンコレクタ（印加電圧 DC30V 以下、ソース 35mA 以下、残留電圧 0.4V 以下）で、出力 ON で +V を出す。PLC の高速カウンタ入力はマイナスコモン（COM を 0V）にする。',
+  },
+  voltage: {
+    series: 'E6B2-CWZ3E',
+    type: 'omron.e6b2-cwz3e',
+    outName: '電圧出力',
+    short: '電圧出力',
+    vmin: 4.75,
+    vmax: 13.2,
+    supply: 'DC5〜12V',
+    current: 0.1,
+    rated: 0.02,
+    phaseNote: (ph) => `${ph} 相 出力（電圧出力。出力抵抗 2kΩ で +V へ引き上げた NPN、シンク 20mA 以下）`,
+    usage:
+      '電源 DC5〜12V（茶 +・青 0V。24V をつながない）、消費電流 100mA 以下（推定）。黒 A 相・白 B 相・橙 Z 相は電圧出力（出力抵抗 2kΩ で電源電圧へ引き上げた NPN トランジスタ。シンク 20mA 以下、残留電圧 0.4V 以下）で、' +
+      'TTL・5V〜12V の電圧入力のカウンタにつなぐ。チェックでは NPN 出力として扱う（DC24V の PLC 入力につなぐと、OFF のときに出力抵抗を通して電流が回り込むことがあるので、24V 系では E6B2-CWZ6C / CWZ5B を使う）。',
+  },
+  'line-driver': {
+    series: 'E6B2-CWZ1X',
+    type: 'omron.e6b2-cwz1x',
+    outName: 'ラインドライバ出力',
+    short: 'ラインドライバ',
+    vmin: 4.75,
+    vmax: 5.25,
+    supply: 'DC5V',
+    current: 0.16,
+    phaseNote: (ph) => `${ph} 相 出力（ラインドライバ）`,
+    usage:
+      '電源 DC5V ±5%（茶 +5V・青 0V。24V をつながない）、消費電流 160mA 以下。黒 A・黒/赤 /A、白 B・白/赤 /B、橙 Z・橙/赤 /Z を、ラインドライバ入力の高速カウンタ（KV-SH04PL など）へ組ごとにツイストペアでつなぐ（受信側は AM26LS32 相当）。',
+  },
+};
+
+/**
+ * E6B2-C の機器定義（output: NPN オープンコレクタの E6B2-CWZ6C / PNP オープンコレクタの E6B2-CWZ5B /
+ * 電圧出力の E6B2-CWZ3E / ラインドライバの E6B2-CWZ1X）
+ */
 export function buildE6b2(output: E6b2Output): DeviceDefinition {
   const ld = output === 'line-driver';
-  const series = ld ? 'E6B2-CWZ1X' : 'E6B2-CWZ6C';
-  const vmin = 4.75;
-  const vmax = ld ? 5.25 : 27.6;
+  const sp = SPECS[output];
+  const { series, vmin, vmax } = sp;
+  const kind = ld ? 'line-driver' : output === 'pnp' ? 'pnp' : 'npn';
   const phase = (ph: 'A' | 'B' | 'Z', inv = false): Pick<Lead, 'label' | 'role' | 'signal' | 'note'> => ({
     label: `${inv ? '/' : ''}${ph} 相${inv ? '（反転）' : ''}`,
     role: 'out',
-    signal: { dir: 'out', kind: ld ? 'line-driver' : 'npn' },
-    note: ld
-      ? `${inv ? '/' : ''}${ph} 相 出力（ラインドライバ。${ph} と /${ph} を 1 組のツイストペアで受信側へ）`
-      : `${ph} 相 出力（NPN オープンコレクタ、シンク 35mA 以下）`,
+    signal: { dir: 'out', kind },
+    note: ld ? `${inv ? '/' : ''}${ph} 相 出力（ラインドライバ。${ph} と /${ph} を 1 組のツイストペアで受信側へ）` : sp.phaseNote(ph),
   });
   const leads: ColorLead[] = [
-    { id: 'BN', look: look('BN'), label: `+V（DC${ld ? '5V' : '5〜24V'}）`, role: 'plus' },
+    { id: 'BN', look: look('BN'), label: `+V（${sp.supply}）`, role: 'plus' },
     { id: 'BK', look: look('BK'), ...phase('A') },
     ...(ld ? [{ id: 'BKRD', look: striped('BK'), ...phase('A', true) }] : []),
     { id: 'WH', look: look('WH'), ...phase('B') },
@@ -89,34 +169,38 @@ export function buildE6b2(output: E6b2Output): DeviceDefinition {
     { id: 'SH', look: look('SH'), label: 'シールド', role: 'shield', note: 'ケーブルのシールド（処理は取扱説明書の指示に従う。推定）' },
   ];
   const cable = colorCable({ cx: CX, y0: CY + 42, yFan: 132, yEnd: H - 4, pitch: ld ? 10.5 : 12, leads, vmin, vmax });
-  // オープンコレクタの出力は ON で 0V（青）と導通する
-  const links: InternalLink[] = ld ? [] : ['BK', 'WH', 'OG'].map((o) => ({ from: o, to: 'BU', switch: 'output', ratedCurrent: 0.035 }));
+  // オープンコレクタ・電圧出力の出力は ON で 0V（青）と導通する。PNP は +V（茶）と導通する
+  const links: InternalLink[] = ld
+    ? []
+    : ['BK', 'WH', 'OG'].map((o) => ({ from: o, to: kind === 'pnp' ? 'BN' : 'BU', switch: 'output', ratedCurrent: sp.rated }));
   const res = (p: ParamValues) => Number(p.resolution);
+  const others = (Object.keys(SPECS) as E6b2Output[]).filter((k) => k !== output).map((k) => `${SPECS[k].outName}（${SPECS[k].series}、${SPECS[k].type}）`);
 
   return {
-    type: ld ? 'omron.e6b2-cwz1x' : 'omron.e6b2-cwz6c',
+    type: sp.type,
     name: 'ロータリエンコーダ（インクリメンタル）',
-    model: `${series}（${ld ? 'ラインドライバ出力' : 'NPN オープンコレクタ出力'}）`,
+    model: `${series}（${sp.outName}）`,
     modelOf: (p) => `${series} ${res(p)}P/R 2M`,
     maker: 'オムロン',
     category: 'sensor',
     description:
-      `オムロンのロータリエンコーダ ${series}（インクリメンタル形、外径 φ40・軸 φ6、A・B・Z 相、${ld ? 'ラインドライバ出力（RS-422A 準拠）' : 'NPN オープンコレクタ出力'}、コード引出し 2m）。` +
+      `オムロンのロータリエンコーダ ${series}（インクリメンタル形、外径 φ40・軸 φ6、A・B・Z 相、${ld ? 'ラインドライバ出力（RS-422A 準拠）' : sp.outName}、コード引出し 2m）。` +
       '軸の回転を A 相・B 相（90° ずれたパルス）と 1 回転 1 パルスの Z 相（原点）で出す。分解能は params の resolution（P/R = 1 回転のパルス数）で選ぶ。' +
-      (ld
-        ? '電源 DC5V ±5%（茶 +5V・青 0V。24V をつながない）、消費電流 160mA 以下。黒 A・黒/赤 /A、白 B・白/赤 /B、橙 Z・橙/赤 /Z を、ラインドライバ入力の高速カウンタ（KV-SH04PL など）へ組ごとにツイストペアでつなぐ（受信側は AM26LS32 相当）。'
-        : '電源 DC5〜24V（茶 +・青 0V）、消費電流 80mA 以下。黒 A 相・白 B 相・橙 Z 相は NPN オープンコレクタ（印加電圧 DC30V 以下、シンク 35mA 以下、残留電圧 0.4V 以下）で、PLC の高速カウンタ入力（プラスコモン）につなぐ。') +
+      sp.usage +
       '最高応答周波数 100kHz。電源投入時に約 9A の突入電流（約 0.3ms）が流れるので、電源の容量に注意する。' +
-      'PNP オープンコレクタ出力（E6B2-CWZ5B）・電圧出力（E6B2-CWZ3E）もあるが、ここでは定義していない。',
+      `同じ E6B2-C の別の出力: ${others.join('、')}。`,
     labelPrefix: 'PG',
     width: W,
     height: H,
     svg: (p) => `${cable.svg}${body(series, p.resolution)}
-  <text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="4.4" fill="#333">${series} ${p.resolution}P/R・${ld ? 'ラインドライバ' : 'NPN OC'}</text>`,
+  <text x="${W / 2}" y="7" text-anchor="middle" font-family="sans-serif" font-size="4.4" fill="#333">${series} ${p.resolution}P/R・${sp.short}</text>`,
     terminals: cable.terminals,
     links,
     params: [{ key: 'resolution', label: '分解能（P/R）', options: RESOLUTIONS.map((r) => ({ value: r, label: `${r}P/R` })), default: ld ? 1000 : 360 }],
-    loadCurrent: ld ? 0.16 : 0.08,
-    estimated: 'シールドの芯線の扱い（取扱説明書で確認できなかった）',
+    loadCurrent: sp.current,
+    estimated:
+      output === 'pnp' || output === 'voltage'
+        ? `シールドの芯線の扱い（取扱説明書で確認できなかった）、消費電流（${output === 'pnp' ? '80mA' : '100mA'}。資料の表の並びから読み取った）`
+        : 'シールドの芯線の扱い（取扱説明書で確認できなかった）',
   };
 }

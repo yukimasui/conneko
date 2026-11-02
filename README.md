@@ -21,7 +21,7 @@
 
 ## できること
 
-- 450 種以上の機器を収録
+- 550 種以上の機器を収録
   - 三菱電機: ブレーカー類（漏電遮断器・ノーヒューズ遮断器 WS-V の NF32/NF63/NF125・NV32/NV63、制御盤用 FA シリーズ NF30-FA/NV30-FA、サーキットプロテクタ CP30-BA）、
     電磁接触器 S-T10〜T32・SD-T、電磁継電器 SR-T5、サーマルリレー TH-T18/T25、インバーター FR-E820、MELSEC iQ-R（ベースユニット含む）/ iQ-F（[一覧](docs/mitsubishi-catalog.md)）
   - KEYENCE: KV-8000 / KV-X と増設ユニット、VT5、光電センサ（PZ-G・PR-G・PZ-V/M・PR-M/F・LR シリーズ・ファイバアンプなど）ほか各種センサー
@@ -37,7 +37,9 @@
   - センサー: オムロン E3Z・E2E（M12）・ロータリエンコーダ E6B2、パナソニック CX-400・GX-F/H、SMC PF3W7、フロートスイッチ（[一覧](docs/sensor-catalog.md)）
   - モーター・駆動: 三菱電機 FR-E820（0.1K〜3.7K）・FR-E820S、サーボ MR-J5-A と HK-KT、オリエンタルモーター AZ シリーズ、ブレーキ付き三相・単相レバーシブルモーター（[一覧](docs/drive-catalog.md)）
   - オムロン PLC NX1P2 と NX の I/O ユニット、フエニックス・コンタクトの端子台 PT/UT（[一覧](docs/omron-plc-catalog.md)）
-  - ロボット: ファナック LR Mate 200iD・R-30iB Mini Plus・iPendant（[一覧](docs/robot-catalog.md)）
+  - ロボット: ファナック LR Mate 200iD・R-30iB Mini Plus・iPendant、安川電機 MOTOMAN-GP7・YRC1000micro（[一覧](docs/robot-catalog.md)）
+  - 空圧: CKD 4GA1（単体・マニホールド）・SCPD3・SSD2・CMK2・SC3W、コガネイ F10・CDA、SMC ITV1000・VX21・ZK2・MXQ・MY1B（[一覧](docs/air-catalog.md)）
+  - 通信・HMI: KEYENCE NQ-EP4L（IO-Link）・KV-EP21V ほか（[一覧](docs/network-catalog.md)）
 - MIL コネクタ間は多芯ケーブル、LAN は LAN ケーブル、M8/M12 はセンサーケーブルとして描画し、ピン単位で導通をチェック
 - PLC エディタ（PLC を右クリック）
   - ユニット構成: 増設ユニットの追加・装着・取り外しと、ドラッグでの並べ替え。内部電源の収支とスロット数を表示する。

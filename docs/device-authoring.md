@@ -179,7 +179,7 @@ bus: { kind: 'kv-8000', host: { slots: 16, numbering: { mode: 'shared', unit: 16
 bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } },
 ```
 
-- `host.numbering`: `shared`（入力と出力で同じ番号の並び。KV・iQ-R）/ `separate`（入力 X と出力 Y を別に数える。FX5）。
+- `host.numbering`: `shared`（入力と出力で同じ番号の並び。KV・iQ-R）/ `separate`（入力 X と出力 Y を別に数える。FX5・オムロン CP）。
   `unit` は 1 ユニットが占有する点数の単位、`start` は最初のユニットの先頭番号（省略時は親自身の `io` の後ろから）。
 - 装着したユニットには、先頭番号（点数）が `params.ioIn` / `params.ioOut` として渡る（装着していなければ 0、または図面で指定した値）。
   ラベルに反映するには `pins` / `terminals` を関数にし、`ioName(format, 'in', p.ioIn + i)`（`src/devices/resolve.ts`）で番号を作る。
@@ -188,7 +188,9 @@ bus: { kind: 'kv-8000', load: { '5V': 0.06 }, io: { inputs: 32, format: 'kv' } }
   とユニット側の `bus.role` で表す。空きスロットが番号を占有する場合は `numbering.emptySlot` に点数を書く。
 - 番号が親の設定で決まり、連結順の相対番号しか付けられない親（KV-EC01 の PDO 割付など）は `numbering.relative: true`。
   装着したユニットの先頭番号を画面（または図面の `params.ioIn` / `ioOut`）で指定でき、後ろのユニットはその続きから数える。
-- 入出力ではなく番号を占有するだけのユニット（KV-XH04ML のリレー 576 点など）は `io: { reserve: 576, format: 'kv' }`。入力の後ろに数える。
+- 入出力ではなく番号を占有するだけのユニット（KV-XH04ML のリレー 576 点、iQ-R のアナログ・通信ユニットの 16 / 32 点など）は `io: { reserve: 576, format: 'kv' }`。入力の後ろに数える。
+- 番号の表記（`format`）は `kv`（R000）・`hex`（X1F）・`octal`（X17）・`omron`（チャネル.ビット。102.07）。オムロン CP のように本体の出力が 100 チャネルから始まる親は、
+  `numbering.start` に増設の先頭（入力 CIO 2 = 32、出力 CIO 102 = 1632）を書く。
 - 内部電源を親の電源端子からそのまま供給する親（KEYENCE KV の CPU・KV-EC01 の DC24V）は `feeds: ['DC24V']`。
   装着したユニットのそのレールの消費を親の `loadCurrent` に加えて、上流の保護（`overload`）と比べる。
 - 連結で電路そのものがつながる場合（IAI R-unit のゲートウェイの MP+ → 各ドライバーの MPO）は、両方の端子に `busNet: 'MP'` を書く。

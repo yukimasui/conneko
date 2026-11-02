@@ -171,7 +171,9 @@ export function deviceElements(def: DeviceDefinition, params?: ParamValues): Sch
   // 3. 保護の経路と電磁接触器の主接点
   const protectLinks = r.links.filter((l) => l.protects && !l.switch && free(l.from) && free(l.to));
   const thermal = protectLinks.length > 0 && def.category !== 'breaker';
-  if (protectLinks.length > 0 && protectLinks.length <= 4) {
+  // 極どうしで端子を共有する経路（1 つの入力から分岐ごとに保護する電子サーキットプロテクタなど）は、極を並べた記号にできないので箱にする
+  const sharedPole = new Set(protectLinks.flatMap((l) => [l.from, l.to])).size < protectLinks.length * 2;
+  if (protectLinks.length > 0 && protectLinks.length <= 4 && !sharedPole) {
     const pairs = protectLinks.map((l) => [l.from, l.to] as [string, string]);
     const n = pairs.length;
     if (thermal) add(poles('thermal', `thermal-${n}p`, `熱動素子（${n} 極）`, pairs));

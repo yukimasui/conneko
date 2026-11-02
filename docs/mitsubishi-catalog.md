@@ -163,3 +163,70 @@ PLC は [mitsubishi-plc-catalog.md](mitsubishi-plc-catalog.md)、安全コント
 - [K2] MS-T 技術資料 L(NA)02031ENG（ミラー接点）https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvsw/l02031eng/L(NA)02031ENG-L_21B.pdf
 - [V1] FR-E800 Instruction Manual (Connection) IB-0600865ENG-C https://eu-assets.contentstack.com/v3/assets/blt5412ff9af9aef77f/blt45e2f3922a086c8e/6172b59eb04cff6af9e6a2aa/6442e518-18ed-11eb-901c-b8ca3a62a094_ib0600865engc.pdf
   （2.4 端子接続図、2.5 主回路端子、2.6 制御回路端子、4.1 定格、4.4 外形寸法図）
+
+## 7. 漏電リレー・零相変流器・電力計測ユニット
+
+主回路の漏電を検出して知らせる漏電リレーと零相変流器（ZCT）、盤の電力を計る計測ユニットを追加した（issue #74・#79）。
+メーカーのサイト（PDF）には届かなかったため、検索結果に引用された製品ページ・仕様ページ・取扱説明書の内容と販売店の仕様表で値を確かめた。
+
+| type | 型式 | 種類 | 外形（W×H mm） | 端子 | 推定 | 出典 |
+|---|---|---|---|---|---|---|
+| `mitsubishi.nv-zba` | NV-ZBA（30mA 高速形 / 100・200・500mA 切換 時延形） | 漏電リレー（互換形・電気式自己保持）。内蔵接点 1c、AC100・200V 5A（cosφ=1）/ 2A（cosφ=0.4）、DC24V 5A | 52×75（絵） | 操作電源 1・2（100V）・3（200V）、ZCT 入力 Z1・Z2、接点 c・a・b | 推定: 外形と端子の並び、操作電源の端子（1-2 = AC100V、1-3 = AC200V）、接点の端子記号、消費電流（約 3VA） | [E1]・[E2]・[E3] |
+| `mitsubishi.zt-b` | ZT15B・ZT30B・ZT40B・ZT60B・ZT80B・ZT100B（穴径をパラメータで選ぶ） | 零相変流器（ZCT） | 62×70（絵） | 貫通する主回路 1・3・5（電源側・K 側）→ 2・4・6、二次 k・l | 推定: 外形と二次端子 k・l の位置 | [E2]・[E4] |
+| `mitsubishi.emu4-bd1-mb` | EMU4-BD1-MB | エネルギー計測ユニット（EcoMonitorLight 基本計測、MODBUS RTU）。単相 2 線・単相 3 線・三相 3 線 | 75×90 | 電圧 P1・P2・P3、補助電源 MA・MB、電流 1k・1L・3k・3L、485+・485−・SLD | 推定: 外形（EMU4-HD1-MB の値とした）、端子の並び、補助電源の消費（10VA） | [E5] |
+
+### 電気的な表現
+
+- **漏電リレー NV-ZBA**: 分類は遮断器（`breaker`）だが保護の経路（`protects`）は持たない（漏電リレーは遮断しない）。内蔵接点 1c を `c → a`（`NO`）・`c → b`（`NC`）、
+  `ratedCurrent: 5` で表す。漏電で回路を切るには、b 接点を電磁接触器のコイル回路に入れるか、a 接点で遮断器の電圧引外し装置・警報を動かす（テストあり）。
+  操作電源は 1（共通）と 2（AC100V）または 3（AC200V）の受電端子（`distinctGroups: [['1','2'],['1','3']]`）。200V の端子に AC100V をつなぐと `voltage-mismatch`。
+  Z1・Z2 は信号の端子（電源の有無は見ない）。
+- **零相変流器 ZT-B**: 貫通する主回路を、電源側 1・3・5 と負荷側 2・4・6 の端子の常時導通の経路で表す（実物には主回路の端子はない。図面では ZCT を通る電線を 2 本に分けて描く）。
+  端子 ID を遮断器とそろえたので、「まとめてつなぐ」で遮断器の二次側 → ZCT → 電磁接触器の一次側が相を合わせてつながる（テストあり）。二次の k・l は信号の端子。
+- **EMU4-BD1-MB**: 電圧入力 P1・P2・P3 は受電端子（AC90〜242V。110V・220V は直接つなげる）で、端子ごとの消費（`loadCurrent` 0.002A）を書き、補助電源 MA・MB（AC100〜240V、10VA）とは別の回路にした。
+  P2 は単相 2 線で使わないので任意（`optional`）。電流入力は専用電流センサの二次をつなぐ信号の端子（5A の CT の二次は EMU-CT5-A を通す。CT と電流センサの組み合わせはチェックしない）。
+  485+・485− は `port: 'RS485'`・`protocols: ['modbus-rtu']`。
+
+### 出典
+
+- [E1] 三菱電機 低圧遮断器 仕様から探す NV-ZBA https://www.mitsubishielectric.co.jp/fa/products/faspec/detail.page?kisyu=%2Flvcb&formNm=NV-ZB_NV-ZBA_5216&popup=1
+  （制御電圧 100・200 切換、内蔵接点 1c、連続通電電流 5A、接点容量）
+- [E2] 三菱電機 漏電リレー 製品特長・形式一覧 https://www.mitsubishielectric.co.jp/fa/products/lvd/lvcb/pmerit/elrly/index.html
+  （ZBA シリーズは電気式自己保持形、ZCT と自由に組み合わせられる。穴径 15mm は ZT15B、30mm は ZT30B）
+- [E3] 三菱電機 取扱いと保守（ノーヒューズ遮断器・漏電遮断器・漏電アラーム遮断器）Y-0388 https://dl.mitsubishielectric.co.jp/dl/fa/document/catalog/lvcb/yn-c-0388/y0388p1709.pdf
+  （操作電圧 100V は 1-2、200V は 1-3 の端子へ。検索結果の抜粋による）。販売店の仕様表（NV-ZBA 30mA 高速形、100・200・500mA 切換 時延形、接点 1c、LED 表示）
+- [E4] 零相変流器の結線の一般的な説明（ZCT の k を継電器の Z1、l を Z2 へ。逆にすると検出できない）
+- [E5] 三菱電機 EMU4-BD1-MB / EMU4-HD1-MB 取扱説明書（詳細編）IB63771 https://dl.mitsubishielectric.com/dl/fa/document/manual/ems/ib63771/ib63771l.pdf
+  （端子の名称 P1・P2・P3・MA・MB・1k・1L・3k・3L・485+・485−・SLD、相線式、110V・220V は直接つなげる、EMU4-HD1-MB の外形 75×90×75mm・補助電源 10VA）
+
+## 8. 富士電機の開閉器・遮断器
+
+三菱電機の機種と同じファミリー（電磁接触器・サーマルリレー・ノーヒューズブレーカー・漏電ブレーカー）に、富士電機の代表的な機種を加えた。
+端子 ID は三菱電機の機種とそろえ（主回路 1/L1・3/L2・5/L3 → 2/T1・4/T2・6/T3、コイル A1・A2、補助接点 13-14・21-22、サーマル 95-96・97-98、遮断器 1・3・5 → 2・4・6）、
+機種を変えても電線はつながったまま（テストあり）。共通部品は `src/devices/fuji/`（`parts.ts` 描画部品、`sc.ts` 電磁接触器 SC、`g-twin.ts` G-TWIN の遮断器）。
+
+| type | 型式 | 種類 | 外形（W×H mm） | 端子 | 推定 | 出典 |
+|---|---|---|---|---|---|---|
+| `fuji.sc-05.ac200v` | SC-05 AC200V 1a1b | 電磁接触器（新SC・NEO SC、AC-3 200〜240V 13A・2.7kW） | 53×81 | 上段 A1・1/L1・3/L2・5/L3・13・21、下段 A2・2/T1・4/T2・6/T3・14・22 | 推定: 端子の並びと補助接点の番号、コイルの保持の消費（7VA） | [F1]・[F2] |
+| `fuji.sc-4-0.ac200v` | SC-4-0 AC200V 1a1b | 電磁接触器（AC-3 200〜240V 18A・3.7kW） | 53×81 | SC-05 と同じ | 推定: 外形（同じ質量の SC-4-1 の 53×81mm とした）、コイルの保持の消費（SC-4-1 の 9VA）、端子の並び | [F3]・[F4] |
+| `fuji.tk-e2` | TK-E2-600〜TK-E2-5400 | サーマルリレー（調整範囲 4〜54A をパラメータで選ぶ） | 45×66（絵） | 上部ピン 1/L1・3/L2・5/L3、下 2/T1・4/T2・6/T3、95-96(b)・97-98(a) | 推定: 外形と端子の位置（TH-T18 と同じ並び） | [F5] |
+| `fuji.bw32aag.3p` | BW32AAG-3P | オートブレーカ（配線用遮断器）G-TWIN 32AF、3〜32A | 75×100 | 1・3・5 / 2・4・6（M5） | 推定: 極間ピッチ 25mm と主端子ネジの位置 | [F6] |
+| `fuji.ew32aag.3p` | EW32AAG-3P | 漏電遮断器 G-TWIN 32AF、5〜32A、感度 15・30・100mA | 75×100 | 1・3・5 / 2・4・6 | 推定: 極間ピッチ 25mm と主端子ネジの位置 | [F6]・[F7] |
+
+- **電磁接触器 SC**: 主接点は `switch: 'NO'`（`ratedCurrent` は AC-3 200〜240V の定格使用電流）、補助 13-14 は a 接点、21-22 は b 接点（ミラー接点かは確かめられず、`linked` は付けていない）。
+  コイル AC200V 品の定格は 200〜220V（50Hz）/ 200〜240V（60Hz）なので受電の条件は AC200〜240V。`loadCurrent` はコイルの保持の消費 ÷ 200V。
+- **サーマルリレー TK-E2**: 保護電流には調整範囲の上限（形式の末尾。TK-E2-1800 なら 18A）を使う。富士電機の資料では SC-E1〜SC-E2S と組み合わせる機種。
+  国内の SC-05・SC-4-0 と組み合わせるサーマルリレー（TR-0N/3・TR-5-1N）は未収録（図面では電線でつなげば TK-E2 でもチェックは働く）。
+- **G-TWIN の遮断器**: WS-V と同じく各極を `protects` の経路、`protectionCurrent` を定格電流、漏電遮断器は `schematic: { earthLeakage: true }`。型式は定格電流（と感度）を付けて組み立てる（`modelOf`）。
+
+### 出典
+
+- [F1] 販売店の仕様表（SC-05: AC-3 200〜240V 2.7kW・13A、380〜440V 4kW・9A、1a1b、幅 53mm・高さ 81mm）
+- [F2] 富士電機 SC-05 新旧製品比較 https://www.fujielectric.co.jp/products/magnetic_contactor/sc/sc05/comparison_table.html （補助接点 1a1b、外形 53×81×80mm）
+- [F3] 富士電機 SC-4-0 製品ページ https://www.fujielectric.co.jp/products/magnetic_contactor/sc/sc40/ （定格電流 AC-3 200〜240V 18A、3.7kW、補助接点 1NO/1NC）
+- [F4] 販売店の仕様表（SC-4-1: 53×81×81mm、0.36kg、保持 200V 50Hz 9VA。SC-4-0: 0.36kg）
+- [F5] AutomationDirect の富士電機 TK-E2 のカタログ https://cdn.automationdirect.com/static/specs/fujimcor.pdf （形式と調整範囲、組み合わせる接触器）
+- [F6] 富士電機 BW32AAG-3P 新旧製品比較 https://www.fujielectric.co.jp/products/low_voltage_circuit_breaker/standard_line_protection/bw32aag3p/comparison_table01.html
+  （外形 75×100×84mm）、販売店の仕様表（端子ねじ M5×14、定格電流）
+- [F7] 富士電機 EW32AAG-3P□4B https://www.fujielectric.co.jp/products/low_voltage_circuit_breaker/standard_line_protection/ew32aag3p_4b/comparison_table01.html
+  と販売店の仕様表（定格感度電流 15・30・100mA）
