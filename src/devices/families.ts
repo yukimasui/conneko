@@ -90,6 +90,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'cp', name: 'サーキットプロテクタ', keywords: ['CP'], test: named(/^サーキットプロテクタ/), default: 'mitsubishi.cp30-ba.2p', facets: [{ label: '極数', value: poles }] },
   { id: 'fuse', name: 'ヒューズホルダ', keywords: ['ヒューズ', '筒形ヒューズ', 'FUSE'], test: named(/^ヒューズホルダ/), default: 'generic.fuse-holder.2p', facets: [{ label: '極数', value: poles }] },
   { id: 'spd', name: 'サージ保護デバイス', keywords: ['SPD', '避雷器', 'サージプロテクタ', 'サージアブソーバ'], test: named(/^サージ保護デバイス/), default: 'generic.spd.1p', facets: [{ label: '相', value: paren }] },
+  { id: 'surge-killer', name: 'サージキラー', keywords: ['サージ吸収器', 'スパークキラー', 'CR', 'ダイオード', 'コイルサージ'], test: named(/^サージキラー/), default: 'generic.surge-killer.cr', facets: [{ label: '種類', value: paren }] },
   { id: 'noise-filter', name: 'ノイズフィルタ', keywords: ['ラインフィルタ', 'EMC フィルタ', 'NF'], test: named(/^ノイズフィルタ/), default: 'generic.noise-filter.1p', facets: [{ label: '相', value: paren }] },
   { id: 'transformer', name: '制御用トランス', keywords: ['トランス', '変圧器', '操作トランス', '絶縁トランス'], test: named(/^制御用トランス/) },
   // --- 開閉器・リレー ---
