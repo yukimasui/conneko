@@ -134,19 +134,25 @@ function drawValve(pen: Pen, hint: PneumaticHint, cx: number, y: number, solLabe
   const x0 = cx - total / 2;
   // ポートの位置（箱の中の座標）
   const five = v.ways === 5;
+  // 2 ポート弁（エアブロー用の VX など）は 1 と 2 だけ。通じる位置と閉じる位置の 2 つ
+  const two = v.ways === 2;
   const ports: Record<string, XY> = five
     ? { '4': [BOX_W * 0.25, 0], '2': [BOX_W * 0.75, 0], '5': [BOX_W * 0.2, BOX_H], '1': [BOX_W * 0.5, BOX_H], '3': [BOX_W * 0.8, BOX_H] }
-    : { '2': [BOX_W * 0.5, 0], '1': [BOX_W * 0.3, BOX_H], '3': [BOX_W * 0.7, BOX_H] };
+    : two
+      ? { '2': [BOX_W * 0.5, 0], '1': [BOX_W * 0.5, BOX_H] }
+      : { '2': [BOX_W * 0.5, 0], '1': [BOX_W * 0.3, BOX_H], '3': [BOX_W * 0.7, BOX_H] };
   // 位置ごとの流れ: a 側（左の箱）＝ a を操作した位置、b 側（右の箱）＝ b を操作した（またはばねで戻った）位置
   const nc = !v.normallyOpen;
-  const posA: [[string, string][], string[]] = five ? [[['1', '4'], ['2', '3']], ['5']] : nc ? [[['1', '2']], ['3']] : [[['2', '3']], ['1']];
-  const posB: [[string, string][], string[]] = five ? [[['1', '2'], ['4', '5']], ['3']] : nc ? [[['2', '3']], ['1']] : [[['1', '2']], ['3']];
+  const open2: [[string, string][], string[]] = [[['1', '2']], []];
+  const closed2: [[string, string][], string[]] = [[], ['2', '1']];
+  const posA: [[string, string][], string[]] = five ? [[['1', '4'], ['2', '3']], ['5']] : two ? (nc ? open2 : closed2) : nc ? [[['1', '2']], ['3']] : [[['2', '3']], ['1']];
+  const posB: [[string, string][], string[]] = five ? [[['1', '2'], ['4', '5']], ['3']] : two ? (nc ? closed2 : open2) : nc ? [[['2', '3']], ['1']] : [[['1', '2']], ['3']];
   const center: [[string, string][], string[]] =
     v.center === 'exhaust'
       ? [[['4', '5'], ['2', '3']], ['1']]
       : v.center === 'pressure'
         ? [[['1', '4'], ['1', '2']], ['5', '3']]
-        : [[], five ? ['4', '2', '5', '1', '3'] : ['2', '1', '3']];
+        : [[], five ? ['4', '2', '5', '1', '3'] : two ? ['2', '1'] : ['2', '1', '3']];
   const boxes = n === 3 ? [posA, center, posB] : [posA, posB];
   boxes.forEach(([flows, blocked], i) => valveBox(pen, x0 + i * BOX_W, y, ports, flows, blocked));
   const cy = y + BOX_H / 2;

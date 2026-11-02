@@ -1,5 +1,6 @@
 /**
  * SMC エアシリンダ（CJ2・CM2・MB・CQ2・MGP）の機器定義を作る。
+ * CKD（SCPD3・SSD2・CMK2）・コガネイ（CDA）のシリンダも、メーカー・ロゴ・シリンダスイッチのメーカーを変えてこの作りで描く（CylinderSeries の maker・logo・switchMaker）。
  *
  * 横から見た姿で、左がヘッド側（ヘッドカバー）、右がロッド側（ロッドカバーとピストンロッド）。ストロークに応じて機器の長さが変わる
  * （長いストロークは 100mm を超えた分を縮めて描く）。
@@ -29,6 +30,7 @@ import {
   switchSlots,
   switchSuffix,
   switchTerminals,
+  type SwitchMaker,
   type SwitchName,
 } from './autoswitch';
 import {
@@ -123,6 +125,14 @@ export interface CylinderSeries {
   /** シリーズ固有のパラメータ（MGP の軸受など） */
   extraParams?: ParamDef[];
   defaultFitting?: number;
+  /** メーカー（省略時は 'SMC'。CKD・コガネイのシリンダもこの作りで描く） */
+  maker?: string;
+  /** 本体に書くロゴの文字と色（省略時は SMC の青） */
+  logo?: { text: string; color: string };
+  /** オートスイッチ（シリンダスイッチ）のメーカー（省略時は 'smc'） */
+  switchMaker?: SwitchMaker;
+  /** ポートに直付けするスピードコントローラ（SMC のエルボ形）を選べる（省略時は true。SMC 以外のシリンダは false にする） */
+  speedController?: boolean;
 }
 
 const FIT = 22;
@@ -402,7 +412,8 @@ function bodySvg(s: CylinderSeries, L: Layout, b: BoreSpec, p: ParamValues): str
   // 銘板の文字
   const tx = (L.xTube0 + L.xTube1) / 2;
   const tl = L.xTube1 - L.xTube0;
-  if (tl > 26) out += text(f(tx), f(cy - Math.min(tubeH, bodyH) * 0.12), 'SMC', Math.min(7, bodyH * 0.22), '#1f5fa8');
+  const logo = s.logo ?? { text: 'SMC', color: '#1f5fa8' };
+  if (tl > 26) out += text(f(tx), f(cy - Math.min(tubeH, bodyH) * 0.12), logo.text, Math.min(7, bodyH * 0.22), logo.color);
   if (tl > 34) out += text(f(tx), f(cy + Math.min(tubeH, bodyH) * 0.12 + 2), `φ${b.bore}×${p.stroke}`, Math.min(5.5, bodyH * 0.16), '#333', 'normal');
   return out;
 }
@@ -435,8 +446,8 @@ function seriesParams(s: CylinderSeries): ParamDef[] {
     options: [4, 6, 8, 10, 12].map((v) => ({ value: v, label: `φ${v}` })),
     default: s.defaultFitting ?? 6,
   });
-  out.push(speedControllerParam);
-  out.push(...switchParams({ names: { 1: 'ヘッド側・後退端', 2: 'ロッド側・前進端' }, magnet: !s.magnetStandard }));
+  if (s.speedController !== false) out.push(speedControllerParam);
+  out.push(...switchParams({ names: { 1: 'ヘッド側・後退端', 2: 'ロッド側・前進端' }, magnet: !s.magnetStandard, maker: s.switchMaker }));
   return out;
 }
 
@@ -517,21 +528,25 @@ export function buildCylinder(s: CylinderSeries): DeviceDefinition {
   };
 
   const extraDesc = (s.single ? '作動方式は複動（D）・単動押出し（S）・単動引込み（T）から選ぶ（単動はエアを入れる側のポートだけが端子になる）。' : '');
+  const scDesc =
+    s.speedController === false
+      ? 'スピードコントローラは別の機器として、ポートと電磁弁の間に置く。'
+      : 'パラメータ speedController でエルボ形スピードコントローラ（メータアウト / メータイン）をポートに直付けできる（型式はポートのねじとチューブ外径で決まり、部品表に 1 ポート 1 個で載る。別にスピードコントローラを置かなくてよい）。';
 
   return {
     type: s.type,
     name: s.name,
     model: s.representative,
     modelOf: (p) => s.model(p, boreOf(s, p), switchSuffix(p)),
-    maker: 'SMC',
+    maker: s.maker ?? 'SMC',
     category: 'actuator',
     description:
       `${s.description}` +
       `チューブ内径・ストローク・支持形式・ポートに付けるワンタッチ管継手のチューブ外径をパラメータで選ぶ。ポートは HEAD（ヘッド側: 給気で前進）と ROD（ロッド側: 給気で後退）。` +
-      'パラメータ speedController でエルボ形スピードコントローラ（メータアウト / メータイン）をポートに直付けできる（型式はポートのねじとチューブ外径で決まり、部品表に 1 ポート 1 個で載る。別にスピードコントローラを置かなくてよい）。' +
+      scDesc +
       `5 ポート電磁弁の A・B に 1 本ずつつなぐ。最高使用圧力 ${s.maxPressure}MPa。` +
       extraDesc +
-      switchDescription({ 1: 'ヘッド側（後退端）', 2: 'ロッド側（前進端）' }),
+      switchDescription({ 1: 'ヘッド側（後退端）', 2: 'ロッド側（前進端）' }, s.switchMaker),
     labelPrefix: 'CY',
     width: L0.W,
     height: L0.H,
