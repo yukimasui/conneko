@@ -35,10 +35,14 @@ describe('機器のファミリー', () => {
 
   it('観点で機種を絞り込める（電磁弁の切換え・取付け・シリーズ）', () => {
     const sv = familyOf('smc.sy3120-5lz')!;
-    expect(sv.facets.map((f) => f.label)).toEqual(['切換え', '取付け', 'シリーズ']);
+    // SMC のほかに CKD・コガネイの電磁弁もあるので、メーカーの観点が先頭に付く
+    expect(sv.facets.map((f) => f.label)).toEqual(['メーカー', '切換え', '取付け', 'シリーズ']);
+    const facet = (label: string) => sv.facets.find((f) => f.label === label)!;
     const pick = (fn: string, mount: string, series: string) =>
-      sv.members.filter((d) => sv.facets[0].value(d) === fn && sv.facets[1].value(d) === mount && sv.facets[2].value(d) === series).map((d) => d.type);
+      sv.members.filter((d) => facet('切換え').value(d) === fn && facet('取付け').value(d) === mount && facet('シリーズ').value(d) === series).map((d) => d.type);
     expect(pick('ダブルソレノイド', 'マニホールド用', 'SY5000')).toEqual(['smc.sy5240-5lz']);
+    expect(pick('ダブルソレノイド', 'マニホールド用', '4GA1')).toEqual(['ckd.4ga120']);
+    expect(pick('シングルソレノイド', '単体（ボディ配管）', 'F10')).toEqual(['koganei.f10t1']);
     const elb = familyOf('mitsubishi.nv32-sv.3p')!;
     expect(elb.facets.find((f) => f.label === '極数')?.value(elb.members.find((m) => m.type === 'mitsubishi.nv30-fa.2p')!)).toBe('2P');
   });
