@@ -49,18 +49,23 @@ describe('三菱電機 機器定義', () => {
       expect(byId.get(l.to)?.role, `${l.to} の role`).toBe('input');
       expect(byId.get(l.from)?.signal?.dir, `${l.from} の signal`).toBe('out');
     }
-    // コモンあたりの上限は出力のコモンに付ける
+    // コモンあたりの上限は出力のコモンに付ける。出力点のグループで決まる上限（outputs）は、どれも出力点であること
     for (const c of r.commonLimits) {
+      if (c.outputs) {
+        for (const o of c.outputs) expect(r.links.some((l) => l.switch === 'output' && l.from === o), `commonLimits ${c.label} の ${o}`).toBe(true);
+        continue;
+      }
       expect(r.links.some((l) => l.switch === 'output' && l.to === c.common), `commonLimits ${c.common}`).toBe(true);
     }
     // PLC の DC 入力点のコモンは受電端子（+/− 共用）。インバーターなどの無電圧接点入力・アナログ入力は対象外
-    for (const t of all.filter((x) => d.category === 'plc' && x.signal?.dir === 'in')) {
+    for (const t of all.filter((x) => d.category === 'plc' && x.signal?.dir === 'in' && x.signal.kind !== 'analog-v' && x.signal.kind !== 'analog-i')) {
       expect(t.signal?.kind).toBe('dc');
       const com = byId.get(t.signal!.common!);
       expect(com?.role, `${t.id} のコモン`).toBe('input');
     }
     // 入出力の点数と、ラベルが付いた入出力点の数が一致する
-    if (d.bus?.io && r.terminals.length) {
+    // （インテリジェント機能ユニット・ネットワークユニットのように番号を占有するだけ（reserve）のユニットは、外部端子が X/Y ではないので対象外）
+    if (d.bus?.io && (d.bus.io.inputs || d.bus.io.outputs) && r.terminals.length) {
       const n = all.filter((t) => t.signal && t.role === 'signal').length;
       expect(n).toBe((d.bus.io.inputs ?? 0) + (d.bus.io.outputs ?? 0));
     }

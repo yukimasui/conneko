@@ -59,7 +59,8 @@ describe('mateCandidates', () => {
     const sensor = deviceDefinitions.find((d) => d.category === 'sensor' && !d.cable && resolveDevice(d).terminals.some((t) => t.connector?.kind === 'M12-4'))!;
     const t = resolveDevice(sensor).terminals.find((x) => x.connector?.kind === 'M12-4')!;
     const types = candidates(diagram([dev('S1', sensor.type)]), 'S1', t.id).map((x) => x.type);
-    expect(types).toEqual(['generic.m12-4p-cable']);
+    // M12 4 ピンのセンサーは、センサー用ケーブルと IO-Link マスタ（M12 5 ピンのポートに直接差せる）に出す
+    expect(types).toEqual(['generic.m12-4p-cable', 'keyence.nq-ep4l']);
   });
 
   it('図面にある機器の空いているコネクタを先に出し、使用中のコネクタには出さない', () => {
