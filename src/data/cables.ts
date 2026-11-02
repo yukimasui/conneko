@@ -61,6 +61,15 @@ export const CABLE_SPECS: CableSpec[] = [
     ends: ['FANUC-LRM200ID-RP1', 'FANUC-R30IB-MINI-RP1'],
     map: (p) => p,
   },
+  // 安川電機のマニピュレータケーブル（ロボットに付属する専用ケーブル。動力・エンコーダーを 1 本で。種類の組は src/devices/yaskawa/parts.ts）
+  {
+    id: 'yaskawa.manipulator-cable.gp7-micro',
+    name: 'マニピュレータケーブル（MOTOMAN-GP7 ⇔ YRC1000micro）',
+    maker: '安川電機',
+    model: 'マニピュレータケーブル（GP7・YRC1000micro 用）',
+    ends: ['YASKAWA-GP7-X1', 'YASKAWA-YRC1000MICRO-X1'],
+    map: (p) => p,
+  },
 ];
 
 export const getCableSpec = (id: string | undefined) => (id ? CABLE_SPECS.find((c) => c.id === id) : undefined);
