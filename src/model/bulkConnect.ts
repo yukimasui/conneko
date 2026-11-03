@@ -138,12 +138,16 @@ function ends(m: Model, device: string, side: 'out' | 'in'): End[] {
   return out.sort((a, b) => a.order - b.order);
 }
 
-/** 受ける側の端子が置かれている機器の分類から、交流の回路の種類（主回路・操作回路）を決める */
+/**
+ * 受ける側の機器の分類から、交流の回路の種類（主回路・操作回路）を決める。
+ * 電磁接触器などでも、主接点（一次側 line）・端子台（pass）へは主回路、コイル（受電 input）へは操作回路
+ */
 const CONTROL_CATEGORIES = new Set(['contactor', 'control', 'plc', 'sensor', 'safety', 'power-supply']);
 
-function circuitOf(slot: Slot, target: DeviceDefinition | undefined): CircuitKind {
+function circuitOf(slot: Slot, target: DeviceDefinition | undefined, terminal: TerminalDef): CircuitKind {
   if (slot === 'PE') return 'ground';
   if (slot === '+' || slot === '-') return 'dc-control';
+  if (terminal.role === 'line' || terminal.role === 'pass') return 'ac-main';
   return target && CONTROL_CATEGORIES.has(target.category) ? 'ac-control' : 'ac-main';
 }
 
@@ -170,7 +174,7 @@ function plan(m: Model, source: string, target: string, protection: Map<string, 
       from: o.ref,
       to: i.ref,
       reason,
-      circuit: circuitOf(slot, targetDef),
+      circuit: circuitOf(slot, targetDef, i.terminal),
       ...(wireNo ? { wireNo } : {}),
       ...(prot !== undefined && Number.isFinite(prot) ? { protection: prot } : {}),
     });
