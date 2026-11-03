@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-02（v0.6.41 機器の追加 81 機種）
+最終更新: 2026-11-03（v0.6.42 まとめてつなぐのボタン）
 
 ## 現在地
 
+- v0.6.42: 上のバーに「まとめてつなぐ」（bulkFrom が '' なら 1 台目のクリックを待つ）。クリックを待つ案内をキャンバスの下へ、「やめる」ボタンの色を修正
 - v0.6.41: 機器を 81 機種追加（parts/mains3・plc2・sensor2・drive2・air2）。docs/air-catalog.md・docs/network-catalog.md を新設。IoFormat 'omron'、bus.io の reserve、アナログ出力の I/O 表、空圧回路図の 2 ポート弁
 - v0.6.40: まとめてつなぐで電源の種類・電圧から推定（`fits`、名前で極の分からない受電端子・distinctGroups、単相 2 線 → 電磁接触器はコイルへ）
 - v0.6.39: まとめてつなぐ（src/model/bulkConnect.ts の `proposeConnections`・`applyProposals`・`proposalWire`、src/editor/BulkConnectDialog.tsx、右クリックと相手のクリック）
