@@ -2679,3 +2679,13 @@ textarea {
   border-color: var(--accent);
   color: #fff;
 }
+/* 展開図の画面で出すお知らせ（概念図のキャンバスの外） */
+.toast.is-global {
+  position: fixed;
+  top: 96px;
+  z-index: 200;
+}
+.bulk-dialog__wrap {
+  white-space: normal !important;
+  font-size: 12px;
+}

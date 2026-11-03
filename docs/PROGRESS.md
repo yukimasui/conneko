@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-03（v0.6.42 まとめてつなぐのボタン）
+最終更新: 2026-11-03（v0.6.43 展開図のまとめて追加）
 
 ## 現在地
 
+- v0.6.43: 展開図の「まとめて追加」（src/editor/BulkAddDialog.tsx、`autoLayout` の `groups` と `only`）。上のバーは展開図のとき「まとめて追加」、概念図のとき「まとめてつなぐ」
 - v0.6.42: 上のバーに「まとめてつなぐ」（bulkFrom が '' なら 1 台目のクリックを待つ）。クリックを待つ案内をキャンバスの下へ、「やめる」ボタンの色を修正
 - v0.6.41: 機器を 81 機種追加（parts/mains3・plc2・sensor2・drive2・air2）。docs/air-catalog.md・docs/network-catalog.md を新設。IoFormat 'omron'、bus.io の reserve、アナログ出力の I/O 表、空圧回路図の 2 ポート弁
 - v0.6.40: まとめてつなぐで電源の種類・電圧から推定（`fits`、名前で極の分からない受電端子・distinctGroups、単相 2 線 → 電磁接触器はコイルへ）

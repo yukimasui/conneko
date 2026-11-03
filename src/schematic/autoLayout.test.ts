@@ -178,3 +178,34 @@ describe('ソース出力（PNP）の段', () => {
     expect(sheet.polylines.some((l) => l.edge?.includes('rail:common') && l.edge.includes('PL1:X1-X2#2'))).toBe(true);
   });
 });
+
+describe('まとめて追加（段・系統ごとに選んで置く）', () => {
+  const blank = (s: Schematic): Schematic => ({ ...s, sheets: s.sheets.map((x) => ({ ...x, items: [] })) });
+  const sample = { ...sampleDiagram, schematic: blank(sampleDiagram.schematic!) };
+  const build = buildSchematic(sample, getDeviceDefinition);
+  const control = sample.schematic.sheets.find((x) => !x.kind && x.rails?.supply)!;
+  const paper = paperOf(sample.schematic, control);
+
+  it('段ごとに、行き着く記号を鍵にして置いた要素をまとめる', () => {
+    const r = autoLayout(build, sample.schematic, control.id, paper);
+    expect(r.groups.length).toBeGreaterThan(3);
+    expect(r.groups.flatMap((g) => g.elements).length).toBe(r.placed);
+    for (const g of r.groups) expect(g.elements).toContain(g.key);
+  });
+
+  it('選んだ段だけを置く（only）。ほかの段の記号は置かない', () => {
+    const all = autoLayout(build, sample.schematic, control.id, paper);
+    const pick = all.groups[1];
+    const r = autoLayout(build, sample.schematic, control.id, paper, new Set([pick.key]));
+    const items = r.schematic.sheets.find((x) => x.id === control.id)!.items.map((i) => i.element);
+    expect(r.groups.map((g) => g.key)).toEqual([pick.key]);
+    expect(items.sort()).toEqual([...pick.elements].sort());
+  });
+
+  it('主回路のシートは、一次電源から続く系統ごと', () => {
+    const main = sample.schematic.sheets.find((x) => !x.kind && !x.rails?.supply)!;
+    const r = autoLayout(build, sample.schematic, main.id, paperOf(sample.schematic, main));
+    expect(r.groups.map((g) => g.key)).toEqual(['PS1:main']);
+    expect(r.groups[0].elements.length).toBe(r.placed);
+  });
+});

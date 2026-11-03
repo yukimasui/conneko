@@ -27,6 +27,7 @@ import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
 import { CurrentDialog } from './editor/CurrentDialog';
 import { BulkConnectDialog } from './editor/BulkConnectDialog';
+import { BulkAddDialog } from './editor/BulkAddDialog';
 import { PrintView, type PrintOptions } from './editor/PrintView';
 import { bomCsv, ioCsv, wireCsv } from './export/reports';
 import { renderSheetSvg } from './export/sheetSvg';
@@ -168,6 +169,8 @@ function Editor() {
    */
   const [bulkFrom, setBulkFrom] = useState<string | null>(null);
   const [bulk, setBulk] = useState<{ a: string; b: string } | null>(null);
+  /** 展開図のまとめて追加のダイアログ */
+  const [bulkAdd, setBulkAdd] = useState(false);
   /** 前に印刷したときの設定（次に印刷ダイアログを開いたときの既定） */
   const [lastPrint, setLastPrint] = useState<PrintOptions | null>(null);
   const [printing, setPrinting] = useState<PrintOptions | null>(null);
@@ -888,6 +891,11 @@ function Editor() {
     [edges, nodes, setNodes, setEdges, showSheet],
   );
 
+  // 展開図へ切り替えたら、まとめてつなぐのクリック待ちをやめる
+  useEffect(() => {
+    if (mode === 'schematic') setBulkFrom(null);
+  }, [mode]);
+
   // まとめてつなぐの相手を待っているときは、Esc でやめる
   useEffect(() => {
     if (bulkFrom === null) return;
@@ -1161,6 +1169,11 @@ function Editor() {
             <button type="button" onClick={() => loadDiagram(sampleDiagram)}>サンプル</button>
           </div>
           <div className="toolbar__group">
+            {mode === 'schematic' ? (
+              <button type="button" onClick={() => setBulkAdd(true)} title="母線につながる、まだ置いていない段（主回路のシートは系統）の一覧から選んで、まとめて展開図に置きます">
+                まとめて追加
+              </button>
+            ) : (
             <button
               type="button"
               className={bulkFrom !== null ? 'is-active' : ''}
@@ -1174,6 +1187,7 @@ function Editor() {
             >
               まとめてつなぐ
             </button>
+            )}
             <button type="button" onClick={() => setCurrentDialog(true)} title="同時に使う機器（工程）を決め、遮断器ごとの電流の合計と余裕をグラフで確かめます">
               電流の余裕
             </button>
@@ -1395,6 +1409,20 @@ function Editor() {
             setLastPrint(o);
             setPrinting(o);
           }}
+        />
+      )}
+      {mode === 'schematic' && toast && <div className="toast is-global">{toast}</div>}
+      {bulkAdd && schematic && schematicBuild && (
+        <BulkAddDialog
+          build={schematicBuild}
+          schematic={schematic}
+          sheetId={schematic.sheets.some((x) => x.id === schematicSheet) ? schematicSheet! : (schematic.sheets[0]?.id ?? '')}
+          onAdd={(next, message) => {
+            setSchematic(next);
+            notify(message);
+            setBulkAdd(false);
+          }}
+          onClose={() => setBulkAdd(false)}
         />
       )}
       {bulk && (
