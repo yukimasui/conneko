@@ -2605,14 +2605,22 @@ textarea {
 }
 
 /* --- まとめてつなぐ --- */
+/* クリックを待つ案内は、つなぐ機器にかぶらないようキャンバスの下に出す */
 .toast.is-sticky {
+  top: auto;
+  bottom: 16px;
   display: flex;
   align-items: center;
   gap: 10px;
+  background: var(--accent);
 }
 .toast.is-sticky button {
   font-size: 12px;
   padding: 2px 8px;
+  color: var(--text);
+  background: #fff;
+  border: none;
+  border-radius: 4px;
 }
 .bulk-dialog {
   width: min(720px, calc(100vw - 32px));
@@ -2664,4 +2672,10 @@ textarea {
   font-size: 13px;
   color: var(--muted);
   padding: 8px 0;
+}
+/* まとめてつなぐのクリックを待っている間のボタン */
+.toolbar__group button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }

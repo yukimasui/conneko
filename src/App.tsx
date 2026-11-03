@@ -162,7 +162,10 @@ function Editor() {
   >(null);
   const [printDialog, setPrintDialog] = useState(false);
   const [currentDialog, setCurrentDialog] = useState(false);
-  /** まとめてつなぐ: 1 台目を選んで相手のクリックを待っている機器と、確認ダイアログを開いている 2 台 */
+  /**
+   * まとめてつなぐ: クリックを待っているとき、1 台目の機器（'' なら 1 台目のクリックを待っている。null なら待っていない）と、
+   * 確認ダイアログを開いている 2 台
+   */
   const [bulkFrom, setBulkFrom] = useState<string | null>(null);
   const [bulk, setBulk] = useState<{ a: string; b: string } | null>(null);
   /** 前に印刷したときの設定（次に印刷ダイアログを開いたときの既定） */
@@ -887,7 +890,7 @@ function Editor() {
 
   // まとめてつなぐの相手を待っているときは、Esc でやめる
   useEffect(() => {
-    if (!bulkFrom) return;
+    if (bulkFrom === null) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setBulkFrom(null);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1158,6 +1161,19 @@ function Editor() {
             <button type="button" onClick={() => loadDiagram(sampleDiagram)}>サンプル</button>
           </div>
           <div className="toolbar__group">
+            <button
+              type="button"
+              className={bulkFrom !== null ? 'is-active' : ''}
+              onClick={() => {
+                // 2 台を選んでいればすぐに接続案を出し、1 台なら相手のクリックを、なければ 1 台目のクリックを待つ
+                const picked = nodes.filter((n) => n.selected && !getDeviceDefinition(n.data.deviceType)?.netLabel).map((n) => n.id);
+                if (picked.length === 2) setBulk({ a: picked[0], b: picked[1] });
+                else setBulkFrom(picked.length === 1 ? picked[0] : '');
+              }}
+              title="2 台の機器をクリックすると、相・極・電圧を合わせた接続案を出し、確かめてからまとめて電線を引きます"
+            >
+              まとめてつなぐ
+            </button>
             <button type="button" onClick={() => setCurrentDialog(true)} title="同時に使う機器（工程）を決め、遮断器ごとの電流の合計と余裕をグラフで確かめます">
               電流の余裕
             </button>
@@ -1258,7 +1274,11 @@ function Editor() {
             isValidConnection={isValidConnection}
             onNodeContextMenu={onNodeContextMenu}
             onNodeClick={(_, node) => {
-              if (!bulkFrom || node.id === bulkFrom) return;
+              if (bulkFrom === null || node.id === bulkFrom) return;
+              if (bulkFrom === '') {
+                setBulkFrom(node.id);
+                return;
+              }
               setBulk({ a: bulkFrom, b: node.id });
               setBulkFrom(null);
             }}
@@ -1283,9 +1303,9 @@ function Editor() {
             <MiniMap pannable zoomable style={{ width: 150, height: 100 }} nodeColor={(n) => (context.deviceSeverity.get(n.id) === 'error' ? '#ef4444' : '#94a3b8')} />
           </ReactFlow>
           {toast && <div className="toast">{toast}</div>}
-          {bulkFrom && (
+          {bulkFrom !== null && (
             <div className="toast is-sticky">
-              {bulkFrom} とまとめてつなぐ相手の機器をクリックしてください
+              {bulkFrom ? `${bulkFrom} とまとめてつなぐ相手の機器をクリックしてください` : 'まとめてつなぐ 1 台目の機器をクリックしてください'}
               <button type="button" onClick={() => setBulkFrom(null)}>
                 やめる（Esc）
               </button>
