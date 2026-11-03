@@ -76,24 +76,36 @@ const LADDER_KINDS = new Set(['contact', 'coil', 'lamp', 'buzzer', 'plc-input', 
 const MAX_DEPTH = 12;
 const MAX_PATHS = 400;
 
+/** 自動配置でまとめて置く単位（制御回路の段、主回路の系統）と、その単位で新しく置く要素 */
+export interface LayoutGroup {
+  /** 単位の鍵（段の終わりの記号・PLC の入出力点・主回路の起点の要素 ID） */
+  key: string;
+  elements: string[];
+}
+
 export interface AutoLayoutResult {
   schematic: Schematic;
   /** 新しく置いた要素の数 */
   placed: number;
+  /** 置いた単位ごとの要素（「まとめて追加」の候補の一覧に使う） */
+  groups: LayoutGroup[];
   /** 置けなかった理由など（置けたときは undefined） */
   message?: string;
 }
 
-export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId: string, paper: Paper): AutoLayoutResult {
+/**
+ * only を渡すと、その鍵（LayoutGroup.key）の段・系統だけを置く（「まとめて追加」で選んだもの）
+ */
+export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId: string, paper: Paper, only?: Set<string>): AutoLayoutResult {
   const sheet = schematic.sheets.find((s) => s.id === sheetId);
-  if (!sheet) return { schematic, placed: 0, message: '展開図のシートがありません' };
+  if (!sheet) return { schematic, placed: 0, groups: [], message: '展開図のシートがありません' };
   const railNet = (ref?: string) => {
     const r = ref ? splitRail(ref) : undefined;
     return r ? build.netOf(r.device, r.terminal) : undefined;
   };
   const left = railNet(sheet.rails?.supply);
   const right = railNet(sheet.rails?.common);
-  if (!left) return autoLayoutMain(build, schematic, sheetId, paper);
+  if (!left) return autoLayoutMain(build, schematic, sheetId, paper, only);
 
   // --- 経路のグラフ（網を頂点、記号を辺とする） ---
   const adjacency = new Map<string, Edge[]>();
@@ -156,11 +168,15 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
   const where = new Map<string, SchematicItem>(items.map((i) => [i.element, i]));
   const elsewhere = new Set(schematic.sheets.filter((s) => s.id !== sheetId).flatMap((s) => s.items.map((i) => i.element)));
   let placed = 0;
+  /** いま並べている段の鍵と、段ごとに置いた要素 */
+  let group = '';
+  const groupItems = new Map<string, string[]>();
   const put = (e: { entry: ElementEntry; reversed?: boolean }, x: number, y: number) => {
     const item: SchematicItem = { element: e.entry.id, x: snap(x), y: snap(y), ...(e.reversed ? { flip: true } : {}) };
     items.push(item);
     where.set(item.element, item);
     placed++;
+    groupItems.set(group, [...(groupItems.get(group) ?? []), e.entry.id]);
     return item;
   };
   const isPlaced = (e: Edge) => where.has(e.entry.id) || elsewhere.has(e.entry.id);
@@ -174,8 +190,10 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
   const GAP = 10;
 
   for (const end of ends) {
-    const group = groups.get(end)!.sort((a, b) => a.length - b.length);
-    const main = group[0];
+    if (only && !only.has(end)) continue;
+    group = end;
+    const route = groups.get(end)!.sort((a, b) => a.length - b.length);
+    const main = route[0];
     const last = main[main.length - 1];
     if (isPlaced(last)) continue;
     const middle = main.slice(0, -1);
@@ -200,7 +218,7 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
     put(last, Math.max(cursor, rightX(last.entry.symbol, paper)), y);
 
     // 並列の枝: 本線にない記号を、迂回する本線の記号の真下に並べる
-    for (const p of group.slice(1)) {
+    for (const p of route.slice(1)) {
       const branch = p.slice(0, -1).filter((e) => !isPlaced(e));
       if (!branch.length || p[p.length - 1].entry.id !== end) continue;
       // 枝が本線から分かれる位置（最初に本線と違う記号のところ）
@@ -219,7 +237,8 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
 
   // --- ソース出力（PNP）: 出力点を段の左に置き、負荷（と途中の接点）を通って戻り側の母線へ着く段にする ---
   for (const src of right ? sources : []) {
-    if (where.has(src.entry.id) || elsewhere.has(src.entry.id)) continue;
+    if (where.has(src.entry.id) || elsewhere.has(src.entry.id) || (only && !only.has(src.entry.id))) continue;
+    group = src.entry.id;
     let best: Edge[] | undefined;
     const walk = (net: string, path: Edge[], seen: Set<string>) => {
       if (path.length >= MAX_DEPTH || (best && path.length >= best.length)) return;
@@ -260,7 +279,8 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
   const pinY = (e: ElementEntry, item: SchematicItem, terminal: string) =>
     paper.height - pinPoint(e.symbol, e.element.pinOf[terminal], [item.x, paper.height - item.y], item.rotation)[1];
   for (const point of build.elements) {
-    if (!point.element.kind.startsWith('plc-') || where.has(point.id) || elsewhere.has(point.id)) continue;
+    if (!point.element.kind.startsWith('plc-') || where.has(point.id) || elsewhere.has(point.id) || (only && !only.has(point.id))) continue;
+    group = point.id;
     const net = netsOf(point)[0]?.net;
     const partner = build.elements.find(
       (e) => e.element.kind === 'box' && e.device !== point.device && netsOf(e).some((x) => x.net === net) && netsOf(e).some((x) => rails.includes(x.net)),
@@ -279,12 +299,17 @@ export function autoLayout(build: SchematicBuild, schematic: Schematic, sheetId:
     return {
       schematic,
       placed: 0,
+      groups: [],
       message: paths.length
         ? '新しく置く記号はありません（段の記号はすべて配置済みです）'
         : '左の母線から右の母線・PLC の入出力点へ、接点・コイル・表示灯だけでたどれる段が見つかりません',
     };
   }
-  return { schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) }, placed };
+  return {
+    schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) },
+    placed,
+    groups: [...groupItems].map(([key, elements]) => ({ key, elements })),
+  };
 }
 
 // ---- 主回路 ----
@@ -311,7 +336,7 @@ interface MainNode {
  * すべての極が前の機器の二次側につながる機器をたどって縦に 1 列に並べる（いちばん長く続く枝を本線にする）。
  * 本線から分かれる機器（制御電源のサーキットプロテクタなど）は、横向きで本線の右に、分かれる位置の下に置く。
  */
-export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, sheetId: string, paper: Paper): AutoLayoutResult {
+export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, sheetId: string, paper: Paper, only?: Set<string>): AutoLayoutResult {
   const sheet = schematic.sheets.find((s) => s.id === sheetId)!;
   const placedIds = new Set(schematic.sheets.flatMap((s) => s.items.map((i) => i.element)));
   const terminalsOf = (e: ElementEntry, pins: string[]) =>
@@ -353,6 +378,7 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
     return {
       schematic,
       placed: 0,
+      groups: [],
       message: '母線を選んでいないシートは主回路として並べます。置いていない一次電源・遮断器・電磁接触器などが見つかりません（制御回路は母線を選んでから並べてください）',
     };
   }
@@ -361,6 +387,10 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
   const H = paper.height;
   const items = [...sheet.items];
   let placed = 0;
+  /** いま並べている系統（起点の要素 ID）と、系統ごとに置いた要素 */
+  let group = '';
+  const groupItems = new Map<string, string[]>();
+  const note = (id: string) => groupItems.set(group, [...(groupItems.get(group) ?? []), id]);
   /** 要素の極 1 の端子（pin）が (x, y) に来るように置く（y は下向き）。置いた記号の端子の y を返す */
   const put = (n: MainNode, vertical: boolean, x: number, y: number, anchorPin: string) => {
     const item: SchematicItem = { element: n.entry.id, x: 0, y: 0, ...(vertical ? { vertical: true } : {}) };
@@ -370,6 +400,7 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
     item.y = snap(y + p[1]);
     items.push(item);
     placed++;
+    note(n.entry.id);
     const yOf = (pin: string) => item.y - (def.pins[pin]?.[1] ?? 0);
     return { item, def, yOf };
   };
@@ -384,6 +415,7 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
     items.push(item);
     done.add(entry.id);
     placed++;
+    note(entry.id);
     return item;
   };
   /** 置いた記号の右端（x） */
@@ -453,7 +485,16 @@ export function autoLayoutMain(build: SchematicBuild, schematic: Schematic, shee
       node = main;
     }
   };
-  roots.forEach((r, i) => layoutChain(r, x0 + i * 80));
+  roots
+    .filter((r) => !only || only.has(r.entry.id))
+    .forEach((r, i) => {
+      group = r.entry.id;
+      layoutChain(r, x0 + i * 80);
+    });
 
-  return { schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) }, placed };
+  return {
+    schematic: { ...schematic, sheets: schematic.sheets.map((s) => (s.id === sheetId ? { ...s, items } : s)) },
+    placed,
+    groups: [...groupItems].map(([key, elements]) => ({ key, elements })),
+  };
 }
