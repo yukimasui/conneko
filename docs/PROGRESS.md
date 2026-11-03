@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-03（v0.6.43 展開図のまとめて追加）
+最終更新: 2026-11-03（v0.6.44 README の作り直し）
 
 ## 現在地
 
+- v0.6.44: README を作り直し（ロゴ・画面の画像は docs/images/、詳しい説明は docs/features.md）。まとめてつなぐの主接点への電線を主回路の色に（`circuitOf` が受ける端子の role を見る）
 - v0.6.43: 展開図の「まとめて追加」（src/editor/BulkAddDialog.tsx、`autoLayout` の `groups` と `only`）。上のバーは展開図のとき「まとめて追加」、概念図のとき「まとめてつなぐ」
 - v0.6.42: 上のバーに「まとめてつなぐ」（bulkFrom が '' なら 1 台目のクリックを待つ）。クリックを待つ案内をキャンバスの下へ、「やめる」ボタンの色を修正
 - v0.6.41: 機器を 81 機種追加（parts/mains3・plc2・sensor2・drive2・air2）。docs/air-catalog.md・docs/network-catalog.md を新設。IoFormat 'omron'、bus.io の reserve、アナログ出力の I/O 表、空圧回路図の 2 ポート弁

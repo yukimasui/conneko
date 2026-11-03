@@ -40,6 +40,8 @@ describe('まとめてつなぐの接続案', () => {
     const expected = { source: 'ELB1', pairs: ['ELB1.2-MC1.1/L1', 'ELB1.4-MC1.3/L2', 'ELB1.6-MC1.5/L3'] };
     expect(pairs(d, 'ELB1', 'MC1')).toEqual(expected);
     expect(pairs(d, 'MC1', 'ELB1')).toEqual(expected);
+    // 主接点へは主回路の色（黒）、コイルへは操作回路の色
+    expect(proposeConnections(d, 'ELB1', 'MC1', lookup).proposals.every((p) => p.circuit === 'ac-main')).toBe(true);
   });
 
   it('電磁接触器の二次側からモーターの U・V・W へ。一次電源の接地はモーターの E へ', () => {
@@ -115,6 +117,7 @@ describe('電源の種類・電圧から推定する', () => {
 
   it('単相 2 線のサーキットプロテクタから電磁接触器へは、主接点ではなくコイル A1・A2 へ', () => {
     expect(pairs(fed, 'CP1', 'MC1').pairs).toEqual(['CP1.2-MC1.A1', 'CP1.4-MC1.A2']);
+    expect(proposeConnections(fed, 'CP1', 'MC1', lookup).proposals.every((p) => p.circuit === 'ac-control')).toBe(true);
   });
 
   it('DC24V 電源から表示灯へは、名前で極の分からない X1・X2 に + と − を並び順で', () => {
