@@ -206,6 +206,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     test: named(/^温度調節器/),
     facets: [{ label: '制御出力', value: paren }],
   },
+  { id: 'signal-converter', name: '信号変換器', keywords: ['アイソレータ', '直流入力変換器', '4-20mA', '0-10V', 'みにまる', 'シグナルコンディショナ'], test: named(/^信号変換器/) },
   { id: 'hmi', name: 'タッチパネル', keywords: ['HMI', 'タッチパネルディスプレイ', 'GOT', 'VT'], test: named(/^タッチパネル/) },
   { id: 'iai-position', name: 'ポジションコントローラー（IAI）', keywords: ['ロボシリンダー', 'コントローラー'], test: named(/^ポジションコントローラー|^多軸ポジションコントローラー/) },
   { id: 'iai-runit', name: 'R-unit（IAI）', keywords: ['RCON', 'ロボシリンダー'], test: named(/^R-unit/) },
