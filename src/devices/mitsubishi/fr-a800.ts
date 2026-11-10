@@ -37,6 +37,11 @@ export interface FrA800Spec {
   depthMm: number;
   /** 推定の値（機器定義の estimated に書く） */
   estimated: string;
+  /**
+   * シリーズ。省略時は 'A'（FR-A800）。'F' は ファン・ポンプ用の FR-F800（catalog/mitsubishi-fr-f820-*.ts）:
+   * 制御回路端子は FR-A800 と同じで、ブレーキトランジスタ・内蔵ブレーキ抵抗器がない（PR・PX の端子がない）。定格は LD（軽負荷）で表す
+   */
+  series?: 'A' | 'F';
 }
 
 const H = 520;
@@ -94,7 +99,9 @@ const ry = (i: number) => RIGHT_Y0 + i * PITCH;
 
 /** 主回路（下段）と直流母線・制御回路電源（上段） */
 const MAIN = ['R/L1', 'S/L2', 'T/L3', 'U', 'V', 'W'];
-const UPPER = ['R1/L11', 'S1/L21', 'N/-', 'P1', 'P/+', 'PR', 'PX'];
+const UPPER_A = ['R1/L11', 'S1/L21', 'N/-', 'P1', 'P/+', 'PR', 'PX'];
+/** FR-F800 は PR・PX がない */
+const UPPER_F = ['R1/L11', 'S1/L21', 'N/-', 'P1', 'P/+'];
 const MAIN_Y = 488;
 const UPPER_Y = 452;
 const EARTH_Y = 510;
@@ -193,6 +200,8 @@ const RST = ['R', 'S', 'T'] as const;
 
 /** FR-A820 の機器定義を作る */
 export function buildFrA800(s: FrA800Spec): DeviceDefinition {
+  const isF = s.series === 'F';
+  const UPPER = isF ? UPPER_F : UPPER_A;
   const W = s.widthMm * 2;
   const LEFT_X = 6;
   const RIGHT_X = W - 6;
@@ -204,7 +213,8 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
   const ux = (id: string) => UPPER_X[UPPER.indexOf(id)];
   // 接地端子は主回路の端子の間（印字と重ならない位置）
   const EARTH_X = [+((MAIN_X[0] + MAIN_X[1]) / 2).toFixed(2), +((MAIN_X[4] + MAIN_X[5]) / 2).toFixed(2)];
-  const model = `FR-A820-${s.capacity}-1`;
+  const model = `FR-${isF ? 'F' : 'A'}820-${s.capacity}-1`;
+  const duty = isF ? 'LD' : 'ND';
   // 操作パネル（FR-DU08）の大きさ
   const pw = 150;
   const px = cx - pw / 2;
@@ -276,9 +286,9 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
   </g>
   <text x="${cx - 36}" y="121" font-family="sans-serif" font-size="4.2" font-weight="bold" fill="#333">MITSUBISHI</text>
   <text x="${cx - 36}" y="126" font-family="sans-serif" font-size="4.2" font-weight="bold" fill="#333">ELECTRIC</text>
-  <text x="${cx}" y="146" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#222">FREQROL-A800</text>
+  <text x="${cx}" y="146" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#222">FREQROL-${isF ? 'F' : 'A'}800</text>
   <text x="${cx}" y="160" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#333">${model}</text>
-  <text x="${cx}" y="170" text-anchor="middle" font-family="sans-serif" font-size="4.4" fill="#555">INVERTER 3φ200V ${s.kw}kW (ND)</text>
+  <text x="${cx}" y="170" text-anchor="middle" font-family="sans-serif" font-size="4.4" fill="#555">INVERTER 3φ200V ${s.kw}kW (${duty})</text>
   <!-- 前面カバー（下段。中に制御回路の端子台） -->
   <rect x="34" y="180" width="${W - 68}" height="236" rx="3" fill="url(#acover-{{uid}})" stroke="#a5a6a2" stroke-width="0.7"/>
   <g stroke="#c3c4c0" stroke-width="0.9">${Array.from({ length: 9 }, (_, i) => `<path d="M44 ${200 + i * 22} H${W - 44 - (i % 3) * 12}"/>`).join('')}</g>
@@ -300,12 +310,13 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
   ${UPPER.map((id) => screw(ux(id), UPPER_Y, 5.5) + `<text x="${ux(id)}" y="${UPPER_Y + 13}" text-anchor="middle" font-family="sans-serif" font-size="${id.length > 4 ? 3.4 : 4}" font-weight="bold" fill="#fff">${id}</text>`).join('')}
   <!-- 短絡片（P1-P/+、PR-PX） -->
   <rect x="${ux('P1') - 3}" y="${UPPER_Y - 4}" width="${ux('P/+') - ux('P1') + 6}" height="8" rx="1.5" fill="#b87333" opacity="0.85"/>
-  <rect x="${ux('PR') - 3}" y="${UPPER_Y - 4}" width="${ux('PX') - ux('PR') + 6}" height="8" rx="1.5" fill="#b87333" opacity="0.85"/>
+  ${isF ? '' : `<rect x="${ux('PR') - 3}" y="${UPPER_Y - 4}" width="${ux('PX') - ux('PR') + 6}" height="8" rx="1.5" fill="#b87333" opacity="0.85"/>`}
   ${MAIN.map((id, i) => screw(MAIN_X[i], MAIN_Y) + `<text x="${MAIN_X[i]}" y="${MAIN_Y + 13}" text-anchor="middle" font-family="sans-serif" font-size="4.2" font-weight="bold" fill="#fff">${id}</text>`).join('')}
   ${EARTH_X.map((x) => screw(x, EARTH_Y, 4.5)).join('')}
   <text x="${cx}" y="${EARTH_Y + 2}" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#fff">⏚</text>
 `;
 
+  const noteOf = (id: string) => (isF && id === 'P/+' ? '直流母線（＋）。ブレーキユニット・DC リアクトル用（FR-F800 はブレーキ抵抗器をつながない）' : NOTES[id]);
   const sig = (id: string, label: string, x: number, y: number, side: 'left' | 'right', extra: Partial<TerminalDef> = {}): TerminalDef => ({
     id,
     ...(label !== id ? { label } : {}),
@@ -329,13 +340,13 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
         side: 'bottom',
         role: 'supply',
         supply: { system: 'AC', voltage: 200, conductor: RST[i], limitCurrent: s.outputCurrent },
-        note: `インバータ出力（モーターへ。ND 定格出力電流 ${s.outputCurrent.toFixed(1)}A）`,
+        note: `インバータ出力（モーターへ。${duty} 定格出力電流 ${s.outputCurrent.toFixed(1)}A）`,
       }),
     ),
     ...UPPER.map((id): TerminalDef => {
       if (id === 'R1/L11' || id === 'S1/L21')
         return { id, note: NOTES[id], hint: HINTS[id], x: ux(id), y: UPPER_Y, side: 'top', role: 'input', accepts: ac200, optional: true };
-      return { id, note: NOTES[id], x: ux(id), y: UPPER_Y, side: 'top', role: 'signal', optional: true };
+      return { id, note: noteOf(id), x: ux(id), y: UPPER_Y, side: 'top', role: 'signal', optional: true };
     }),
     { id: 'E', label: '⏚', note: '接地', x: EARTH_X[0], y: EARTH_Y, side: 'bottom', role: 'ground' },
     { id: 'E2', label: '⏚', note: '接地（モーターの接地用）', x: EARTH_X[1], y: EARTH_Y, side: 'bottom', role: 'ground', optional: true },
@@ -368,14 +379,7 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
     model,
     maker: '三菱電機',
     category: 'load',
-    description:
-      `三菱電機の高機能インバーター FR-A800 シリーズ 三相 200V ${s.kw}kW（FR-A820-${s.code}。ND 定格出力電流 ${s.outputCurrent.toFixed(1)}A、定格入力電流 ${s.inputCurrent}A（DC リアクトルなし）。` +
-      `外形 W${s.widthMm} × H260 × D${s.depthMm}mm）。R/L1・S/L2・T/L3 に三相 AC200V を入れ、U・V・W からモーターを可変速運転する（ベクトル制御・PM モーター制御にも対応）。` +
-      '制御回路電源 R1/L11・S1/L21 は出荷時に R/L1・S/L2 と短絡片でつながっている（停電中もモニタ・異常出力を保ちたいときは短絡片を外して別電源を入れる）。' +
-      '接点入力はシンクロジック（出荷時。STF などと SD の間を接点か NPN トランジスタで短絡して ON）、RUN・SU・IPF・OL・FU はオープンコレクタ出力（共通 SE）、' +
-      'A1-B1-C1 は異常出力、A2-B2-C2 はリレー出力（どちらも AC230V 0.3A / DC30V 0.3A）。周波数は 10-2-5 にボリューム、2-5 に電圧、4-5 に電流（AU を ON）を入れて設定する。' +
-      'S1・S2 は安全停止入力（使わない場合は PC と短絡、SIC は SD と短絡）。' +
-      'ブレーキ抵抗器を内蔵しており（PR-PX 間の短絡片）、高頻度の制動には外付けのブレーキ抵抗器（MRS 形・FR-ABR 形）を P/+-PR 間につなぐ（そのときは PR-PX 間の短絡片を外す）。',
+    description: isF ? describeF(s) : describeA(s),
     labelPrefix: 'INV',
     width: W,
     height: H,
@@ -397,6 +401,30 @@ export function buildFrA800(s: FrA800Spec): DeviceDefinition {
     loadCurrent: s.inputCurrent,
     estimated: s.estimated,
   };
+}
+
+function describeA(s: FrA800Spec) {
+  return (
+    `三菱電機の高機能インバーター FR-A800 シリーズ 三相 200V ${s.kw}kW（FR-A820-${s.code}。ND 定格出力電流 ${s.outputCurrent.toFixed(1)}A、定格入力電流 ${s.inputCurrent}A（DC リアクトルなし）。` +
+    `外形 W${s.widthMm} × H260 × D${s.depthMm}mm）。R/L1・S/L2・T/L3 に三相 AC200V を入れ、U・V・W からモーターを可変速運転する（ベクトル制御・PM モーター制御にも対応）。` +
+    '制御回路電源 R1/L11・S1/L21 は出荷時に R/L1・S/L2 と短絡片でつながっている（停電中もモニタ・異常出力を保ちたいときは短絡片を外して別電源を入れる）。' +
+    '接点入力はシンクロジック（出荷時。STF などと SD の間を接点か NPN トランジスタで短絡して ON）、RUN・SU・IPF・OL・FU はオープンコレクタ出力（共通 SE）、' +
+    'A1-B1-C1 は異常出力、A2-B2-C2 はリレー出力（どちらも AC230V 0.3A / DC30V 0.3A）。周波数は 10-2-5 にボリューム、2-5 に電圧、4-5 に電流（AU を ON）を入れて設定する。' +
+    'S1・S2 は安全停止入力（使わない場合は PC と短絡、SIC は SD と短絡）。' +
+    'ブレーキ抵抗器を内蔵しており（PR-PX 間の短絡片）、高頻度の制動には外付けのブレーキ抵抗器（MRS 形・FR-ABR 形）を P/+-PR 間につなぐ（そのときは PR-PX 間の短絡片を外す）。'
+  );
+}
+
+function describeF(s: FrA800Spec) {
+  return (
+    `三菱電機のファン・ポンプ用インバーター FR-F800 シリーズ 三相 200V ${s.kw}kW（FR-F820-${s.code}。LD 定格出力電流 ${s.outputCurrent.toFixed(1)}A、定格入力電流 ${s.inputCurrent}A（LD・DC リアクトルなし）。` +
+    `外形 W${s.widthMm} × H260 × D${s.depthMm}mm）。R/L1・S/L2・T/L3 に三相 AC200V を入れ、U・V・W からファン・ポンプのモーターを可変速運転する（最適励磁制御による省エネ。PM モーターにも対応）。` +
+    '定格は LD（軽負荷）で表した（SLD（超軽負荷）に切り換えると定格出力電流が大きくなる）。' +
+    '制御回路端子は FR-A800 と同じ: 接点入力 STF・STR・RH・RM・RL など（シンクロジック。SD との間を接点か NPN トランジスタで短絡して ON）、RUN・SU・IPF・OL・FU はオープンコレクタ出力（共通 SE）、' +
+    'A1-B1-C1 は異常出力、A2-B2-C2 はリレー出力。周波数は 10-2-5 にボリューム、2-5 に電圧、4-5 に電流（4〜20mA。圧力・流量の調節計の出力など）を入れて設定する。' +
+    'S1・S2 は安全停止入力（使わない場合は PC と短絡、SIC は SD と短絡）。制御回路電源 R1/L11・S1/L21 は出荷時に R/L1・S/L2 と短絡片でつながっている。' +
+    'ブレーキトランジスタ・ブレーキ抵抗器がない（PR・PX の端子がない）ので、急減速・回生の多い用途には FR-A800 を使う。'
+  );
 }
 
 /** 制御回路端子の並びの説明（各容量の estimated の頭に付ける） */

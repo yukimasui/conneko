@@ -160,7 +160,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     facets: [
       // 型式の末尾が S（FR-E820S など）は単相 200V 入力
       // 同じ容量の FR-E800 と FR-A800 を分ける
-      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
+      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^FR-F8/.test(d.model) ? 'FR-F800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
       // 安川電機 GA500 は CIPR-GA50A2□□□（三相 200V）/ GA50AB□□□（単相 200V）
       {
         label: '電源',
