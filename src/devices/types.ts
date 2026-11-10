@@ -511,6 +511,12 @@ export interface BusSpec {
      * 連のソレノイドの数は、連の機器の pneumatic.valve.operators（'solenoid' の数）で数える
      */
     serial?: SerialOutputSpec;
+    /**
+     * プラグイン形（一括配線）のマニホールド: 親のコネクタ（D サブ・フラットケーブル）のピンを、装着した電磁弁のソレノイドへ連の順に割り付ける
+     * （src/model/bus.ts）。割り付けたピン番号は連の params の solA / solB に、ピンの割付けは親の params の plugInMap に入る。
+     * ソレノイドのコイルは親のピン（受電端子）として書く（連の弁は電気の端子を持たない）
+     */
+    plugIn?: PlugInWiringSpec;
   };
   /** 専用の位置に装着するユニットの種類（host.slotRoles と対応。例: 'power'、'cpu'） */
   role?: string;
@@ -542,6 +548,23 @@ export interface SerialOutputSpec {
   outputs: number | ((params: ParamValues) => number);
   /** SI ユニットの型式（I/O 表・部品表に書く）。引数は既定値を補完済みのパラメータ */
   unitModel: (params: ParamValues) => string;
+}
+
+/**
+ * プラグイン形（一括配線）のマニホールドのコネクタのピンの割付け（BusSpec.host.plugIn）。
+ * ソレノイドは、pins の順に、連 1（D 側）から各連の A 側・B 側の順に割り付ける（ダブル配線はどの連も 2 本、配線指定はソレノイドの数）
+ */
+export interface PlugInWiringSpec {
+  /** コネクタの端子 ID（ピンは '<connector>#<番号>'） */
+  connector: string;
+  /** 配線（SerialOutputSpec.wiring と同じ） */
+  wiring: 'double' | 'specified' | { param: string };
+  /** ソレノイドに割り付けるピン番号の順（例: D サブ 25 ピンのダブル配線は 1, 14, 2, 15, …）。この本数を超えると指摘する */
+  pins: number[];
+  /** コモンのピン番号 */
+  common: number[];
+  /** コネクタの名前（指摘・バルブエディタの表示用。例: 'D サブ 25 ピン'） */
+  name: string;
 }
 
 export interface ParamOption {
@@ -733,6 +756,9 @@ export interface Accessory {
  * - silencer: サイレンサ（in） / pressure-switch: 圧力スイッチ（in） / gauge: 圧力計（in）
  * - tee: 分岐継手（a, b, c） / manifold: マニホールド（sup, exh。装着した電磁弁をまとめる）
  * - vacuum-ejector: 真空エジェクタ（in, vac, exh） / vacuum-pad: 吸着パッド（vac）
+ * - soft-start: ソフトスタート弁（残圧排気弁を兼ねる 3 ポート電磁弁。通電で in → out へ徐々に給気し、通電をやめると out を exh へ排気する。in, out, exh。
+ *   ソレノイドの + 端子は valve.solenoids.a）
+ * - reducer: 異径継手（プラグインレデューサなど。a が細い側、b が太い側。配管の途中に段のついた管の記号で描く）
  */
 export type PneumaticSymbolKind =
   | 'source'
@@ -756,7 +782,9 @@ export type PneumaticSymbolKind =
   | 'tee'
   | 'manifold'
   | 'vacuum-ejector'
-  | 'vacuum-pad';
+  | 'vacuum-pad'
+  | 'soft-start'
+  | 'reducer';
 
 /** 方向制御弁の操作方式 */
 export type ValveOperator = 'solenoid' | 'pilot' | 'manual' | 'mechanical' | 'spring';

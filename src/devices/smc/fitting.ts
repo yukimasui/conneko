@@ -154,7 +154,7 @@ export function buildKq2r(type: string): DeviceDefinition {
         default: '6-8',
       },
     ],
-    pneumatic: { symbol: 'tee', ports: { a: 'TUBE', b: 'PLUG' } },
+    pneumatic: { symbol: 'reducer', ports: { a: 'TUBE', b: 'PLUG' } },
     estimated: 'チューブ外径と差込み側の組み合わせ（選べる組）は推定',
   };
 }

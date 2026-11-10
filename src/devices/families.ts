@@ -337,7 +337,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     facets: [
       { label: '切換え', value: (d) => paren(d) },
       { label: '取付け', value: (d) => d.name.split('・')[1] ?? '単体（ボディ配管）' },
-      { label: 'シリーズ', value: (d) => /^SY\d/.exec(d.model)?.[0]?.concat('000') ?? /^(4GA\d|F\d{2}|VX\d{2})/.exec(d.model)?.[1] },
+      { label: 'シリーズ', value: (d) => /^SY\d/.exec(d.model)?.[0]?.concat('000') ?? /^VQC\d/.exec(d.model)?.[0]?.concat('000') ?? /^(4GA\d|F\d{2}|VX\d{2})/.exec(d.model)?.[1] },
     ],
   },
   {
@@ -347,8 +347,8 @@ export const FAMILY_RULES: FamilyRule[] = [
     test: named(/^マニホールド/),
     default: 'smc.ss5y3-41',
     facets: [
-      { label: '配線', value: (d) => (d.bus?.host?.serial ? '通信（SI ユニット付き）' : '個別配線') },
-      { label: 'シリーズ', value: (d) => /^SS5Y(\d)/.exec(d.model)?.[1]?.replace(/^(\d)$/, 'SY$1000') ?? /^M(4GA\d)/.exec(d.model)?.[1] },
+      { label: '配線', value: (d) => (d.bus?.host?.serial ? '通信（SI ユニット付き）' : d.bus?.host?.plugIn ? `一括配線（${d.bus.host.plugIn.name}）` : '個別配線') },
+      { label: 'シリーズ', value: (d) => /^SS5Y(\d)/.exec(d.model)?.[1]?.replace(/^(\d)$/, 'SY$1000') ?? /^M(4GA\d)/.exec(d.model)?.[1] ?? (/^VV5QC1/.test(d.model) ? 'VQC1000' : undefined) },
     ],
   },
   { id: 'manifold-blank', name: 'ブランクプレート（マニホールド用）', test: named(/^ブランクプレート/), hidden: true },
@@ -358,7 +358,7 @@ export const FAMILY_RULES: FamilyRule[] = [
   { id: 'speed-controller', name: 'スピードコントローラ', keywords: ['スピコン', '速度制御弁'], test: named(/^スピードコントローラ/), facets: [{ label: '形', value: paren }] },
   { id: 'fitting', name: '継手', keywords: ['ワンタッチ管継手', 'ユニオン', 'ティー', 'レデューサ'], test: named(/継手|^ユニオン/) },
   { id: 'silencer', name: 'サイレンサ', keywords: ['消音器'], test: named(/^サイレンサ/) },
-  { id: 'pressure-switch', name: '圧力スイッチ', test: named(/圧力スイッチ/) },
+  { id: 'pressure-switch', name: '圧力スイッチ', test: named(/圧力スイッチ/), facets: [{ label: 'シリーズ', value: (d) => /^[A-Z]+\d+[A-Z]?/.exec(d.model)?.[0] }] },
   { id: 'vacuum', name: '真空機器', keywords: ['真空', 'エジェクタ', '吸着パッド'], test: named(/^真空|^吸着パッド/) },
 ];
 
