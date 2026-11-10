@@ -185,3 +185,43 @@ DC24V の分岐保護・サージキラー）を追加した（issue #74・#79�
   AC100〜240V 25A（40℃）、最小負荷電流 0.2A、ゼロクロス、素子数 3）、形式一覧 https://www.fa.omron.co.jp/products/family/2002/lineup/
 - オムロン S8V-CP: 製品ページ https://www.fa.omron.co.jp/products/family/3780/specification/ 、カタログ SGTC-076
   （4 分岐 / 8 分岐、定格出力電流 2〜10A を分岐ごとにロータリスイッチで設定、+VO1〜 の順に起動、アラーム出力 MOS FET リレー DC30V 50mA、S8V-CP0424S の入力 DC20〜28.8V）
+
+## DC24V の分岐保護・MIL コネクタ端子台（追加）
+
+DC24V の分岐保護（電子式の機器保護用遮断器）と、PLC の MIL コネクタをネジ端子に変換する端子台のメーカー品を追加した（issue #74・#79）。
+メーカーのサイトの PDF には届かなかったため、検索結果に引用された製品ページと販売店の仕様表で値を確かめた。
+
+- 共通部品: `src/devices/omron/xw2r.ts`（`buildXw2r`）
+- 電気チェックの動作確認のテスト: `src/devices/panel3.test.ts`
+
+| type | 型式 | 分類 | 主な仕様 | 推定 | 主な出典 |
+|---|---|---|---|---|---|
+| `phoenix.cbmc-e4-24dc-1-4a-no` | CBMC E4 24DC/1-4A NO（2906031） | breaker | 電子式機器保護用遮断器 DC24V（DC18〜30V）4 チャンネル。入力 IN+（最大 16A）・GND、出力 OUT1〜OUT4（定格電流 1・2・3・4A をチャンネルごとに設定、出荷時 4A）、信号接点 13-14、消費電流 25mA、外形 36×90mm、出力のプッシュイン 0.2〜2.5㎟ | 推定: 端子の位置と記号、信号接点の向き（正常で閉じる a 接点）と定格（DC30V 100mA） | フエニックス・コンタクトの製品ページ、販売店の仕様表 |
+| `omron.xw2r-j20gd-t` | XW2R-J20GD-T | terminal | コネクタ端子台変換ユニット 汎用タイプ、MIL 20 極（XG4A）、M3 プラススクリュー、端子間ピッチ 7mm、1A（AC125V / DC24V） | 推定: ネジ端子の番号と並び（ピン番号と同じ、奥段が奇数・手前段が偶数）、外形（85×48mm）、コネクタの位置 | オムロン XW2R-J20GD-T 製品ページ、XW2R（汎用タイプ）定格・性能 |
+| `omron.xw2r-j34g-t` | XW2R-J34G-T | terminal | 同上、MIL 34 極（KEYENCE KV-C32XC / KV-C32TC と組み合わせる） | 推定: 同上、外形（長さ 130.7mm は DIN レール取付品 XW2R-J34GD-T の寸法） | オムロン XW2R（汎用タイプ）形式一覧・定格・性能、販売店の仕様表 |
+| `omron.xw2r-j40g-t` | XW2R-J40G-T | terminal | 同上、MIL 40 極 | 推定: 同上、外形（長さ 151.7mm） | 同上 |
+
+### 方針
+
+- **CBMC**: オムロン S8V-CP と同じく、分類は遮断器（`breaker`）で、各チャンネルを IN+ → OUT□ の保護の経路にした。保護電流は機器に 1 つ（全チャンネルに同じ定格電流）。
+  GND は機器自身の電源の受電端子（DC18〜30V、`-` の導体）で、+24V をつなぐと `conductor-mismatch`。出力の端子に適合電線（0.2〜2.5㎟）を書き、太すぎる電線は `wire-size-terminal`（テストあり）。
+  S8V-CP と同じ一般名称「電子サーキットプロテクタ」なので、同じファミリーに入る。展開図では箱になる（極どうしが入力の端子を共有するため）。
+- **XW2R**: 汎用の MIL 変換端子台（`generic.mil-terminal-block.*`）と同じく、コネクタのピン n とネジ端子 n を常時導通の経路でつないだ。電子部品は載っていない。
+  ネジ端子に適合電線（丸形・Y 形圧着端子 AWG22-16、より線・単線 AWG26-16 ≒ 0.14〜1.25㎟）と定格電流 1A（`ratedCurrent`）を書いたので、
+  太い電線は `wire-size-terminal`、端子の上流の保護電流が 1A を超えると `terminal-overcurrent` の注意になる（テストあり）。
+  KEYENCE KV-C32TC の COM0（KEYENCE No.17）は MIL のピン 33 なので、XW2R-J34G-T では端子 33 になる（KEYENCE XC-T34B1 の端子は KEYENCE の番号）。
+
+### 確かめられなかったもの・収録しなかったもの
+
+- **三菱電機 FA-TH16YRAC20 などのリレーターミナル**: 今回も、20 ピンのコネクタのピンの割付けを資料で確かめられず実装しなかった（三菱電機エンジニアリングの製品ページで確かめられたのは、FA-TH16YRAC20S の定格 6A/1 点・出力 Y0〜YF、FA-TH16YRA20 の 2A/1 点、シンクタイプの DC24V トランジスタ出力ユニットにつなぐことまで）。
+- **IDEC の電子サーキットプロテクタ**: 該当する製品の資料を見つけられなかった（フエニックス・コンタクト CBMC を収録した）。
+- **XW2R の FCN（富士通コネクタ）品**: 形式を確かめられず収録しなかった。
+
+### 出典（DC24V の分岐保護・MIL コネクタ端子台）
+
+- フエニックス・コンタクト CBMC E4 24DC/1-4A NO: 製品ページ https://www.phoenixcontact.com/en-us/products/device-circuit-breakers-cbmc-e4-24dc1-4a-no-2906031
+  （定格電圧 DC24V、使用電圧 DC18〜30V、IN+ 最大 16A、出力 1 / 2 / 3 / 4A をチャンネルごとに設定・出荷時 4A、消費電流 25mA、無電圧接点 13-14）、
+  販売店の仕様表（高さ 90 × 幅 36 × 奥行 98mm、DIN レール 35mm、出力のプッシュイン 単線 0.2〜2.5㎟・ストリップ長 10mm）
+- オムロン XW2R（汎用タイプ）: 形式一覧 https://www.fa.omron.co.jp/products/family/3154/itemlist/ （XW2R-J34G-T: プラススクリュータイプ、34 極、MIL コネクタ）、
+  定格・性能 https://www.fa.omron.co.jp/products/family/3154/specification/ （定格電流 1A、定格電圧 AC125V / DC24V、適合電線 AWG22-16（丸形・Y 形端子）・AWG26-16（より線・単線）、ストリップ長 9mm、締付けトルク 0.5N･m）、
+  XW2R-J20GD-T 製品ページ https://www.fa.omron.co.jp/product/item/XW2R-J20GD-T/ （MIL タイプ XG4A 20 極）、販売店の仕様表（XW2R-J34GD-T: 端子間ピッチ 7mm、A 寸法 130.7mm）
