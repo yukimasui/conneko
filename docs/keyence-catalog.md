@@ -324,3 +324,25 @@ EC01 W26.7、KV-X550 W77.9（高さはいずれも 90〜92.5mm）。
 - VT5 シリーズ: https://www.keyence.co.jp/products/controls/hmi/vt5/specs/
 - センサー各シリーズ: `https://www.keyence.co.jp/products/sensor/<分類>/<シリーズ>/models/<型式>/`（io-circuit / dimensions）、`…/<シリーズ>/specs/`（全型式の仕様表）
 - 光電センサの取扱説明書・カタログ（KEYENCE の入出力回路図が非公開のもの）は「光電センサ」の表の出典欄を参照
+
+## 追加: KV-X の残りのユニット（KV-XH16ML・KV-CL20、issue #75）
+
+KV-X の CPU に連結するユニットのうち、未収録だった 16 軸のモーションユニットと CC-Link のマスタ・ローカルユニットを追加した。調査は 2026-11 時点。
+KEYENCE のサイトは直接取得できなかったため、検索で確かめられた製品ページ（海外向けサイトを含む）の記載による。テストは `src/devices/plc-units3.test.ts`。
+
+| type | 型式 | 要点 | 推定 |
+|---|---|---|---|
+| `keyence.kv-xh16ml` | KV-XH16ML | 位置決め・モーションユニット（MECHATROLINK-III、16 軸）。内部消費電流 400mA 以下、リレー 2112 点（132 チャネル）を占有（`io.reserve`）。接続できる CPU は KV-X（と KV-8000A）だけなので `bus.kind` は `kv-x`（KV-8000 の CPU には装着できない） | 推定: 外形（4 軸の KV-XH04ML と同じ W42 × H92.5mm として描いた） |
+| `keyence.kv-cl20` | KV-CL20 | CC-Link マスタ・ローカルユニット。内部消費電流 170mA 以下。DA・DB・DG に `port: 'CC-Link'`・`protocols: ['cc-link']` を書き、DeviceNet などほかの通信線とつなぐと `protocol-mismatch` | 推定: 外形（W35 × H90mm）と端子台の並び（上から DA・DB・DG・SLD・FG） |
+
+- KV-XH16ML は KV-XH04ML と同じ作りの絵（MECHATROLINK-III コネクタ `kind: 'MECHATROLINK3'` と FG 端子）。CPU 1 台に 7 台まで（台数の上限はバスでは数えない）。
+  後ろに装着したユニットの先頭番号は 2112 点ずれる（テストで確認: KV-X550 の 1 台目に KV-XH16ML、2 台目の KV-B16XC は R2112 から）。
+- KV-CL20 の SLD と端子台の FG、本体の FG は内部で接続（`links`）。CC-Link の端子の意味（DA・DB・DG・SLD・FG）は KEYENCE の DL-CL1・LK-CC100 の取扱説明書による。
+- 出典:
+  - KV-XH16ML: https://www.keyence.com/products/controls/plc-building-block-type/kv-x/models/kv-xh16ml 、https://www.keyence.co.in/products/controls/plc-building-block-type/kv-x/models/kv-xh16ml/ （16 軸（仮想軸を含む）、接続できる CPU、7 台、400mA、リレー 2112 点・DM 4 ワード、約 280g）
+  - KV-CL20: https://www.keyence.co.in/products/controls/plc-building-block-type/kv-x/models/kv-cl20/ （内部消費電流 170mA 以下、CPU から供給）
+
+確かめられなかったこと・見送ったもの:
+
+- KV-CL20 の端子台の並び・外形、KV-XH16ML の外形（上の表のとおり）。CC-Link の局番・伝送速度の設定と、リモート局の占有点数は扱わない（`io` を持たない）。
+- KV-AD40V・KV-DA40V（アナログ 4ch）・KV-SC20V（カウンタ）・KV-ML16V（MECHATROLINK-II）などの KV-8000/7000 用の旧来のユニットは、内部消費電流・端子台の配列を確かめられず見送った。
