@@ -48,11 +48,17 @@ export const DC24_ANY: AcceptSpec = { system: 'DC', minVoltage: 21.6, maxVoltage
 export const CTRL_KIND = {
   /** R-30iB Mini Plus */
   miniPlus: { rm1: 'FANUC-R30IB-MINI-RM1', rp1: 'FANUC-R30IB-MINI-RP1' },
+  /** R-30iB Compact Plus（スカラ SR シリーズ用） */
+  compactPlus: { rm1: 'FANUC-R30IB-COMPACT-RM1', rp1: 'FANUC-R30IB-COMPACT-RP1' },
+  /** R-30iB Mate Plus（M-1iA など用） */
+  matePlus: { rm1: 'FANUC-R30IB-MATE-RM1', rp1: 'FANUC-R30IB-MATE-RP1' },
 } as const;
 
 /** ロボット側のロボット接続コネクターの種類 */
 export const ROBOT_KIND = {
   lrMate200iD: { rm1: 'FANUC-LRM200ID-RM1', rp1: 'FANUC-LRM200ID-RP1' },
+  sr3iA: { rm1: 'FANUC-SR3IA-RM1', rp1: 'FANUC-SR3IA-RP1' },
+  m1iA: { rm1: 'FANUC-M1IA-RM1', rp1: 'FANUC-M1IA-RP1' },
 } as const;
 
 /** ティーチングペンダント（iPendant）のコネクター */

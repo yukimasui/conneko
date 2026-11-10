@@ -38,7 +38,17 @@ const rulesOf = (d: Diagram) => issuesOf(d).map((i) => i.rule);
 describe('ファナック 機器定義', () => {
   it('ロボット・コントローラー・ティーチングペンダント・EE ケーブルがあり、type は fanuc. で始まる', () => {
     const types = fanuc.map((d) => d.type).sort();
-    expect(types).toEqual(['fanuc.ee-cable', 'fanuc.ipendant', 'fanuc.lr-mate-200id', 'fanuc.r-30ib-mini-plus']);
+    // SR-3iA・M-1iA と R-30iB Compact Plus・Mate Plus は issue #81 の 3 回目で追加（src/devices/robot3.test.ts）
+    expect(types).toEqual([
+      'fanuc.ee-cable',
+      'fanuc.ipendant',
+      'fanuc.lr-mate-200id',
+      'fanuc.m-1ia',
+      'fanuc.r-30ib-compact-plus',
+      'fanuc.r-30ib-mate-plus',
+      'fanuc.r-30ib-mini-plus',
+      'fanuc.sr-3ia',
+    ]);
   });
 
   it.each(fanuc.map((d) => [d.type, d] as const))('%s: すべてのパラメーターの組で定義が整合し、コネクターのピンがそろっている', (_, d) => {
