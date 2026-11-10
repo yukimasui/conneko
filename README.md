@@ -28,7 +28,7 @@
 
 ## できること
 
-- **実物そっくりの機器 550 種以上** — 三菱電機・KEYENCE・オムロン・SMC・IAI・ファナック・安川電機ほか（[下の表](#収録している機器)）
+- **実物そっくりの機器 600 種以上** — 三菱電機・KEYENCE・オムロン・SMC・IAI・ファナック・安川電機ほか（[下の表](#収録している機器)）
 - **配線をその場でチェック** — 短絡・地絡、電圧・極性、電線の太さ、NPN/PNP、安全回路（2 チャンネル・PL）など
 - **まとめてつなぐ** — 2 台の機器をクリックすると、相・極・電圧を合わせて一気に配線
 - **電流の余裕** — 同時に動く機器を工程で選び、遮断器の余裕をグラフで確認
@@ -49,14 +49,14 @@
 
 | 分野 | 主なメーカー・機種 | 一覧 |
 |---|---|---|
-| ブレーカー・開閉器・計器 | 三菱電機（WS-V・FA・CP30-BA・S-T・MSO-T・TH-T・NV-ZBA・EMU4）、富士電機 | [三菱電機・富士電機](docs/mitsubishi-catalog.md) |
-| 盤の電源・保護・つなぎ部品 | オムロン S8VK-G・G7TC・G3PE、IDEC PS5R、トランス・ヒューズ・ノイズフィルタ・計器 | [電源・保護](docs/power-catalog.md) |
-| PLC・タッチパネル | KEYENCE KV-8000 / KV-X・VT5、三菱電機 iQ-R / iQ-F・GOT、オムロン NX1P2・CP2E | [KEYENCE](docs/keyence-catalog.md)・[三菱電機](docs/mitsubishi-plc-catalog.md)・[オムロン](docs/omron-plc-catalog.md)・[通信](docs/network-catalog.md) |
-| センサー | KEYENCE、オムロン、パナソニック、SMC | [KEYENCE](docs/keyence-catalog.md)・[センサー](docs/sensor-catalog.md) |
+| ブレーカー・開閉器・計器 | 三菱電機（WS-V・FA・CP30-BA・S-T・MSO-T・TH-T・NV-ZBA・EMU4）、富士電機、パナソニック BBW・BJW | [三菱電機・富士電機](docs/mitsubishi-catalog.md) |
+| 盤の電源・保護・つなぎ部品 | オムロン S8VK-G・G7TC・G3PE・XW2R、IDEC PS5R、フエニックス・コンタクト CBMC、エム・システム技研 W2VS、トランス・ヒューズ・計器 | [電源・保護](docs/power-catalog.md) |
+| PLC・タッチパネル | KEYENCE KV-8000 / KV-X・VT5、三菱電機 iQ-R / iQ-F・GOT、オムロン NX1P2・NX102・CP2E・NB、シーメンス S7-1200 | [KEYENCE](docs/keyence-catalog.md)・[三菱電機](docs/mitsubishi-plc-catalog.md)・[オムロン](docs/omron-plc-catalog.md)・[通信](docs/network-catalog.md) |
+| センサー・計測 | KEYENCE、オムロン、パナソニック、SICK、SMC、エー・アンド・デイ（ロードセルと指示計） | [KEYENCE](docs/keyence-catalog.md)・[センサー](docs/sensor-catalog.md) |
 | 操作・表示・制御機器 | オムロン A22N・MY・H3CR・E5CC、IDEC、富士電機 AR22、パトライト | [汎用・制御](docs/generic-catalog.md)・[表示・操作](docs/control-catalog.md) |
-| 安全機器 | KEYENCE、オムロン、IDEC、Pilz、三菱電機 | [安全機器](docs/safety-catalog.md) |
-| モーター・駆動 | 三菱電機 FR-E820・FR-A820・MR-J5、安川電機 GA500・Σ-7、オリエンタルモーター | [駆動機器](docs/drive-catalog.md) |
-| ロボット | ファナック LR Mate 200iD、安川電機 MOTOMAN-GP7、IAI ロボシリンダ | [ロボット](docs/robot-catalog.md)・[IAI](docs/iai-catalog.md) |
+| 安全機器 | KEYENCE、オムロン（NX-SL ほか）、IDEC、Pilz、三菱電機 | [安全機器](docs/safety-catalog.md) |
+| モーター・駆動 | 三菱電機 FR-E820・FR-A820・FR-F820・MR-J5、安川電機 GA500・Σ-7、パナソニック MINAS A6、オリエンタルモーター | [駆動機器](docs/drive-catalog.md) |
+| ロボット | ファナック LR Mate 200iD・SR-3iA（スカラ）・M-1iA（パラレルリンク）、安川電機 GP7、デンソー VS-060、川崎重工 RS007N、IAI ロボシリンダ | [ロボット](docs/robot-catalog.md)・[IAI](docs/iai-catalog.md) |
 | 空圧 | SMC、CKD、コガネイ | [SMC](docs/generic-catalog.md)・[CKD・コガネイほか](docs/air-catalog.md) |
 | 端子台 | 東洋技研、フエニックス・コンタクト、MIL 変換端子台 | [東洋技研](docs/toyogiken-catalog.md)・[オムロン PLC と端子台](docs/omron-plc-catalog.md) |
 

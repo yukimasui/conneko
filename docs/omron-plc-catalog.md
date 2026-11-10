@@ -149,3 +149,25 @@ KEYENCE・三菱電機以外の PLC として、オムロンのマシンオー�
 - CP2E データシート（Cat. No. P145）: https://files.omron.eu/downloads/latest/datasheet/en/p145_cp2e_datasheet_en.pdf
   （N タイプの端子台、出力 CIO 100・101、COM(V−) は内部で V− に接続、V+・V− は 100.00・100.01 用の外部電源、電線 AWG22〜18）
 - CP2E ハードウェア ユーザーズマニュアル（Cat. No. W613）: https://assets.omron.eu/downloads/latest/manual/en/w613_cp2e_hardware_users_manual_en.pdf
+
+## NX102・NB シリーズ（issue #75 の残り）
+
+マシンオートメーションコントローラの NX102 の CPU ユニットと、小型のプログラマブルターミナル NB シリーズを追加した。調査は 2026-11 時点で、
+オムロンのサイトは直接取得できなかったため、検索で確かめられた製品ページの記載による。テストは `src/devices/plc-units3.test.ts`。
+
+| type | 型式 | 種類 | 主な仕様 | 推定 |
+|---|---|---|---|---|
+| `omron.nx102-9000` | NX102-9000 | CPU ユニット（内蔵 I/O なし、単軸位置制御 4 軸） | DC24V（20.4〜28.8V）5.80W 以下、EtherNet/IP × 2・EtherCAT × 1、NX ユニット 32 台、W72 × H100 × D90mm | 推定: ユニット電源の端子台の並び（上段 + − ⏚、下段 + −）と正面の配置 |
+| `omron.nb7w-tw01b` | NB7W-TW01B | プログラマブルターミナル 7 型ワイド（Ethernet 付き） | DC24V（20.4〜27.6V）、800×480、COM1 RS-232C・COM2・Ethernet・USB、W202 × H148 × D46mm | 推定: 消費電力（約 7W、0.3A）、COM2 の通信方式、背面の並び |
+
+- NX102-9000 は NX1P2 と同じく NX ユニットのバスの親（`bus.kind: 'omron-nx'`、`host.slots: 32`）。NX ユニットへ I/O 電源を供給しない（NX バスの I/O 電源を使う NX-ID5342 などの前に NX-PF0630 を連結する）
+  前提も NX1P2 と同じで、テストで NX-PF0630 の IOV に +24V を入れると NX-ID5342 の入力がプラスコモンになり、PNP のセンサーを指摘することを確かめた。
+- 入出力の番号の割付けはしない（Sysmac Studio のデバイス変数）。ポートは PORT1・PORT2 が `['ethernet', 'ethernet-ip']`、PORT3 が `['ethercat']`。
+- NB7W-TW01B は GOT・VT5 と同じく正面図と背面のインタフェースの概念図。分類 `control`、一般名称「タッチパネルディスプレイ」でパレットの「タッチパネル」に入る。
+  COM1 は `DSUB9`・`['rs-232c']`、COM2 は `['rs-232c', 'rs-422', 'rs-485']`、LAN は `['ethernet', 'ethernet-ip', 'modbus-tcp']`。
+- 出典:
+  - NX102: https://www.ia.omron.com/products/family/3705/specification.html （ユニット電源・消費電力・突入電流・ポート・NX ユニット 32 台・外形）、
+    https://industrial.omron.eu/en/products/NX102-9000 （サーボ軸 0・PTP 軸 4・EtherCAT ノード 64）。NX102 CPU ユニット ハードウェアユーザーズマニュアル W593 は参照できなかった
+  - NB: https://www.ia.omron.com/products/family/3983/specification.html （DC24V ±15%、シリアルポート A は RS-232C・D-sub 9 ピン・6 番ピン +5V 250mA、USB Type-A・Type-B）、販売店の製品情報（外形、Ethernet・RS-485）
+
+見送ったもの: NX102 のほかの型式（NX102-1□00 などモーション軸付き。正面は同じなのでパラメータで足せる）、NB の 3.5 型・5 型・10 型、NX102 の NX バス電源の収支。

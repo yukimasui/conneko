@@ -334,3 +334,52 @@ iQ-F のアナログ入力ユニットとコネクタ式の CPU、タッチパ�
 - CC-Link IE フィールドのリモート I/O（NZ2GF 形）は、端子台の配列を確かめられなかったため見送った（RJ71GF11-T2 の相手として次の候補）。
 - アナログ入出力のレンジ（4〜20mA・1〜5V など）はパラメータにせず、説明に書いた（チェックは電圧/電流の区別まで）。
 - RJ71EN71 のネットワークの種類の切り換えは、ポートの `protocols` に全部を並べて表した（設定による違いは区別しない）。
+
+## 追加: FX5-4DA・GOT2000 GT27・CC-Link IE フィールドのリモート I/O（issue #75 の残り）
+
+調査は 2026-11 時点。三菱電機のサイト・PDF は直接取得できなかったため、検索で確かめられた製品ページ・販売店のデータシートの記載による。
+確かめられなかった値は機器定義の `estimated` に書き、下の表の「推定」の列に書いた。テストは `src/devices/plc-units3.test.ts`。
+
+| type | 型式 | 種類 | 主な仕様 | 推定 |
+|---|---|---|---|---|
+| `mitsubishi.fx5-4da` | FX5-4DA | iQ-F アナログ出力 4ch（増設ケーブルタイプ） | DC−10〜10V（負荷 1kΩ〜1MΩ）/ 0〜20mA（負荷 0〜500Ω）、80µs/ch、外部供給 DC24V 150mA、内部 DC5V 100mA、X/Y は割り付けない | 推定: 端子台の上での並び |
+| `mitsubishi.gt2710-vtbd` | GT2710-VTBD | GOT2000 GT27 10.4 型タッチパネル（マルチタッチ） | DC24V（+25%/−20%）、最大負荷 48W 以下、W303 × H218 × D52mm、Ethernet・RS-232・RS-422/485・USB | 推定: 本体のみの消費電力（約 14W、0.6A） |
+| `mitsubishi.nz2gf2b1n1-16d` | NZ2GF2B1N1-16D | CC-Link IE フィールド リモート I/O、DC 入力 16 点（ネジ端子台、1 線式） | DC24V 6mA、プラス/マイナスコモン共用、増設 3 台まで | 推定: 外形、端子台の並び、消費電流 0.12A |
+| `mitsubishi.nz2gf2b1n1-16t` | NZ2GF2B1N1-16T | CC-Link IE フィールド リモート I/O、トランジスタ出力 16 点（シンク） | DC12/24V 0.5A/点・4A/コモン、ユニット電源 DC24V 0.13A | 推定: 外形、端子台の並び |
+
+### FX5-4DA
+
+- FX5-4AD と同じ絵と千鳥の端子台に、外部供給電源の 24+・24− の段を足した（左列 24+・CH1・CH2、右列 24−・CH3・CH4）。
+- 出力は V+ に `{ dir: 'out', kind: 'analog-v', ref: 'CHnCOM' }`、I+ に `analog-i`。I/O 表の出力点に出て、FX5-4AD・R60AD4 などの入力との電圧/電流の取り違え・基準の未配線をチェックする（テストで確認）。
+- 外部供給電源の消費（150mA）は機器の `loadCurrent`、内部電源は `bus.load` の DC5V 0.1A。
+
+### GOT2000（GT2510・GT2710 の共通化）
+
+- GT2510-VTBD の絵と端子を `src/devices/mitsubishi/got2000.ts` の `buildGot2000` に移し、GT2710-VTBD と共通にした。GT2510-VTBD の定義（端子・絵・説明・消費電流）は変えていない
+  （移す前後で解決後の定義が一致することを確かめた）。GT27 は正面の右下に USB ポートの保護カバーを描く（`frontUsb`）。
+- GT2710-VTBD の外形・インタフェースは GT2510-VTBD と同じ（W303 × H218 × D52mm、Ethernet・RS-232（D-sub 9 ピン オス）・RS-422/485（D-sub 9 ピン メス））。
+
+### CC-Link IE フィールドのリモート I/O（NZ2GF2B1N1-16D・16T）
+
+- 以前は端子台の配列を確かめられず見送っていたが、端子台の並びを推定として追加した。RJ71GF11-T2 の相手として使う。
+  NZ2GF2B1-16D は生産終了で、後継の NZ2GF2B1N1-16D も生産中止のお知らせが出ている（推奨後継は CC-Link IE TSN の NZ2GN2B1 形）。
+  CC-Link IE TSN は CC-Link IE フィールドとつながらないため、CC-Link IE フィールドの既設の設備を描くための機種として NZ2GF2B1N1 形を選んだ。
+- 共通部品 `src/devices/mitsubishi/nz2gf.ts`（`buildNz2gf`）。ポート P1・P2 は `protocols: ['cc-link-ie-field']`（EtherNet/IP のポート・一般のスイッチングハブとつなぐと `protocol-mismatch`）。
+- 端子: ユニット電源 24V・24G、FG、COM、X0〜XF（16D）/ Y0〜YF（16T）。16D の入力は `{ dir: 'in', kind: 'dc', common: 'COM' }`（COM は +/− 共用）、
+  16T の出力は COM（負荷電源の 0V）への `switch: 'output'`（0.5A）と `commonLimits` 4A。
+- 入出力番号: マスタ局のリンクデバイス RX / RY のうち局番で決まる位置に割り付けられ、CPU の X / Y への転送はマスタ局の設定で決まる。そこでラベルはユニットの印字（X0〜XF / Y0〜YF）にし、
+  I/O 表にはユニットごとに出す（バスの割付けはしない）。分類は `plc`、一般名称は「リモート I/O ユニット（…）」で、パレットの「リモート I/O」のファミリーに入る（`families.ts` の `remote-io` のルールに一般名称を足した）。
+
+### 出典（検索で確かめた範囲）
+
+- 三菱電機 CC-Link IE フィールド ネットワーク製品の一覧（NZ2GF2B1N1-16D: プラス/マイナスコモン 16 点 DC24V 6mA 1 線式 増設 3 台、NZ2GF2B1N1-16T: シンク 16 点 DC12/24V 0.5A/点・4A/コモン 1 線式）
+  https://www.mitsubishielectric.co.jp/fa/products/cnt/plcnet/pmerit/cclink_ie/lineup/io.html
+- 三菱電機 EMEA の製品ページ（NZ2GF2B1N1-16T: 電源 DC24V、消費電流 0.13A）: https://emea.mitsubishielectric.com/fa/products/cnt/plc/alldigitaliomodule/nz2gf2b1n1-16t.html
+- テクニカルニュース FA-D-0472（生産中止のお知らせ、後継 NZ2GN2B1-16D）、FA-D-0333（CC-Link IE TSN への置換え）
+- FX5-4DA: 三菱電機 EMEA の製品ページ https://gb.mitsubishielectric.com/fa/products/cnt/plc/plcf/analog-control-module/fx5-4da.html と販売店のデータシート（外部 DC24V 150mA、内部 DC5V 100mA、80µs/ch、出力範囲）
+- GT2710-VTBD: GOT2000 セレクションガイド（GT27 の電源仕様、最大負荷）、販売店の製品情報（外形、インタフェース）
+
+### 確かめられなかったこと
+
+- NZ2GF2B1N1 形の端子台の配列（マニュアル SH-081114 を参照できなかった）・外形・16D の消費電流、FX5-4DA の端子台の上での並び、GT2710-VTBD の本体のみの消費電力（上の表のとおり）。
+- NZ2GF2B1N1 形の増設ユニット（NZ2EX2B1 形）・局番の設定・リンクデバイスの割付けは扱わない。

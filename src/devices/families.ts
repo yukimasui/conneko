@@ -160,7 +160,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     facets: [
       // 型式の末尾が S（FR-E820S など）は単相 200V 入力
       // 同じ容量の FR-E800 と FR-A800 を分ける
-      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
+      { label: 'シリーズ', value: (d) => (/^FR-E8/.test(d.model) ? 'FR-E800' : /^FR-A8/.test(d.model) ? 'FR-A800' : /^FR-F8/.test(d.model) ? 'FR-F800' : /^CIPR-GA50/.test(d.model) ? 'GA500' : undefined) },
       // 安川電機 GA500 は CIPR-GA50A2□□□（三相 200V）/ GA50AB□□□（単相 200V）
       {
         label: '電源',
@@ -206,6 +206,7 @@ export const FAMILY_RULES: FamilyRule[] = [
     test: named(/^温度調節器/),
     facets: [{ label: '制御出力', value: paren }],
   },
+  { id: 'signal-converter', name: '信号変換器', keywords: ['アイソレータ', '直流入力変換器', '4-20mA', '0-10V', 'みにまる', 'シグナルコンディショナ'], test: named(/^信号変換器/) },
   { id: 'hmi', name: 'タッチパネル', keywords: ['HMI', 'タッチパネルディスプレイ', 'GOT', 'VT'], test: named(/^タッチパネル/) },
   { id: 'iai-position', name: 'ポジションコントローラー（IAI）', keywords: ['ロボシリンダー', 'コントローラー'], test: named(/^ポジションコントローラー|^多軸ポジションコントローラー/) },
   { id: 'iai-runit', name: 'R-unit（IAI）', keywords: ['RCON', 'ロボシリンダー'], test: named(/^R-unit/) },
@@ -232,7 +233,18 @@ export const FAMILY_RULES: FamilyRule[] = [
     test: (d) => d.category === 'plc' && d.maker === 'オムロン' && /CPUユニット/.test(d.name),
     default: 'omron.nx1p2-1140dt',
   },
-  { id: 'remote-io', name: 'リモート I/O', keywords: ['EtherCAT', 'カプラ', 'リモートIO', '分散 I/O'], test: named(/通信ユニット（カプラ）/) },
+  {
+    id: 'plc-cpu-siemens',
+    name: 'PLC CPU（シーメンス）',
+    keywords: ['シーケンサ', 'PLC', 'CPU', 'SIMATIC', 'S7-1200'],
+    test: (d) => d.category === 'plc' && d.maker === 'シーメンス' && /CPUユニット/.test(d.name),
+  },
+  {
+    id: 'remote-io',
+    name: 'リモート I/O',
+    keywords: ['EtherCAT', 'カプラ', 'リモートIO', '分散 I/O', 'CC-Link IE'],
+    test: named(/通信ユニット（カプラ）|^リモート I\/O ユニット/),
+  },
   { id: 'plc-analog', name: 'PLC アナログ・温度ユニット', keywords: ['アナログ', '温調'], test: named(/^PLC .*(アナログ|温度)/), hidden: true },
   {
     id: 'plc-comm',

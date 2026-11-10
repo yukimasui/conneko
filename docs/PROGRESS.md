@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-03（v0.6.44 README の作り直し）
+最終更新: 2026-11-10（v0.6.45 機器の追加 49 機種）
 
 ## 現在地
 
+- v0.6.45: 機器を 49 機種追加（parts/robot3・panel3・plc3・misc3。ロボットの描画部品 src/devices/generic/robot-*.ts、GOT の共通部品 got2000.ts）
 - v0.6.44: README を作り直し（ロゴ・画面の画像は docs/images/、詳しい説明は docs/features.md）。まとめてつなぐの主接点への電線を主回路の色に（`circuitOf` が受ける端子の role を見る）
 - v0.6.43: 展開図の「まとめて追加」（src/editor/BulkAddDialog.tsx、`autoLayout` の `groups` と `only`）。上のバーは展開図のとき「まとめて追加」、概念図のとき「まとめてつなぐ」
 - v0.6.42: 上のバーに「まとめてつなぐ」（bulkFrom が '' なら 1 台目のクリックを待つ）。クリックを待つ案内をキャンバスの下へ、「やめる」ボタンの色を修正
