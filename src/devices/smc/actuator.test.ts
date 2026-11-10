@@ -251,14 +251,19 @@ describe('ポートに直付けするスピードコントローラ', () => {
     expect(svgOf('smc.msq', { speedController: 'meter-in' })).toContain('#7cc3ea');
   });
 
-  it('エアチャック・ロータリ: M5・Rc1/8 のポートに付く。M3 のポートには付かない', () => {
+  it('エアチャック・ロータリ: M5・Rc1/8 のポートに付く。M3 のポートは φ4（AS1201F-M3）だけ付き、φ6 には付かない', () => {
     expect(accessoryModels('smc.mhz2', { speedController: 'meter-in' })).toEqual([
       ['OPEN', 'AS1211F-M5-04A'],
       ['CLOSE', 'AS1211F-M5-04A'],
     ]);
     expect(accessoryModels('smc.mhz2', { action: 'C', fitting: 6, speedController: 'meter-out' })).toEqual([['OPEN', 'AS1201F-M5-06A']]);
-    expect(accessoryModels('smc.mhz2', { size: 10, speedController: 'meter-out' })).toEqual([]);
-    expect(resolveDevice(def('smc.mhz2'), { size: 10, speedController: 'meter-out' }).air.get('OPEN')?.thread).toBe('M3');
+    expect(accessoryModels('smc.mhz2', { size: 10, speedController: 'meter-out' })).toEqual([
+      ['OPEN', 'AS1201F-M3-04A'],
+      ['CLOSE', 'AS1201F-M3-04A'],
+    ]);
+    expect(resolveDevice(def('smc.mhz2'), { size: 10, speedController: 'meter-out' }).air.get('OPEN')?.thread).toBeUndefined();
+    expect(accessoryModels('smc.mhz2', { size: 10, fitting: 6, speedController: 'meter-out' })).toEqual([]);
+    expect(resolveDevice(def('smc.mhz2'), { size: 10, fitting: 6, speedController: 'meter-out' }).air.get('OPEN')?.thread).toBe('M3');
     expect(resolveDevice(def('smc.mhz2'), { speedController: 'meter-out' }).pneumatic?.speedControllers).toEqual({
       open: { control: 'meter-out', model: 'AS1201F-M5-04A' },
       close: { control: 'meter-out', model: 'AS1201F-M5-04A' },
@@ -267,7 +272,11 @@ describe('ポートに直付けするスピードコントローラ', () => {
       ['A', 'AS2201F-01-08SA'],
       ['B', 'AS2201F-01-08SA'],
     ]);
-    expect(accessoryModels('smc.msq', { size: 1, speedController: 'meter-out' })).toEqual([]);
+    expect(accessoryModels('smc.msq', { size: 1, speedController: 'meter-out' })).toEqual([
+      ['A', 'AS1201F-M3-04A'],
+      ['B', 'AS1201F-M3-04A'],
+    ]);
+    expect(accessoryModels('smc.msq', { size: 1, fitting: 6, speedController: 'meter-out' })).toEqual([]);
   });
 
   /** 電磁弁 SOL1（SY3120、A・B は φ6）→ シリンダ CY1 */

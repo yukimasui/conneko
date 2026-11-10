@@ -8,7 +8,7 @@ import { ioName, parseIoName, resolveDevice } from '../devices/resolve';
 import { familyOf } from '../devices/families';
 import { deviceModel, paramOptions, paramsWithDefaults, type DeviceDefinition, type ParamValues, type SafetyRating, type Termination } from '../devices/types';
 import type { CheckIssue } from '../check/checkDiagram';
-import { busAccepts, serialOutputOf, type BusLayout } from '../model/bus';
+import { busAccepts, plugInPinOf, serialOutputOf, type BusLayout } from '../model/bus';
 import { CABLE_WIRE_TYPE, type Sheet } from '../model/diagram';
 import { hasEstimates } from '../devices/estimates';
 import { terminalFacts } from './terminalInfo';
@@ -164,6 +164,11 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
     const o = serialOutputOf(props.bus, node.id, side);
     return o ? [{ side, ...o }] : [];
   });
+  // プラグイン形のマニホールドに装着した電磁弁: ソレノイドがつながるコネクタのピン（連の順に自動で決まる）
+  const plug = (['A', 'B'] as const).flatMap((side) => {
+    const o = plugInPinOf(props.bus, node.id, side);
+    return o ? [{ side, ...o }] : [];
+  });
   return (
     <div className="field">
       <span>装着先</span>
@@ -180,6 +185,11 @@ function MountInfo({ node, def, props }: { node: DeviceFlowNode; def: DeviceDefi
           {serial.length > 0 && (
             <div className="small">
               SI ユニットの出力: {serial.map((o) => `${o.host} 出力${o.output}${serial.length > 1 ? `（SOL ${o.side}）` : ''}`).join('、')}
+            </div>
+          )}
+          {plug.length > 0 && (
+            <div className="small">
+              コネクタのピン: {plug.map((o) => `${o.host} ピン ${o.pin}${plug.length > 1 ? `（SOL ${o.side}）` : ''}`).join('、')}
             </div>
           )}
         </>

@@ -4,7 +4,7 @@
  * 正面から見た姿で、横長の本体（中にラックとピストン）の上に回転テーブルがあり、本体の両端に回転角度の調整ボルト（A）
  * またはショックアブソーバ（R）が付く。ポートは本体の左右の上面に A・B として描く（実物は本体の側面にある）。
  * オートスイッチ（D-M9 シリーズ）は本体の溝に付き、SW1 が A ポート側の回転端、SW2 が B ポート側の回転端を検出する。
- * スピードコントローラ（エルボ形）はパラメータで選ぶと A・B に直付けする（M5・Rc1/8 のポート。M3 に付くエルボ形は AS-F にない）。
+ * スピードコントローラ（エルボ形）はパラメータで選ぶと A・B に直付けする（M3・M5・Rc1/8 のポート。M3 は AS1201F-M3 で φ3.2・φ4 だけ）。
  */
 import type { DeviceDefinition, ParamValues, TerminalDef } from '../types';
 import { text } from '../generic/parts';
@@ -187,7 +187,7 @@ export function buildRotary(s: RotarySeries): DeviceDefinition {
     description:
       `${s.description}サイズ・角度調整（調整ボルト A / ショックアブソーバ R）・ポートに付けるワンタッチ管継手のチューブ外径をパラメータで選ぶ。` +
       'ポート A・B を 5 ポート電磁弁の A・B に 1 本ずつつなぐ（給気した側の向きへ回る）。マグネットは標準で内蔵。' +
-      'パラメータ speedController でエルボ形スピードコントローラを A・B に直付けできる（M5・Rc1/8 のポートのサイズ 7 以上。型式はチューブ外径で決まる）。' +
+      'パラメータ speedController でエルボ形スピードコントローラを A・B に直付けできる（型式はポートのねじとチューブ外径で決まる。M3 のポートのサイズ 1〜3 は φ4 だけ）。' +
       switchDescription({ 1: 'A 側の回転端', 2: 'B 側の回転端' }),
     labelPrefix: 'RA',
     width: L0.W,

@@ -7,10 +7,11 @@
  *
  * 出典: SMC スピードコントローラ AS-F シリーズ カタログ・製品ページ
  *   AS2201F: 最高使用圧力 1.0MPa、最低使用圧力 0.1MPa、耐圧 1.5MPa
- *   エルボ形のサイズ: AS1201F（M5）、AS2201F（R1/8・R1/4）、AS3201F（R1/4・R3/8）、AS4201F（R1/2）。メータインは AS□211F
+ *   エルボ形のサイズ: AS1201F（M3・M5）、AS2201F（R1/8・R1/4）、AS3201F（R1/4・R3/8）、AS4201F（R1/2）。メータインは AS□211F
+ *   M3 のエルボ形: AS1201F-M3-23（φ3.2）・AS1201F-M3-04（φ4）、メータアウト（販売店の掲載。最高使用圧力 1.0MPa）。メータインの AS1211F-M3 は推定
  *   エルボ形のねじと適合チューブ外径（SMC 新製品カタログ「ワンタッチ管継手付スピードコントローラ エルボタイプ AS Series」s20-220b のバリエーション表）:
  *     AS1201F-M5: φ2・3.2・4・6 / AS2201F-01・-02: φ3.2〜10 / AS3201F-02・-03: φ6〜12 / AS4201F-04: φ10・12・16
- *   型式の外径は 2 桁（3.2 は 23）。R ねじはシール剤付き（S）、M5 はガスケットシールで S を付けない。
+ *   型式の外径は 2 桁（3.2 は 23）。R ねじはシール剤付き（S）、M5・M3 はガスケットシールで S を付けない。
  *   ハンドルの色はメータアウトがアーバングレー、メータインがライトブルー
  *   型式の末尾の A はプッシュロック式のつまみ（例: AS2201F-01-06SA）。いまのカタログの標準に合わせて付ける
  *
@@ -100,6 +101,7 @@ export function buildAsInline(type: string): DeviceDefinition {
 
 /** エルボ形のボディサイズごとのねじ（'M5'・'01'〜'04'）と適合チューブ外径（小さいボディから並べる） */
 const ELBOW_BODIES: { body: 1 | 2 | 3 | 4; thread: string; ods: number[] }[] = [
+  { body: 1, thread: 'M3', ods: [3.2, 4] },
   { body: 1, thread: 'M5', ods: [2, 3.2, 4, 6] },
   { body: 2, thread: '01', ods: [3.2, 4, 6, 8, 10] },
   { body: 2, thread: '02', ods: [3.2, 4, 6, 8, 10] },
@@ -111,20 +113,20 @@ const ELBOW_BODIES: { body: 1 | 2 | 3 | 4; thread: string; ods: number[] }[] = [
 export type SpeedControl = 'meter-out' | 'meter-in';
 
 /**
- * エルボ形の型式（例: M5・φ4 のメータアウト → AS1201F-M5-04A、'01'・φ6 のメータイン → AS2211F-01-06SA）。
+ * エルボ形の型式（例: M5・φ4 のメータアウト → AS1201F-M5-04A、M3・φ4 → AS1201F-M3-04A、'01'・φ6 のメータイン → AS2211F-01-06SA）。
  * 末尾の A はプッシュロック式のつまみ（いまのカタログの標準）。
- * thread はねじの記号（'M5'・'01'〜'04'）。合うボディがなければ undefined
+ * thread はねじの記号（'M3'・'M5'・'01'〜'04'）。合うボディがなければ undefined
  */
 export function elbowModel(thread: string, od: number, control: SpeedControl): string | undefined {
   const b = ELBOW_BODIES.find((x) => x.thread === thread && x.ods.includes(od));
   if (!b) return undefined;
   const size = od === 3.2 ? '23' : pad2(od);
-  // R ねじはシール剤付き（S）が標準。M5 は付けない
-  return `AS${b.body}2${control === 'meter-out' ? 0 : 1}1F-${thread}-${size}${thread === 'M5' ? '' : 'S'}A`;
+  // R ねじはシール剤付き（S）が標準。M5・M3 は付けない
+  return `AS${b.body}2${control === 'meter-out' ? 0 : 1}1F-${thread}-${size}${thread.startsWith('M') ? '' : 'S'}A`;
 }
 
 /** エルボ形 AS□201F（メータアウト）/ AS□211F（メータイン） */
-const ELBOW_SIZES = ['M5-04', 'M5-06', '01-04', '01-06', '01-08', '02-06', '02-08', '02-10', '02-12', '03-08', '03-10', '03-12', '04-10', '04-12', '04-16'];
+const ELBOW_SIZES = ['M3-04', 'M5-04', 'M5-06', '01-04', '01-06', '01-08', '02-06', '02-08', '02-10', '02-12', '03-08', '03-10', '03-12', '04-10', '04-12', '04-16'];
 
 export function buildAsElbow(type: string, mode: 'meter-out' | 'meter-in'): DeviceDefinition {
   const W = 76;
@@ -242,12 +244,12 @@ export const speedControlOf = (p: ParamValues): SpeedControl | undefined =>
   p.speedController === 'meter-out' || p.speedController === 'meter-in' ? p.speedController : undefined;
 
 /** ねじの呼び（'M5'・'Rc1/8' など）→ 型式のねじの記号（'M5'・'01'〜'04'） */
-const THREAD_CODE: Record<string, string> = { M5: 'M5', '1/8': '01', '1/4': '02', '3/8': '03', '1/2': '04' };
+const THREAD_CODE: Record<string, string> = { M3: 'M3', M5: 'M5', '1/8': '01', '1/4': '02', '3/8': '03', '1/2': '04' };
 
 /** ポートに直付けするスピードコントローラ */
 export interface PortSpeedController {
   control: SpeedControl;
-  /** 型式。ポートのねじとチューブ外径に合うエルボ形がなければ undefined（M3 のポート、R1/2 に φ8 など） */
+  /** 型式。ポートのねじとチューブ外径に合うエルボ形がなければ undefined（M3 のポートに φ6、R1/2 に φ8 など） */
   model?: string;
 }
 
@@ -289,6 +291,8 @@ export function speedControllerAccessories(p: ParamValues, ports: [string, strin
       category: 'air-fitting',
       spec: `${R_MALE[THREAD_CODE[threadSize(thread)!]] ?? thread} × φ${od}、${sc.control === 'meter-out' ? 'メータアウト' : 'メータイン'}（アクチュエータのポートに直付け）`,
       terminal,
+      // M3 のメータイン（AS1211F-M3）は資料で確かめられなかった（推定）
+      ...(threadSize(thread) === 'M3' && sc.control === 'meter-in' ? { estimated: true } : {}),
     });
   }
   return out;

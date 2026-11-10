@@ -262,6 +262,39 @@ pneumatic: syPneumatic('double'),
   プロトコルが合わなければ警告する。`mates` に `'RJ45'` を含むピンのないコネクタは LAN ポートとして扱い（`isLanPort`）、引くとネットワークの候補を出す。
 - 電源コネクタ（M12）はピン（`PWR#1` …）に `role: 'input'` と `accepts` を書き、片側バラ線の電源ケーブル（`smc.ex500-ap050-s`）でつなぐと DC24V の受電をチェックできる。
 
+#### プラグイン形（一括配線）のマニホールド
+
+D サブ・フラットケーブルの一括配線のコネクタを持つマニホールド（お手本は `src/devices/smc/vqc.ts` の VV5QC11）は、親の `bus.host.plugIn` を書く。
+連の弁はソレノイドの電気端子を持たず、親のコネクタのピンが連の順に各連のソレノイドへ割り付けられる。
+
+```ts
+// 親（コネクタ付きのマニホールド）
+bus: {
+  kind: 'smc-vv5qc11',
+  host: {
+    slots: 24,
+    airGallery: { P: 'P', EA: 'R', EB: 'R' },
+    fromUnits: vqcManifoldParams,
+    plugIn: {
+      connector: 'CN',                      // コネクタの端子 ID（ピンは CN#1 …）
+      wiring: { param: 'wiring' },          // 'double' / 'specified'（通信タイプと同じ）
+      pins: [1, 14, 2, 15, 3, 16],          // ソレノイドに割り付けるピンの順（連 1 の A・B、連 2 の A・B …）
+      common: [13],                         // コモンのピン
+      name: 'D サブ 25 ピン',
+    },
+  },
+},
+// 親のピン: params.plugInMap（'1=1A,14=1B,2=2A'。ピン番号 = 連の番号と側。src/devices/plugin-map.ts の parsePlugInMap で読む）から、
+// ソレノイドのピンを受電端子（accepts・端子の loadCurrent）、COM を反対の極の受電端子にする
+pins: (p) => …,
+```
+
+- 割付けは `src/model/bus.ts` の `assignPlugInPins`（結果は `layout.plugIn`）。割り付けたピン番号は連の `params.solA` / `params.solB` に入るので、連の `svg` を関数にすれば絵に書ける。
+  ピンが足りなければ `manifold-pins-over` を指摘する
+- コイルを親のピンに書くので、PLC の出力 → ケーブル（片側バラ線の `category: 'terminal'` の機器や変換端子台）→ ピン → COM の極性・電圧・出力の定格・電源の容量のチェックがそのまま効く
+- バルブエディタは、連ごとにソレノイドのピンと PLC の出力を出し、出力を選ぶとケーブル・変換端子台のそのピンの端子へ電線を引く（`setPlugInOutput`）。
+  空圧回路図・インスペクタは `plugInPinOf()` でピンを引き、I/O 表はピンを通した接続先を出す
+
 ## パラメータで変わる端子・ピン・内部経路
 
 `terminals` / `pins` / `links` はパラメータを受け取って配列を返す関数にもできる（引数は既定値と `ioIn` / `ioOut` を補完済み）。
@@ -380,7 +413,7 @@ SMC のエアシリンダ・エアチャック・ロータリテーブルは `sr
 - 2 線式の出力が 1 台に複数ある機器は、出力の内部経路（`switch: 'output'`）で結ばれた 2 本ずつを 1 つのスイッチとして 2 線式のチェックを行う（`src/check/signals.ts`）
 
 スピードコントローラ（エルボ形 AS□201F / AS□211F）も、アクチュエータのパラメータ `speedController`（`none` / `meter-out` / `meter-in`）でポートに直付けできる（`speed-controller.ts` の `portSpeedController()` など）。
-- 型式はポートのねじとチューブ外径（パラメータ `fitting`）で決まる（`elbowModel()`。例: M5・φ4 → `AS1201F-M5-04A`、Rc1/8・φ6 → `AS2201F-01-06SA`）。合う型式がない組み合わせ（M3 のポート、Rc1/2 に φ8 など）は付けず、絵に赤い文字を出す
+- 型式はポートのねじとチューブ外径（パラメータ `fitting`）で決まる（`elbowModel()`。例: M5・φ4 → `AS1201F-M5-04A`、M3・φ4 → `AS1201F-M3-04A`、Rc1/8・φ6 → `AS2201F-01-06SA`）。合う型式がない組み合わせ（M3 のポートに φ6、Rc1/2 に φ8 など）は付けず、絵に赤い文字を出す
 - 付けたポートは `air.thread` を書かず（継手はスピードコントローラのもの）、端子の説明に型式を書く
 - 部品表には `accessories`（下記）で 1 ポート 1 個として載せ、空圧回路図には `pneumatic.speedControllers`（記号のポート名 → 制御方式と型式）で速度制御弁の記号を描く
 
