@@ -57,7 +57,7 @@
 | 安全機器 | KEYENCE、オムロン（NX-SL ほか）、IDEC、Pilz、三菱電機 | [安全機器](docs/safety-catalog.md) |
 | モーター・駆動 | 三菱電機 FR-E820・FR-A820・FR-F820・MR-J5、安川電機 GA500・Σ-7、パナソニック MINAS A6、オリエンタルモーター | [駆動機器](docs/drive-catalog.md) |
 | ロボット | ファナック LR Mate 200iD・SR-3iA（スカラ）・M-1iA（パラレルリンク）、安川電機 GP7、デンソー VS-060、川崎重工 RS007N、IAI ロボシリンダ | [ロボット](docs/robot-catalog.md)・[IAI](docs/iai-catalog.md) |
-| 空圧 | SMC、CKD、コガネイ | [SMC](docs/generic-catalog.md)・[CKD・コガネイほか](docs/air-catalog.md) |
+| 空圧 | SMC（SY・VQC1000 プラグイン形・ITV・ISE30A・AV ほか）、CKD、コガネイ | [SMC](docs/generic-catalog.md)・[CKD・コガネイほか](docs/air-catalog.md) |
 | 端子台 | 東洋技研、フエニックス・コンタクト、MIL 変換端子台 | [東洋技研](docs/toyogiken-catalog.md)・[オムロン PLC と端子台](docs/omron-plc-catalog.md) |
 
 メーカーの資料で確かめられなかった値は「推定」と表示します。実際の設計に使う前に、カタログ・実機で確かめてください。

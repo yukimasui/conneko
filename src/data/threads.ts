@@ -6,11 +6,12 @@
  *   型式: KQ2H<外径 2 桁>-<ねじ>。R ねじはシール剤付きの S を付ける（例: KQ2H06-01AS）、M5 は KQ2H04-M5A
  */
 
-/** ねじの呼びの大きさ（'Rc1/8'・'R1/8'・'G1/8'・'01' などを '1/8' に、'M5' はそのまま）。分からなければ undefined */
+/** ねじの呼びの大きさ（'Rc1/8'・'R1/8'・'G1/8'・'01' などを '1/8' に、'M5'・'M3' はそのまま）。分からなければ undefined */
 export function threadSize(thread: string | undefined): string | undefined {
   if (!thread) return undefined;
   const t = thread.replace(/\s/g, '');
   if (/^M5/i.test(t)) return 'M5';
+  if (/^M3/i.test(t)) return 'M3';
   const m = /(\d\/\d)/.exec(t);
   if (m) return m[1];
   const code: Record<string, string> = { '01': '1/8', '02': '1/4', '03': '3/8', '04': '1/2' };

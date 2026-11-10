@@ -5,11 +5,13 @@
  * - 装着したユニットの入出力の先頭番号（params の ioIn / ioOut）
  * - 装着したユニットから決まる親のパラメータ（bus.host.fromUnits。マニホールドの連数など）
  * - 通信タイプのマニホールドの、SI ユニットの出力とソレノイドの割付け（bus.host.serial。連の params の solA / solB）
+ * - プラグイン形（一括配線）のマニホールドの、コネクタのピンとソレノイドの割付け（bus.host.plugIn。連の params の solA / solB、親の params の plugInMap）
  * - キャンバス上の位置（親の横・中に順に並べる）
  * - 内部電源の収支やスロット数などの指摘
  * を求める。
  */
-import { deviceSize, paramsWithDefaults, resolveNum, type DeviceDefinition, type ParamValues } from '../devices/types';
+import { deviceSize, paramsWithDefaults, resolveNum, type DeviceDefinition, type ParamValues, type PlugInWiringSpec } from '../devices/types';
+import { plugInMapParam } from '../devices/plugin-map';
 import type { DiagramDevice } from './diagram';
 
 type DefLookup = (type: string) => DeviceDefinition | undefined;
@@ -57,12 +59,43 @@ export interface SerialLayout {
   points: SerialPoint[];
 }
 
+/** プラグイン形のマニホールドのコネクタのピン 1 本 */
+export interface PlugInPoint {
+  /** ピン番号 */
+  pin: number;
+  /** 連の機器ID */
+  device: string;
+  /** 連の位置（mount の slot） */
+  slot: number;
+  /** 連の番号（D 側から数えた連の順。1 から） */
+  station: number;
+  /** つながるソレノイド（ダブル配線のシングルの弁の B 側・ブランクプレートの連の空きのピンは undefined） */
+  side?: 'A' | 'B';
+}
+
+/** プラグイン形のマニホールドのピンの割付け */
+export interface PlugInLayout {
+  /** コネクタの端子ID */
+  connector: string;
+  /** コネクタの名前 */
+  name: string;
+  wiring: 'double' | 'specified';
+  /** 連が占めるピン（割付けの順）。ピンの本数を超えた分は pin が 0 */
+  points: PlugInPoint[];
+  /** ソレノイドに使えるピンの本数 */
+  capacity: number;
+  /** コモンのピン番号 */
+  common: number[];
+}
+
 export interface BusLayout {
   /** 機器ID → 装着で決まるパラメータ（ioIn / ioOut、通信タイプのマニホールドの連の solA / solB） */
   params: Map<string, ParamValues>;
   groups: Map<string, BusGroup>;
   /** 通信タイプのマニホールドの機器ID → 出力の割付け（連を装着したものだけ） */
   serial: Map<string, SerialLayout>;
+  /** プラグイン形のマニホールドの機器ID → ピンの割付け（連を装着したものだけ） */
+  plugIn: Map<string, PlugInLayout>;
   problems: BusProblem[];
 }
 
@@ -102,12 +135,47 @@ function serialLayout(hostDef: DeviceDefinition, host: DiagramDevice, members: D
   return { unitModel: spec.unitModel(hp), outputs: typeof spec.outputs === 'function' ? spec.outputs(hp) : spec.outputs, wiring, points };
 }
 
+/** 配線の指定（'double' / 'specified' / { param }）を、親のパラメータから決める */
+function wiringOf(spec: { wiring: 'double' | 'specified' | { param: string } }, hp: ParamValues): 'double' | 'specified' {
+  return (typeof spec.wiring === 'string' ? spec.wiring : String(hp[spec.wiring.param])) === 'specified' ? 'specified' : 'double';
+}
+
+/**
+ * プラグイン形のマニホールドの、連の順にコネクタのピンを割り付ける。
+ * ダブル配線はどの連も 2 本（シングルの弁の B 側・ブランクプレートは空き）、配線指定はソレノイドの数（ブランクプレートは 1 本）
+ */
+export function assignPlugInPins(spec: PlugInWiringSpec, wiring: 'double' | 'specified', units: { device: string; slot: number; solenoids: number }[]): PlugInPoint[] {
+  const points: PlugInPoint[] = [];
+  units.forEach((u, k) => {
+    const size = wiring === 'double' ? 2 : Math.max(1, u.solenoids);
+    for (let i = 0; i < size; i++) {
+      const pin = spec.pins[points.length] ?? 0;
+      points.push({ pin, device: u.device, slot: u.slot, station: k + 1, ...(i < u.solenoids ? { side: i === 0 ? ('A' as const) : ('B' as const) } : {}) });
+    }
+  });
+  return points;
+}
+
+/** プラグイン形のマニホールドの、連の順にピンを割り付ける */
+function plugInLayout(hostDef: DeviceDefinition, host: DiagramDevice, members: DiagramDevice[], lookup: DefLookup): PlugInLayout | undefined {
+  const spec = hostDef.bus?.host?.plugIn;
+  if (!spec) return undefined;
+  const wiring = wiringOf(spec, paramsWithDefaults(hostDef, host.params));
+  const points = assignPlugInPins(
+    spec,
+    wiring,
+    members.map((m) => ({ device: m.id, slot: m.mount!.slot, solenoids: solenoidCount(lookup(m.type), m.params) })),
+  );
+  return { connector: spec.connector, name: spec.name, wiring, points, capacity: spec.pins.length, common: spec.common };
+}
+
 /** 装着関係を解析する */
 export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayout {
   const byId = new Map(devices.map((d) => [d.id, d]));
   const params = new Map<string, ParamValues>();
   const groups = new Map<string, BusGroup>();
   const serial = new Map<string, SerialLayout>();
+  const plugIn = new Map<string, PlugInLayout>();
   const problems: BusProblem[] = [];
 
   for (const d of devices) {
@@ -244,6 +312,26 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
       }
     }
 
+    // プラグイン形のマニホールド: コネクタのピンをソレノイドに割り付ける
+    const pl = plugInLayout(hostDef, g.host, g.members, lookup);
+    if (pl) {
+      plugIn.set(g.host.id, pl);
+      for (const p of pl.points) {
+        if (p.side && p.pin > 0) params.set(p.device, { ...params.get(p.device), [`sol${p.side}`]: p.pin });
+      }
+      params.set(g.host.id, { ...params.get(g.host.id), plugInMap: plugInMapParam(pl.points) });
+      if (pl.points.length > pl.capacity) {
+        problems.push({
+          severity: 'error',
+          rule: 'manifold-pins-over',
+          message: `${g.host.id}: コネクタ（${pl.name}）でソレノイドにつなげるのは ${pl.capacity} 本までです（連の割付けで ${pl.points.length} 本。${
+            pl.wiring === 'double' ? 'ダブル配線はどの連も 2 本を使います。シングルの弁が多ければ配線指定にします' : '連を減らします'
+          }）`,
+          devices: [g.host.id, ...g.members.map((m) => m.id)],
+        });
+      }
+    }
+
     // 内部電源の収支
     const totals = new Map<string, BusRailTotal>();
     const rail = (name: string) => totals.get(name) ?? (totals.set(name, { rail: name, supply: 0, load: 0, unitLoad: 0 }), totals.get(name)!);
@@ -289,7 +377,7 @@ export function computeBus(devices: DiagramDevice[], lookup: DefLookup): BusLayo
     });
     params.set(d.id, { ...params.get(d.id), ...from(units) });
   }
-  return { params, groups, serial, problems };
+  return { params, groups, serial, plugIn, problems };
 }
 
 /**
@@ -316,6 +404,15 @@ export function serialOutputOf(layout: BusLayout, device: string, side: 'A' | 'B
 export function serialOutputName(layout: BusLayout, device: string, side: 'A' | 'B'): string | undefined {
   const o = serialOutputOf(layout, device, side);
   return o ? `${o.host} 出力${o.output}` : undefined;
+}
+
+/** プラグイン形のマニホールドに装着した連の、ソレノイドがつながるコネクタのピン（親の機器ID・ピンID・ピン番号）。割り付けていなければ undefined */
+export function plugInPinOf(layout: BusLayout, device: string, side: 'A' | 'B'): { host: string; pinId: string; pin: number } | undefined {
+  for (const [host, l] of layout.plugIn) {
+    const p = l.points.find((x) => x.device === device && x.side === side && x.pin > 0);
+    if (p) return { host, pinId: `${l.connector}#${p.pin}`, pin: p.pin };
+  }
+  return undefined;
 }
 
 /** 図面の機器の、装着で決まるパラメータを加えた params（明示した params が優先） */

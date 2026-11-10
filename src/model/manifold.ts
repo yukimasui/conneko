@@ -7,12 +7,14 @@
  * - A・B のつなぎ先: 連の A・B ポートからチューブ（シートが違えばエアのリンク）を引く
  * - ソレノイドと PLC の出力: I/O の接続（src/model/io.ts）を使う。シンク出力（NPN）は −、ソース出力（PNP）は + につなぐ
  * - 通信タイプ（SI ユニット付き）のマニホールド: ソレノイドの出力は連の順に自動で決まる（src/model/bus.ts の serial）。電線は引かない
+ * - プラグイン形（一括配線）のマニホールド: ソレノイドがつながるコネクタのピンは連の順に自動で決まる（src/model/bus.ts の plugIn）。
+ *   PLC の出力は、コネクタにつないだケーブル・変換端子台の、そのピンの端子へ電線を引く
  */
 import { buildModel, key, type Model } from '../check/model';
 import { resolveDevice } from '../devices/resolve';
 import { deviceModel, paramsWithDefaults, type DeviceDefinition } from '../devices/types';
 import { tubeAttrs } from './air';
-import { computeBus, effectiveParams, solenoidCount, type SerialPoint } from './bus';
+import { computeBus, effectiveParams, solenoidCount, type PlugInPoint, type SerialPoint } from './bus';
 import { isTube, nextDeviceId, type Diagram, type DiagramDevice, type TerminalRef } from './diagram';
 import { compareAddress, connectIo, disconnectIo, ioHosts, ioSystem, type IoPoint } from './io';
 import { AIR_LINK_TYPE, connectTerminals, uniqueLinkName, type WireAttrs } from './ops';
@@ -28,6 +30,11 @@ export function isManifold(def: DeviceDefinition | undefined): boolean {
 /** 通信タイプ（SI ユニット付き）のマニホールドか */
 export function isSerialManifold(def: DeviceDefinition | undefined): boolean {
   return isManifold(def) && !!def?.bus?.host?.serial;
+}
+
+/** プラグイン形（一括配線のコネクタ付き）のマニホールドか */
+export function isPlugInManifold(def: DeviceDefinition | undefined): boolean {
+  return isManifold(def) && !!def?.bus?.host?.plugIn;
 }
 
 /** 機器がマニホールドか、マニホールドに装着した連なら、そのマニホールドの機器ID */
@@ -174,6 +181,18 @@ export interface SolenoidRow {
   commonWired: boolean;
 }
 
+/** プラグイン形のマニホールドの、ソレノイド 1 つ（A 側・B 側）がつながるコネクタのピン */
+export interface PlugInSolenoid {
+  side: 'A' | 'B';
+  /** ピン番号とピンID（親のコネクタのピン。'CN#1' など） */
+  pin: number;
+  pinId: string;
+  /** つないだ PLC の出力 */
+  outputs: IoPoint[];
+  /** PLC の出力から電線を引く端子（コネクタにつないだケーブルの芯線・変換端子台のネジ端子）。ケーブルがなければ undefined */
+  endpoint?: TerminalRef;
+}
+
 export interface StationRow {
   slot: number;
   device: DiagramDevice;
@@ -186,6 +205,23 @@ export interface StationRow {
   solenoids: SolenoidRow[];
   /** 通信タイプのマニホールドで、この連が使う SI ユニットの出力（番号の順。side がないのは空きの点） */
   serial: SerialPoint[];
+  /** プラグイン形のマニホールドで、この連が使うコネクタのピン（割付けの順。side がないのは空きのピン） */
+  plugInPoints: PlugInPoint[];
+  /** プラグイン形のマニホールドの、ソレノイドがつながるピンと PLC の出力 */
+  plugIn: PlugInSolenoid[];
+}
+
+/**
+ * コネクタのピンから、PLC の出力の電線を引く端子（マニホールドの外の、端子台の分類の機器のネジ端子・芯線）。
+ * コネクタにつないだケーブル（片側バラ線）・変換端子台をたどる。なければ undefined
+ */
+function pinEndpoint(m: Model, family: Set<string>, k: string): TerminalRef | undefined {
+  for (const x of m.fixedMembers.get(m.fixed.find(k)) ?? []) {
+    const ti = m.terminals.get(x);
+    if (!ti || family.has(ti.device.id) || ti.def.category !== 'terminal' || ti.terminal.id.includes('#')) continue;
+    return { device: ti.device.id, terminal: ti.terminal.id };
+  }
+  return undefined;
 }
 
 /** 図面にある PLC の出力の一覧 */
@@ -201,6 +237,8 @@ const solenoidSides = (r: ReturnType<typeof resolveDevice>): ('A' | 'B')[] => ([
 export function manifoldRows(d: Diagram, hostId: string, lookup: DefLookup, outputs = plcOutputs(d, lookup)): StationRow[] {
   const m = buildModel(d, lookup, () => {});
   const points = m.bus.serial.get(hostId)?.points ?? [];
+  const plug = m.bus.plugIn.get(hostId);
+  const family = new Set([hostId, ...mountedUnits(d, hostId).map((u) => u.id)]);
   return mountedUnits(d, hostId).flatMap((u) => {
     const info = m.devices.get(u.id);
     if (!info) return [];
@@ -215,7 +253,15 @@ export function manifoldRows(d: Diagram, hostId: string, lookup: DefLookup, outp
       return { side, plus, minus, outputs: outs, commonWired: m.wiresAt.has(key(u.id, common)) };
     });
     const serial = points.filter((p) => p.device === u.id);
-    return [{ slot: u.mount!.slot, device: u, def: info.def, blank: !r.terminals.length, ports, solenoids, serial }];
+    const plugInPoints = plug?.points.filter((p) => p.device === u.id) ?? [];
+    const plugIn = plugInPoints.flatMap((p): PlugInSolenoid[] => {
+      if (!p.side || !p.pin || !plug) return [];
+      const pinId = `${plug.connector}#${p.pin}`;
+      const outs = outputs.filter((o) => o.connections.some((c) => c.ref.device === hostId && c.ref.terminal === pinId));
+      const endpoint = pinEndpoint(m, family, key(hostId, pinId));
+      return [{ side: p.side, pin: p.pin, pinId, outputs: outs, ...(endpoint ? { endpoint } : {}) }];
+    });
+    return [{ slot: u.mount!.slot, device: u, def: info.def, blank: !r.terminals.length, ports, solenoids, serial, plugInPoints, plugIn }];
   });
 }
 
@@ -296,6 +342,31 @@ export function setSolenoidOutput(
   return connectIo(out, fresh, { device: unitId, terminal: solenoidTerminal(side, fresh) }, attrs, lookup);
 }
 
+/**
+ * プラグイン形のマニホールドで、ソレノイドにつなぐ PLC の出力を変える（point が null なら外す）。
+ * 電線は、コネクタにつないだケーブル・変換端子台の、そのソレノイドのピンの端子へ引く（線番は入出力番号）
+ */
+export function setPlugInOutput(
+  d: Diagram,
+  hostId: string,
+  unitId: string,
+  side: 'A' | 'B',
+  point: Pick<IoPoint, 'device' | 'terminal'> | null,
+  attrs: Omit<WireAttrs, 'wireNo'>,
+  lookup: DefLookup,
+): Diagram {
+  const sol = manifoldRows(d, hostId, lookup)
+    .find((r) => r.device.id === unitId)
+    ?.plugIn.find((x) => x.side === side);
+  if (!sol?.endpoint) return d;
+  let out = d;
+  for (const p of sol.outputs) out = disconnectIo(out, p, sol.endpoint, lookup);
+  if (!point) return out;
+  const fresh = plcOutputs(out, lookup).find((p) => p.device === point.device && p.terminal === point.terminal);
+  if (!fresh) return out;
+  return connectIo(out, fresh, sol.endpoint, attrs, lookup);
+}
+
 /** マニホールドの概要 */
 export interface ManifoldSummary {
   model: string;
@@ -303,6 +374,8 @@ export interface ManifoldSummary {
   solenoids: number;
   /** 通信タイプのマニホールドの SI ユニット（型式・使う出力の点数・出力点数・配線） */
   serial?: { unitModel: string; used: number; outputs: number; wiring: 'double' | 'specified' };
+  /** プラグイン形のマニホールドのコネクタ（名前・使うピンの本数・ソレノイドにつなげる本数・配線・コモンのピンとつないだか） */
+  plugIn?: { name: string; used: number; capacity: number; wiring: 'double' | 'specified'; common: string[]; commonWired: boolean };
   notes: string[];
 }
 
@@ -320,7 +393,7 @@ export function manifoldSummary(d: Diagram, hostId: string, lookup: DefLookup): 
   const sl = bus.serial.get(hostId);
   const params = effectiveParams(host, bus);
   if (units.length < 2) notes.push('連数は 2 以上にします（使わない連はブランクプレートにします）');
-  if (units.length > 10) notes.push(spec ? '11 連以上は P・E ポートを両側（D 側・U 側）にします（型式の記号 B）' : '10 連を超える場合は、両側（D 側・U 側）から給排気します');
+  if (units.length > 10 && !def.bus?.host?.plugIn) notes.push(spec ? '11 連以上は P・E ポートを両側（D 側・U 側）にします（型式の記号 B）' : '10 連を超える場合は、両側（D 側・U 側）から給排気します');
   for (const p of bus.problems) if (p.devices.includes(hostId)) notes.push(p.message);
   const full = paramsWithDefaults(def, params);
   const serial = spec
@@ -331,5 +404,21 @@ export function manifoldSummary(d: Diagram, hostId: string, lookup: DefLookup): 
         wiring: sl?.wiring ?? (String(typeof spec.wiring === 'string' ? spec.wiring : full[spec.wiring.param]) === 'specified' ? ('specified' as const) : ('double' as const)),
       }
     : undefined;
-  return { model: deviceModel(def, params), stations: units.length, solenoids, ...(serial ? { serial } : {}), notes };
+  const pl = bus.plugIn.get(hostId);
+  const plugSpec = def.bus?.host?.plugIn;
+  let plugIn: ManifoldSummary['plugIn'];
+  if (plugSpec) {
+    const m = buildModel(d, lookup, () => {});
+    const common = plugSpec.common.map((n) => `${plugSpec.connector}#${n}`);
+    plugIn = {
+      name: plugSpec.name,
+      used: pl?.points.length ?? 0,
+      capacity: plugSpec.pins.length,
+      wiring: pl?.wiring ?? (String(typeof plugSpec.wiring === 'string' ? plugSpec.wiring : full[plugSpec.wiring.param]) === 'specified' ? 'specified' : 'double'),
+      common: plugSpec.common.map(String),
+      // コモンのピンが、ケーブルの先で電線につながっているか
+      commonWired: common.some((k) => (m.fixedMembers.get(m.fixed.find(key(hostId, k))) ?? []).some((x) => m.wiresAt.has(x))),
+    };
+  }
+  return { model: deviceModel(def, params), stations: units.length, solenoids, ...(serial ? { serial } : {}), ...(plugIn ? { plugIn } : {}), notes };
 }

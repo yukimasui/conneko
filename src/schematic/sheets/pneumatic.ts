@@ -16,7 +16,7 @@ import type { Model } from '../../check/model';
 import { key } from '../../check/model';
 import { airPressures } from '../../check/pneumatic';
 import { deviceModel, type DeviceDefinition, type PneumaticHint, type ValveOperator } from '../../devices/types';
-import { serialOutputName } from '../../model/bus';
+import { plugInPinOf, serialOutputName } from '../../model/bus';
 import type { Diagram } from '../../model/diagram';
 import { ioRows } from '../../export/reports';
 import type { SchematicSheetOut } from '../format';
@@ -255,6 +255,14 @@ function drawSwitch(pen: Pen, x: number, y: number, label: string, addr: string 
   pen.text(tx, y - 0.2, addr ? `${label} ${addr}` : label, { height: 1.9, layer: 'TAG', align });
 }
 
+/** 異径継手（縦向き、高さ 8）。上端 y、中心 cx。narrowUp なら上（アクチュエータの側）が細い管 */
+function drawReducer(pen: Pen, cx: number, y: number, narrowUp: boolean): Drawn {
+  const [t, b] = narrowUp ? [1, 2.2] : [2.2, 1];
+  pen.line([[cx - t, y], [cx - t, y + 4], [cx - b, y + 4], [cx - b, y + 8]]);
+  pen.line([[cx + t, y], [cx + t, y + 4], [cx + b, y + 4], [cx + b, y + 8]]);
+  return { pins: { top: [cx, y], bottom: [cx, y + 8] }, box: { x: cx - 2.2, y, w: 4.4, h: 8 } };
+}
+
 /** 速度制御弁（縦向き）。上端 y、中心 cx。in が下（弁の側）・out が上（アクチュエータの側）のとき上向きの流れが自由流れ */
 function drawSpeedController(pen: Pen, cx: number, y: number, freeUp: boolean): Drawn {
   const h = 16;
@@ -275,7 +283,7 @@ function drawSpeedController(pen: Pen, cx: number, y: number, freeUp: boolean): 
 }
 
 /** 横向きの機器（エア源・3 点セットなど。in が左、out が右）。左端 x、中心の高さ cy。返り値の幅で次を並べる */
-function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number, opts: { exhSilencer?: boolean } = {}): Drawn & { width: number } {
+function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number, opts: { exhSilencer?: boolean; solLabel?: string } = {}): Drawn & { width: number } {
   const diamond = (dx: number, inner: 'filter' | 'lub' | 'mist') => {
     const s = 6;
     pen.line([[dx, cy], [dx + s, cy - s], [dx + 2 * s, cy], [dx + s, cy + s]], { closed: true });
@@ -350,6 +358,40 @@ function drawInline(pen: Pen, hint: PneumaticHint, x: number, cy: number, opts: 
     drawExhaust(pen, [bx + 17, bot], !!opts.exhSilencer);
     return { pins: { in: [x, cy], out: [bx + 24, cy], exh: [bx + 17, bot] }, box: { x, y: top - 5, w: bx + 24 - x, h: 22 }, width: bx + 24 - x };
   }
+  if (s === 'soft-start') {
+    // ソフトスタート弁: 3 ポート 2 位置のソレノイド・ばね戻りの弁（通電で 1 → 2、切で 2 → 3 へ排気）と、
+    // 二次側の出口に立ち上がりを遅くする可変絞り（破線の枠でまとめる）
+    const bx = x + 12;
+    const top = cy - 6;
+    const bot = cy + 6;
+    pen.rect(bx, top, 10, 12);
+    pen.rect(bx + 10, top, 10, 12);
+    // 左の箱（通電した位置）: 1(IN) → 2(OUT)、3(EXH) は塞ぐ
+    pen.arrow([bx + 3, bot], [bx + 5, top]);
+    pen.line([[bx + 7, bot], [bx + 7, bot - 3]]);
+    pen.line([[bx + 5.5, bot - 3], [bx + 8.5, bot - 3]]);
+    // 右の箱（通電していない位置）: 2(OUT) → 3(EXH)、1(IN) は塞ぐ
+    pen.arrow([bx + 15, top], [bx + 17, bot]);
+    pen.line([[bx + 13, bot], [bx + 13, bot - 3]]);
+    pen.line([[bx + 11.5, bot - 3], [bx + 14.5, bot - 3]]);
+    // 操作部: 左にソレノイド、右にばね
+    operator(pen, 'solenoid', bx, cy, -1);
+    operator(pen, 'spring', bx + 20, cy, 1);
+    if (opts.solLabel) pen.text(bx - 7, top - 13, opts.solLabel, { height: 2, layer: 'TAG' });
+    // 二次側の可変絞り（立ち上がりの速さ）
+    const tx = bx + 28;
+    pen.line([[tx - 2.5, top - 8.5], [tx, top - 6.5], [tx + 2.5, top - 8.5]]);
+    pen.line([[tx - 2.5, top - 1.5], [tx, top - 3.5], [tx + 2.5, top - 1.5]]);
+    pen.arrow([tx - 3, top - 2], [tx + 3, top - 8]);
+    // 一次側は下から、二次側は上から出して、主の流れ（cy）につなぐ
+    pen.line([[x, cy], [x + 2, cy], [x + 2, bot + 5], [bx + 13, bot + 5], [bx + 13, bot]], { layer: 'WIRE' });
+    pen.line([[bx + 15, top], [bx + 15, top - 5], [tx - 0.1, top - 5]], { layer: 'WIRE' });
+    pen.line([[tx + 0.1, top - 5], [bx + 38, top - 5], [bx + 38, cy]], { layer: 'WIRE' });
+    pen.rect(bx - 7, top - 11, 42, 24, { dashed: true });
+    drawExhaust(pen, [bx + 17, bot], !!opts.exhSilencer);
+    // 外形は、下を回る一次側の配管と排気の記号まで含める（名前・型式をその下に書く）
+    return { pins: { in: [x, cy], out: [bx + 38, cy], exh: [bx + 17, bot] }, box: { x, y: top - 15, w: bx + 38 - x, h: bot + 10 - (top - 15) }, width: bx + 38 - x };
+  }
   if (s === 'pressure-switch' || s === 'gauge') {
     pen.line([[x, cy], [x + 4, cy]], { layer: 'WIRE' });
     if (s === 'gauge') gauge(x + 4);
@@ -402,8 +444,8 @@ function drawExhaust(pen: Pen, p: XY, silencer: boolean) {
 }
 
 const ACTUATORS = new Set(['cylinder', 'gripper', 'rotary', 'vacuum-pad']);
-const INLINE = new Set(['speed-controller', 'check-valve', 'shutoff', 'tee']);
-const SUPPLY = new Set(['source', 'filter', 'mist-separator', 'lubricator', 'regulator', 'filter-regulator', 'frl', 'residual-valve', 'shutoff', 'pressure-switch', 'gauge']);
+const INLINE = new Set(['speed-controller', 'check-valve', 'shutoff', 'tee', 'reducer']);
+const SUPPLY = new Set(['source', 'filter', 'mist-separator', 'lubricator', 'regulator', 'filter-regulator', 'frl', 'residual-valve', 'soft-start', 'shutoff', 'pressure-switch', 'gauge']);
 
 interface Entry {
   id: string;
@@ -701,8 +743,14 @@ export function pneumaticLayout(
         const label = (side: 'a' | 'b') => {
           const t = sol?.[side];
           if (!t && !(v.hint.valve?.operators[side] === 'solenoid')) return undefined;
-          // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる。通信タイプのマニホールドの弁は SI ユニットの出力
-          const addr = tagOf(v.id, t) ?? tagOf(v.id, t?.replace(/\+$/, '-')) ?? serialOutputName(model.bus, v.id, side === 'a' ? 'A' : 'B');
+          // シンク出力は − 側、ソース出力は + 側につながるので、両方を調べる。通信タイプのマニホールドの弁は SI ユニットの出力。
+          // プラグイン形のマニホールドの弁は、ソレノイドがつながる親のコネクタのピンにつないだ出力
+          const pin = plugInPinOf(model.bus, v.id, side === 'a' ? 'A' : 'B');
+          const addr =
+            tagOf(v.id, t) ??
+            tagOf(v.id, t?.replace(/\+$/, '-')) ??
+            serialOutputName(model.bus, v.id, side === 'a' ? 'A' : 'B') ??
+            (pin ? tagOf(pin.host, pin.pinId) : undefined);
           const name = v.hint.valve?.operators.b === 'solenoid' ? `${v.id}${side.toUpperCase()}` : v.id;
           return addr ? `${name}（${addr}）` : name;
         };
@@ -753,6 +801,20 @@ export function pneumaticLayout(
             const d = drawSpeedController(pen, curAuto[0] + 2.5, sy, freeUp);
             pen.text(d.box.x + d.box.w + 1, sy + 4, e.id, { layer: 'TAG', height: 2.2 });
             pen.text(d.box.x + d.box.w + 1, sy + 7.5, e.model, { height: 1.8 });
+            return d;
+          });
+          const d = place(e.id, s);
+          obstacles.push(d.box);
+          ends.push({ pos: d.pins.top, dir: UP }, { pos: d.pins.bottom, dir: DOWN });
+          cur = d.pins.bottom;
+          curAuto = s.drawn.pins.bottom;
+        } else if (e.hint.symbol === 'reducer') {
+          // 異径継手: 段のついた管の記号と、名前・型式（弁の側から入る向き enter が細い側 a なら、上が太い）
+          const narrowUp = e.symPort.get(c.enter) !== 'a';
+          const s = sketch((pen) => {
+            const d = drawReducer(pen, curAuto[0], sy + 4, narrowUp);
+            pen.text(d.box.x + d.box.w + 1.5, sy + 7, e.id, { layer: 'TAG', height: 2.2 });
+            pen.text(d.box.x + d.box.w + 1.5, sy + 10.5, e.model, { height: 1.8 });
             return d;
           });
           const d = place(e.id, s);
@@ -828,8 +890,13 @@ export function pneumaticLayout(
     const p = pressure.get(key(e.id, Object.entries(e.hint.ports).find(([sy]) => sy === 'out')?.[1] ?? ''));
     const pressureText =
       p !== undefined && (e.hint.symbol === 'source' || e.hint.units?.includes('regulator') || e.hint.symbol === 'regulator' || e.hint.symbol === 'filter-regulator') ? `${p}MPa` : undefined;
+    // ソフトスタート弁のソレノイドの名前と PLC の出力（シンク出力は − 側につながる）
+    const solT = e.hint.symbol === 'soft-start' ? e.hint.valve?.solenoids?.a : undefined;
+    const solMinus = e.def.schematic?.elements?.[0]?.terminals.find((t) => t !== solT);
+    const solAddr = solT ? (tagOf(e.id, solT) ?? tagOf(e.id, solMinus)) : undefined;
+    const solLabel = solT ? (solAddr ? `${e.id}（${solAddr}）` : e.id) : undefined;
     const s = sketch((pen) => {
-      const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer });
+      const d = drawInline(pen, e.hint, x, ySupply, { exhSilencer, ...(solLabel ? { solLabel } : {}) });
       // 名前と型式は記号の下に（残圧排気弁の一次側の配管のように、記号の下を回る配管にかからないよう外形の下から）
       const ty = Math.max(ySupply + 12, d.box.y + d.box.h + 3);
       pen.text(d.box.x, ty, e.id, { layer: 'TAG', height: 2.4 });

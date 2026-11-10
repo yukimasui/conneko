@@ -35,7 +35,7 @@ export const setPressureParam = (def = 0.4, max = 0.8): ParamDef => ({
 /** ねじの呼びの表示（'01' → 'Rc1/8'）。JIS の管用テーパめねじ */
 export const RC: Record<string, string> = { M5: 'M5', '01': 'Rc1/8', '02': 'Rc1/4', '03': 'Rc3/8', '04': 'Rc1/2' };
 /** おねじ（R）の表示 */
-export const R_MALE: Record<string, string> = { M5: 'M5', '01': 'R1/8', '02': 'R1/4', '03': 'R3/8', '04': 'R1/2' };
+export const R_MALE: Record<string, string> = { M3: 'M3', M5: 'M5', '01': 'R1/8', '02': 'R1/4', '03': 'R3/8', '04': 'R1/2' };
 
 /** 金属・樹脂のグラデーション（id: smc-metal-{{uid}}、smc-white-{{uid}}、smc-clear-{{uid}}、smc-knob-{{uid}}） */
 export const SMC_GRADIENTS = `

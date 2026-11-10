@@ -9,12 +9,14 @@ import {
   addStation,
   airTargets,
   changeStationType,
+  isPlugInManifold,
   isSerialManifold,
   manifoldOf,
   manifoldRows,
   manifoldSummary,
   plcOutputs,
   setAllPorts,
+  setPlugInOutput,
   setPortTarget,
   setSolenoidOutput,
   stationTypes,
@@ -177,6 +179,42 @@ function SerialCell({ row, side }: { row: StationRow; side: 'A' | 'B' }) {
   return <span className="muted small">—</span>;
 }
 
+/**
+ * プラグイン形のマニホールドの、ソレノイドがつながるコネクタのピン（連の順に自動で決まる）と PLC の出力。
+ * 出力を選ぶと、コネクタにつないだケーブル・変換端子台のそのピンの端子へ電線を引く
+ */
+function PlugInCell({ row, side, outputs, onChange }: { row: StationRow; side: 'A' | 'B'; outputs: IoPoint[]; onChange: (p: IoPoint | null) => void }) {
+  const sol = row.plugIn.find((x) => x.side === side);
+  const free = row.plugInPoints[side === 'A' ? 0 : 1];
+  if (!sol) return free && !free.side && free.pin ? <span className="muted small">空き（ピン {free.pin}）</span> : <span className="muted small">—</span>;
+  const current = sol.outputs[0];
+  const k = (p: IoPoint) => `${p.device}:${p.terminal}`;
+  const usable = outputs.filter((p) => p.endpoint || (current && k(p) === k(current)));
+  const usedBy = (p: IoPoint) => p.connections.filter((c) => c.ref.device !== row.device.id && !c.ref.terminal.startsWith('CN#')).map((c) => c.name);
+  return (
+    <div className="valve-cell">
+      <span className="io-address">ピン {sol.pin}</span>
+      {sol.endpoint ? (
+        <select value={current ? k(current) : ''} onChange={(e) => onChange(usable.find((p) => k(p) === e.target.value) ?? null)}>
+          <option value="">（なし）</option>
+          {usable.map((p) => (
+            <option key={k(p)} value={k(p)}>
+              {p.address}
+              {p.comment ? ` ${p.comment}` : ''}
+              {usedBy(p).length ? `（使用中: ${usedBy(p).join('・')}）` : ''}
+            </option>
+          ))}
+        </select>
+      ) : current ? (
+        <span className="small">{current.address}</span>
+      ) : (
+        <span className="muted small">コネクタにケーブルをつなぐと選べます</span>
+      )}
+      {sol.endpoint && <span className="muted small">{`${sol.endpoint.device}.${sol.endpoint.terminal} へ`}</span>}
+    </div>
+  );
+}
+
 /** バルブエディタ（マニホールドの連の構成と、A・B のつなぎ先・ソレノイドの PLC 出力） */
 export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Props) {
   const hostId = manifoldOf(diagram, deviceId, lookup);
@@ -185,6 +223,7 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
   const host = hostId ? diagram.devices.find((x) => x.id === hostId) : undefined;
   const hostDef = host && lookup(host.type);
   const serial = isSerialManifold(hostDef);
+  const plugIn = isPlugInManifold(hostDef);
   const outputs = useMemo(() => (serial ? [] : plcOutputs(diagram, lookup)), [diagram, serial]);
   const rows = useMemo(() => (hostId ? manifoldRows(diagram, hostId, lookup, outputs) : []), [diagram, hostId, outputs]);
   const targets = useMemo(() => (hostId ? airTargets(diagram, hostId, lookup) : []), [diagram, hostId]);
@@ -226,8 +265,8 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
                   <th>A・B の継手</th>
                   <th>4(A) のつなぎ先</th>
                   <th>2(B) のつなぎ先</th>
-                  <th>{serial ? 'SOL A（SI ユニット）' : 'SOL A の出力'}</th>
-                  <th>{serial ? 'SOL B（SI ユニット）' : 'SOL B の出力'}</th>
+                  <th>{serial ? 'SOL A（SI ユニット）' : plugIn ? 'SOL A（ピン・出力）' : 'SOL A の出力'}</th>
+                  <th>{serial ? 'SOL B（SI ユニット）' : plugIn ? 'SOL B（ピン・出力）' : 'SOL B の出力'}</th>
                   <th />
                 </tr>
               </thead>
@@ -294,6 +333,20 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
                         serial ? (
                           <td key={side}>
                             <SerialCell row={r} side={side} />
+                          </td>
+                        ) : plugIn ? (
+                          <td key={side}>
+                            <PlugInCell
+                              row={r}
+                              side={side}
+                              outputs={outputs}
+                              onChange={(p) =>
+                                onApply(
+                                  setPlugInOutput(diagram, hostId, r.device.id, side, p, SOL_WIRE, lookup),
+                                  p ? `${r.device.id} の SOL ${side} を ${p.address} につなぎました` : `${r.device.id} の SOL ${side} の出力を外しました`,
+                                )
+                              }
+                            />
                           </td>
                         ) : (
                           <td key={side}>
@@ -413,6 +466,13 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
                   SI ユニット {summary.serial.unitModel}: 出力 {summary.serial.used} / {summary.serial.outputs} 点を使用（{summary.serial.wiring === 'double' ? 'ダブル配線。どの連も 2 点' : '配線指定。シングルの連は 1 点'}）
                 </p>
               )}
+              {summary.plugIn && (
+                <p className="small">
+                  コネクタ {summary.plugIn.name}: ソレノイドにピン {summary.plugIn.used} / {summary.plugIn.capacity} 本を使用（
+                  {summary.plugIn.wiring === 'double' ? 'ダブル配線。どの連も 2 本' : '配線指定。シングルの連は 1 本'}）。COM はピン {summary.plugIn.common.join('・')}
+                  {!summary.plugIn.commonWired && <span className="sev-text-warning">（COM を電源へつなぎます）</span>}
+                </p>
+              )}
               {summary.notes.map((n) => (
                 <p key={n} className="small sev-text-warning">
                   {n}
@@ -424,7 +484,9 @@ export function ValveEditor({ diagram, deviceId, onApply, onJump, onClose }: Pro
             4(A)・2(B) のつなぎ先を選ぶとチューブを引きます（別のシートの機器ならエアのリンクを置いてつなぎます）。
             {serial
               ? 'ソレノイドはマニホールドの中で SI ユニットにつながり、出力番号は連 1 から順に（各連の A 側・B 側）自動で決まります。配線（ダブル配線・配線指定）と SI ユニットはマニホールドのパラメータで選びます。'
-              : 'SOL の出力を選ぶと、PLC の出力からソレノイドへ電線を引きます（シンク出力は −、ソース出力は + の側。もう一方は電源へつなぎます）。'}
+              : plugIn
+                ? 'ソレノイドはマニホールドの中でコネクタのピンにつながり、ピン番号は連 1 から順に（各連の A 側・B 側）自動で決まります。SOL の出力を選ぶと、コネクタにつないだケーブル（片側バラ線）・変換端子台のそのピンの端子へ PLC の出力から電線を引きます。COM はプラスコモンなら +24V、マイナスコモンなら 0V へつなぎます。'
+                : 'SOL の出力を選ぶと、PLC の出力からソレノイドへ電線を引きます（シンク出力は −、ソース出力は + の側。もう一方は電源へつなぎます）。'}
           </p>
         </div>
       </div>
