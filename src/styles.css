@@ -2689,3 +2689,177 @@ textarea {
   white-space: normal !important;
   font-size: 12px;
 }
+
+/* --- 配線言語のエディタ --- */
+.modal.lang {
+  width: min(1280px, calc(100vw - 32px));
+  height: min(860px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+}
+.lang__badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: 4px;
+  padding: 0 5px;
+  vertical-align: middle;
+}
+.lang p {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.lang__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+  gap: 10px;
+}
+.lang__editor {
+  display: flex;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fbfcfd;
+}
+.lang__gutter,
+.lang__editor textarea {
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 8px 0;
+}
+.lang__gutter {
+  flex: none;
+  min-width: 44px;
+  overflow: hidden;
+  text-align: right;
+  color: var(--muted);
+  background: #f1f4f8;
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+.lang__gutter div {
+  padding: 0 8px 0 6px;
+  border-left: 3px solid transparent;
+}
+.lang__gutter .is-error {
+  border-left-color: var(--error);
+  color: var(--error);
+  font-weight: 700;
+}
+.lang__gutter .is-warning {
+  border-left-color: var(--warning);
+  color: var(--warning);
+}
+.lang__gutter .is-info {
+  border-left-color: var(--info);
+}
+.lang__editor textarea {
+  flex: 1;
+  height: auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+  background: transparent;
+}
+.lang__side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 6px;
+}
+.lang__summary {
+  font-weight: 700;
+  font-size: 13px;
+}
+.lang__issues {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.lang__issues li + li {
+  border-top: 1px solid var(--border);
+}
+.lang__issues button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lang__issues button:hover:not(:disabled) {
+  background: #f1f5fb;
+}
+.lang__issues .is-error button {
+  border-left-color: var(--error);
+}
+.lang__issues .is-warning button {
+  border-left-color: var(--warning);
+}
+.lang__issues .is-info button {
+  border-left-color: var(--info);
+}
+.lang__where {
+  font-weight: 700;
+  margin-right: 6px;
+}
+.lang__issues .is-error .lang__where {
+  color: var(--error);
+}
+.lang__issues .is-warning .lang__where {
+  color: var(--warning);
+}
+.lang__issues .is-info .lang__where {
+  color: var(--info);
+}
+.lang__rule {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.lang__message {
+  display: block;
+  color: var(--text);
+}
+.lang__help summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lang__help pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  background: #f6f8fa;
+  border-radius: 6px;
+}
+.lang__note {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+}

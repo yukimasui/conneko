@@ -1,7 +1,7 @@
 {
   "name": "conneko",
   "private": true,
-  "version": "0.6.46",
+  "version": "0.6.47",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "render-device": "tsx scripts/render-device.ts",
-    "schematic-sample": "tsx scripts/schematic-sample.ts"
+    "schematic-sample": "tsx scripts/schematic-sample.ts",
+    "cnk": "tsx scripts/cnk.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

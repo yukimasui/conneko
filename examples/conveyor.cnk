@@ -1,0 +1,212 @@
+// アプリの「サンプル」の図面（コンベアの制御盤）を配線言語で書いたもの
+// 主回路 → DC24V 電源 → PLC → 入出力機器 → エア回路 の 5 シート。盤用ファン FAN1 は、わざと配線していない
+// 確かめ方: npm run cnk -- check examples/conveyor.cnk
+sheet S1 "主回路" {
+  PS1 = generic.power-source.3p200v
+  ELB1 = mitsubishi.nv32-sv.3p(ratedCurrent=20)
+  CP1 = mitsubishi.cp30-ba.2p(ratedCurrent=3)
+  CP2 = mitsubishi.cp30-ba.2p(ratedCurrent=3)
+  MC1 = mitsubishi.s-t10.ac200v
+  THR1 = mitsubishi.th-t18(heater=3.6)
+  M1 = generic.motor.3p(ratedCurrent=3.6) "コンベア駆動"
+  FAN1 = generic.panel-fan.ac200v "盤内換気"
+
+  wire KIV 3.5sq black {
+    [R, S, T]: PS1.[R, S, T] -- ELB1.[1, 3, 5]
+    [R1, S1, T1]: ELB1.[2, 4, 6] -- MC1.[1/L1, 3/L2, 5/L3]
+    [U1, V1, W1]: MC1.[2/T1, 4/T2, 6/T3] -- THR1.[1/L1, 3/L2, 5/L3]
+    [R1, S1]: ELB1.[2, 4] -- CP1.[1, 3]
+    [S1, T1]: ELB1.[4, 6] -- CP2.[1, 3]
+  }
+
+  wire KIV 2sq black {
+    [U, V, W]: THR1.[2/T1, 4/T2, 6/T3] -- M1.[U, V, W]
+  }
+
+  wire KIV 1.25sq red {
+    [R2, S2]: CP1.[2, 4] -- MC1.[A1, A2]
+  }
+
+  wire KIV 3.5sq green {
+    E: PS1.PE -- M1.E
+  }
+
+  wire KIV 1.25sq black {
+    CP2.4 -- <T3>
+    CP2.2 -- <S3>
+  }
+
+  wire KIV 2sq green {
+    PS1.PE -- <E>
+  }
+}
+
+sheet S2 "DC24V電源" {
+  PSU1 = generic.psu.dc24v(outputCurrent=5)
+  PL1 = generic.pilot-lamp.dc24v "DC24V 電源表示"
+
+  wire KIV 0.75sq blue {
+    [P24, N24]: PSU1.[+V1, -V1] -- PL1.[X1, X2]
+    PSU1.-V1 -- <N24>
+    PSU1.+V1 -- <P24>
+  }
+
+  wire KIV 1.25sq blue {
+    PSU1.-V2 -- <N24>
+    PSU1.+V2 -- <P24>
+  }
+
+  wire KIV 2sq green {
+    PSU1.PE -- <E>
+  }
+
+  wire KIV 1.25sq black {
+    PSU1.N -- <T3>
+    PSU1.L -- <S3>
+  }
+}
+
+sheet S3 "PLC" {
+  PLC1 = keyence.kv-8000.cpu {
+    IN1 = keyence.kv-c32xc.input
+    OUT1 = keyence.kv-c32tc.output
+  }
+  TB3 = generic.mil-terminal-block.34p
+  TB4 = generic.mil-terminal-block.34p
+  HMI1 = keyence.vt5-w07
+  SW1 = generic.ethernet-switch.5p "制御 LAN（PLC・タッチパネル・SI ユニット）"
+
+  comment IN1.CN1#1 "PH1 ワーク検出"
+  comment IN1.CN1#3 "CY1 後退端"
+  comment IN1.CN1#5 "CY1 前進端"
+  comment IN1.CN1#7 "CY2 開"
+  comment IN1.CN1#9 "CY2 閉"
+  comment OUT1.CN1#1 "PL2 運転中表示"
+  comment OUT1.CN1#3 "SOL1 プッシャ前進"
+  comment OUT1.CN1#5 "SOL2A チャック閉"
+  comment OUT1.CN1#7 "SOL2B チャック開"
+
+  wire KIV 1.25sq blue {
+    [P24, N24]: PLC1.[24V+, 24V-] -- HMI1.[24V+, 24V-]
+    [P24, N24]: PLC1.[24V+, 24V-] -- SW1.[V1+, 0V]
+    PLC1.24V- -- <N24>
+    PLC1.24V+ -- <P24>
+  }
+
+  wire KIV 0.75sq blue {
+    P24: PLC1.24V+ -- TB3.33
+    N24: PLC1.24V- -- TB4.33
+    TB3.9 -- <R004>
+    TB3.7 -- <R003>
+    TB3.5 -- <R002>
+    TB3.3 -- <R001>
+    TB3.1 -- <R000>
+    TB4.7 -- <R203>
+    TB4.5 -- <R202>
+    TB4.3 -- <R201>
+    TB4.1 -- <R200>
+  }
+
+  CBL-IN1: IN1.CN1 -- TB3.CN
+  CBL-OUT1: OUT1.CN1 -- TB4.CN
+  LAN1: PLC1.ETH -- SW1.P1
+  LAN2: HMI1.LAN -- SW1.P2
+  SW1.P3 -- <制御LAN>
+
+  wire KIV 2sq green {
+    E: PLC1.FG -- HMI1.FG
+    E: PLC1.FG -- SW1.FG
+    PLC1.FG -- <E>
+  }
+}
+
+sheet S4 "入出力機器" {
+  PH1 = keyence.pz-g41 "ワーク検出（コンベア入口）"
+  PL2 = generic.pilot-lamp.dc24v "運転中表示"
+
+  wire KIV 0.75sq blue {
+    PH1.BK -- <R000>
+    PH1.BU -- <N24>
+    PH1.BN -- <P24>
+    PL2.X1 -- <P24>
+    PL2.X2 -- <R200>
+  }
+}
+
+sheet S5 "エア回路" {
+  AIR1 = generic.air-source
+  FR1 = smc.aw(setPressure=0.4) "装置の元圧 0.4MPa"
+  VHS1 = smc.vhs(tubeOD=8)
+  MF1 = smc.ss5y3-41 {
+    SOL1 = smc.sy3140-5lz "プッシャ 前進"
+    SOL2 = smc.sy3240-5lz(portAB=4) "チャック 閉 / 開"
+  }
+  SC1 = smc.as-f.inline
+  SC2 = smc.as-f.inline
+  CY1 = smc.cm2(bore=25, stroke=100, switch=M9N) "ワーク押出し"
+  CY2 = smc.mhz2(size=16, switch=M9N, speedController=meter-out) "ワーク把持（スピコンをポートに直付け）"
+  SL1 = smc.an(thread=01)
+  SL2 = smc.an(thread=01)
+  SL3 = smc.an(thread=01)
+  J1 = smc.kq2t(tubeOD=8)
+  SL4 = smc.an-c(tubeOD=8)
+  SL5 = smc.an-c(tubeOD=8)
+  MF2 = smc.ss5y3-10s(protocol=E, points=B) "ストッパ用（EtherNet/IP）" {
+    SOL4 = smc.sy3200-5u1 "ストッパ 上昇 / 下降"
+  }
+  CY3 = smc.cq2 "ストッパ"
+  CBL2 = smc.ex500-ap050-s
+
+  wire TU 8mm blue {
+    AIR1.OUT -- FR1.IN
+    FR1.OUT -- VHS1.IN
+    VHS1.OUT -- J1.A
+    J1.B -- MF1.P
+    J1.C -- MF2.P
+    SL4.IN -- MF2.EA
+    SL5.IN -- MF2.EB
+    SL1.IN -- MF1.EA
+    SL2.IN -- MF1.EB
+    SL3.IN -- VHS1.EXH
+  }
+
+  wire TU 6mm blue {
+    SOL4.[A, B] -- CY3.[HEAD, ROD]
+    SOL1.A -- SC1.IN
+    SC1.OUT -- CY1.HEAD
+    SOL1.B -- SC2.IN
+    SC2.OUT -- CY1.ROD
+  }
+
+  wire TU 4mm blue {
+    SOL2.[A, B] -- CY2.[CLOSE, OPEN]
+  }
+
+  CBL-MF2: CBL2.CN -- MF2.PWR
+  MF2.IN -- <制御LAN>
+
+  wire KIV 0.75sq blue {
+    CBL2.BK -- <N24>
+    CBL2.BU -- <N24>
+    CBL2.WH -- <P24>
+    CBL2.BN -- <P24>
+    CY1.SW2.BU -- <N24>
+    CY1.SW2.BK -- <R002>
+    CY1.SW2.BN -- <P24>
+    CY1.SW1.BU -- <N24>
+    CY1.SW1.BK -- <R001>
+    CY1.SW1.BN -- <P24>
+    CY2.SW2.BU -- <N24>
+    CY2.SW2.BK -- <R004>
+    CY2.SW2.BN -- <P24>
+    CY2.SW1.BU -- <N24>
+    CY2.SW1.BK -- <R003>
+    CY2.SW1.BN -- <P24>
+    SOL1.A- -- <R201>
+    SOL1.A+ -- <P24>
+    SOL2.B- -- <R203>
+    SOL2.B+ -- <P24>
+    SOL2.A- -- <R202>
+    SOL2.A+ -- <P24>
+  }
+}
