@@ -1,0 +1,24 @@
+// 構文と名前は正しいが、電気的に誤っている例（配線チェックの指摘が、電線・機器を書いた行に出る）
+// 確かめ方: npm run cnk -- check examples/short-circuit.cnk
+PS1  = generic.power-source.3p200v
+ELB1 = mitsubishi.nv32-sv.3p(ratedCurrent=30)
+PSU1 = generic.psu.dc24v(outputCurrent=5)
+PL1  = generic.pilot-lamp.dc24v "電源表示"
+M1   = generic.motor.3p(ratedCurrent=3.6)
+
+wire KIV 3.5sq black {
+  [R, S, T]: PS1.[R, S, T] -- ELB1.[1, 3, 5]
+}
+
+wire KIV 2sq black {
+  // 30A の遮断器の二次側に 2sq（許容電流 18A）をつないでいる
+  [U, V, W]: ELB1.[2, 4, 6] -- M1.[U, V, W]
+  // 電源ユニットの L と N の両方に R 相をつないでいる（電圧がかからない）
+  R1: ELB1.2 -- PSU1.L -- PSU1.N
+}
+
+wire KIV 0.75sq blue {
+  [P24, N24]: PSU1.[+V1, -V1] -- PL1.[X1, X2]
+  // AC200V の T 相を、DC24V の表示灯へつないでいる
+  T1: ELB1.6 -- PL1.X1
+}

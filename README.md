@@ -36,6 +36,7 @@
 - **PLC の I/O** — ユニット構成・I/O 割付・I/O 表をまとめて管理
 - **出力** — 印刷・PDF（図面枠付き）、部品表・線番表・I/O 表の CSV
 - **生成 AI と連携** — 図面の JSON を AI に渡して配線させ、返ってきた JSON を読み込む
+- **配線言語（試験的）** — 機器と電線を文字で書いてコンパイルし、誤りを行番号つきで示す（[docs/wiring-language.md](docs/wiring-language.md)）
 
 | 概念図（PLC のシート） | 展開図（主回路） |
 |---|---|
@@ -83,6 +84,7 @@ npm run dev        # 開発サーバー
 npm test           # ユニットテスト（配線チェック）
 npm run typecheck  # 型チェック
 npm run build      # dist/index.html を生成
+npm run cnk -- check examples/motor-starter.cnk  # 配線言語のコンパイルとチェック
 ```
 
 機器の追加方法は [docs/device-authoring.md](docs/device-authoring.md) を参照。
@@ -97,6 +99,9 @@ src/
   model/          図面データ（JSON）の型と読み書き、装着（bus）、サンプル図面
   editor/         キャンバス、機器ノード、電線の描画と経路計算、各パネル
   io/aiPrompt.ts  生成AI用プロンプトの組み立て
+  lang/           配線言語（.cnk）のコンパイラ（字句・構文解析、図面データへの変換、行番号つきの診断、図面からの逆変換）
 scripts/
   render-device.ts  機器定義のプレビュー画像出力・整合性検査
+  cnk.ts            配線言語のコマンドライン（check / build / print / devices / terminals）
+examples/           配線言語の見本（.cnk）
 ```

@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-10（v0.6.46 VQC1000 のプラグイン形マニホールド）
+最終更新: 2026-11-14（v0.6.47 配線言語）
 
 ## 現在地
 
+- v0.6.47: 配線言語（試験的。src/lang/ の `compile`・`checkSource`・`printDiagram`・`inheritFromBase`、src/editor/LangDialog.tsx、scripts/cnk.ts、examples/*.cnk、docs/wiring-language.md・wiring-language-survey.md、ADR-005）
 - v0.6.46: 空圧（parts/air3）。プラグイン形マニホールドの割付け（`bus.host.plugIn`・`PlugInWiringSpec`、src/devices/plugin-map.ts、`manifold-pins-over`）、ISE30A・AV2000、M3 のスピコン、KQ2R の異径の記号
 - v0.6.45: 機器を 49 機種追加（parts/robot3・panel3・plc3・misc3。ロボットの描画部品 src/devices/generic/robot-*.ts、GOT の共通部品 got2000.ts）
 - v0.6.44: README を作り直し（ロゴ・画面の画像は docs/images/、詳しい説明は docs/features.md）。まとめてつなぐの主接点への電線を主回路の色に（`circuitOf` が受ける端子の role を見る）
@@ -188,6 +189,8 @@
 - `vite.config.ts` について Vite 8 が警告を出す（`./package.json` の import に `with { type: 'json' }`、`./build/third-party` に拡張子を付けること）。いまは動作に影響しない
 
 ### 調べ方
+- 配線言語のコマンドライン（`npm run cnk`）は、registry を通さず `src/devices/catalog/` を直接 import して機器カタログを作る（tsx で動く）。
+  機器の端子 ID・パラメータを調べるのにも使える（`npm run cnk -- devices 漏電`、`npm run cnk -- terminals mitsubishi.s-t10.ac200v`）
 - 吹き出しが出ない・長すぎる端子の一覧は、`deviceDefinitions` を回して `terminalCallout()`（`src/devices/hint.ts`）が undefined のもの・`terminalHint()` が 8 文字を超えるものを書き出す一時テストで出せる（`import.meta.glob` を使う registry は tsx では読めないため、vitest の一時テストにする。終わったら消す）
 - 機器定義の変更が意図した項目だけか（`hint` だけ、など）は、全機種・全パラメータ（`paramVariants`）の `resolveDevice` の結果と SVG を JSON に書き出し、
   変更前（`git stash`）と比べると確かめられる

@@ -25,6 +25,7 @@ import { connectorsMate, isLanPort, resolveDevice } from './devices/resolve';
 import { deviceModel, deviceSize, fixUnavailableParams } from './devices/types';
 import { AboutDialog } from './editor/AboutDialog';
 import { PrintDialog } from './editor/PrintDialog';
+import { LangDialog } from './editor/LangDialog';
 import { CurrentDialog } from './editor/CurrentDialog';
 import { BulkConnectDialog } from './editor/BulkConnectDialog';
 import { BulkAddDialog } from './editor/BulkAddDialog';
@@ -162,6 +163,7 @@ function Editor() {
     { mode: 'add'; familyId: string; initial: string; onChosen: (type: string) => void } | { mode: 'replace'; deviceId: string } | null
   >(null);
   const [printDialog, setPrintDialog] = useState(false);
+  const [langDialog, setLangDialog] = useState(false);
   const [currentDialog, setCurrentDialog] = useState(false);
   /**
    * まとめてつなぐ: クリックを待っているとき、1 台目の機器（'' なら 1 台目のクリックを待っている。null なら待っていない）と、
@@ -1195,6 +1197,7 @@ function Editor() {
           <div className="toolbar__group">
             <button type="button" onClick={copyAiPrompt} title="現在の図面と指示文をコピーします">AI用にコピー</button>
             <button type="button" onClick={() => setModal({ kind: 'paste' })} title="AIが返したJSONを貼り付けて読み込みます">JSONを貼り付け</button>
+            <button type="button" onClick={() => setLangDialog(true)} title="図面を、機器と電線を文字で書いた「配線言語」で見る・書き換える（コンパイルして誤りを行番号つきで示します）">配線言語</button>
           </div>
           <label className="toolbar__toggle" title="端子の近くに線番（マークチューブ）を表示します">
             <input
@@ -1396,6 +1399,17 @@ function Editor() {
             />
           );
         })()}
+      {langDialog && (
+        <LangDialog
+          diagram={diagram}
+          onClose={() => setLangDialog(false)}
+          onApply={(d) => {
+            setLangDialog(false);
+            loadDiagram(d);
+            notify('配線言語のソースを図面に反映しました（Ctrl+Z で元に戻せます）');
+          }}
+        />
+      )}
       {printDialog && (
         <PrintDialog
           sheets={sheets}

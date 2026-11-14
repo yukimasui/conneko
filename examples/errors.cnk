@@ -1,0 +1,12 @@
+// わざと誤りを入れた例（コンパイラの指摘を見るためのもの）
+// 確かめ方: npm run cnk -- check examples/errors.cnk
+PS1  = generic.power-source.3p200v
+ELB1 = mitsubishi.nv32-sv.3p(ratedCurrent=25)
+MC1  = mitsubishi.s-t10.ac200
+M1   = generic.motor.3p
+
+wire KIV 2sq blak {
+  PS1.[R, S, T]  -- ELB1.[1, 3]
+  ELB1.[2, 4, 6] -- M1.[U, V, X]
+  ELB2.2 -- MC1.A1
+}
