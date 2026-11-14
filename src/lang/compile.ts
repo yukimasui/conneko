@@ -15,6 +15,7 @@ import { CABLE_WIRE_TYPE, nextDeviceId, type Diagram, type DiagramDevice, type D
 import { AIR_LINK_TYPE, LINK_TYPE, NET_LINK_TYPE, splitCrossSheetWires } from '../model/ops';
 import { isLanPort, resolveDevice, type ResolvedDevice } from '../devices/resolve';
 import { deviceSize, type DeviceDefinition, type ParamValues, type Termination, type TerminalDef, type TerminalSide } from '../devices/types';
+import { CABLE_SPECS, getCableSpec } from '../data/cables';
 import { TERMINATIONS } from '../data/terminations';
 import { DEFAULT_TUBE, TUBE_COLORS, TUBE_ODS, TUBE_TYPES, isTubeType } from '../data/tubes';
 import { DEFAULT_WIRE, WIRE_COLORS, WIRE_TYPES } from '../data/wires';
@@ -259,6 +260,7 @@ export function compile(source: string, options: CompileOptions): CompileResult 
             break;
           case 'cable':
             out.cable = v;
+            if (!getCableSpec(v)) report('warning', 'unknown-cable', `変換ケーブル ${v} はありません（${suggestOr(v, CABLE_SPECS.map((c) => c.id))}）`, a.value.span);
             break;
           case 'from':
             out.from = termination(a) ?? out.from;
@@ -366,8 +368,12 @@ export function compile(source: string, options: CompileOptions): CompileResult 
     if (def) resolved.set(d.id, resolveDevice(def, effectiveParams(d, bus)));
   }
   type Port = Pick<TerminalDef, 'id' | 'role' | 'connector'>;
-  /** 端子（またはコネクタのピン）を探す。機器種別が不明な機器の端子は 'unknown'（重ねて誤りを出さない） */
-  const findPort = (e: Extract<Endpoint, { kind: 'terminal' }>): Port | 'unknown' | undefined => {
+  /**
+   * 端子を探す。機器種別が不明な機器の端子は 'unknown'（重ねて誤りを出さない）。
+   * コネクタのピン（`CN1#1`。画面に端子として出ない）は、コメントを付けるとき（allowPin）だけ認める。
+   * ピンに電線をつなぐと、画面に描けず、選ぶことも消すこともできない電線になる
+   */
+  const findPort = (e: Extract<Endpoint, { kind: 'terminal' }>, allowPin = false): Port | 'unknown' | undefined => {
     const d = byId.get(e.device.value);
     if (!d) {
       const near = suggest(e.device.value, [...byId.keys()]);
@@ -376,10 +382,21 @@ export function compile(source: string, options: CompileOptions): CompileResult 
     }
     const r = resolved.get(d.id);
     if (!r) return 'unknown';
-    const t = r.terminal(e.terminal.value) ?? r.pin(e.terminal.value);
+    const t = r.terminal(e.terminal.value);
     if (t) return t;
+    const pin = r.pin(e.terminal.value);
+    if (pin && allowPin) return pin;
+    if (pin) {
+      const connector = r.terminals.find((x) => x.connector && e.terminal.value.startsWith(`${x.id}#`));
+      error(
+        'pin-wire',
+        `${d.id}.${e.terminal.value} はコネクタのピンで、電線を直接つなげません${connector ? `（コネクタ ${d.id}.${connector.id} をケーブルで変換端子台などへつなぎ、その端子に電線をつなぎます）` : ''}`,
+        e.terminal.span,
+      );
+      return undefined;
+    }
     const ids = r.terminals.map((x) => x.id);
-    const near = suggest(e.terminal.value, [...ids, ...r.pins.map((x) => x.id)]);
+    const near = suggest(e.terminal.value, allowPin ? [...ids, ...r.pins.map((x) => x.id)] : ids);
     const list = ids.length > 40 ? `${ids.slice(0, 40).join('、')} など ${ids.length} 個` : ids.join('、');
     error(
       'unknown-terminal',
@@ -394,7 +411,7 @@ export function compile(source: string, options: CompileOptions): CompileResult 
       error('invalid-comment', 'comment はリンクには書けません（機器名.端子ID に書きます）', c.target.span);
       continue;
     }
-    if (!findPort(c.target)) continue;
+    if (!findPort(c.target, true)) continue;
     const d = byId.get(c.target.device.value)!;
     d.comments = { ...d.comments, [c.target.terminal.value]: c.text.value };
   }
@@ -563,28 +580,63 @@ export function compile(source: string, options: CompileOptions): CompileResult 
 }
 
 /**
- * シートをまたぐ電線をリンクの組に置き換え、置き換えでできた電線・リンクにも元の文の位置を引き継ぐ
+ * シートをまたぐ電線をリンクの組に置き換え、置き換えでできた電線・リンクにも元の文の位置と端末処理を引き継ぐ
  * （チェックの指摘をソースの行に戻せるようにする）。
+ *
+ * 置き換えでできる電線は「元の電線の端子（from）— リンク」。元の電線 1 本につき、両端に 1 本ずつできる。
+ * どの元の電線からできたかは、端子・属性（線番・種類・太さ・色）と、同じ名前のリンクの相手側の端子で見分ける
+ * （同じ端子からシートをまたぐ電線が何本も出ているとき、それぞれの行に戻すため）。
  */
 function splitCrossSheets(d: Diagram, lookup: DefLookup, map: SourceMap): Diagram {
   const out = splitCrossSheetWires(d, lookup);
   if (out === d) return d;
-  const kept = new Set(out.wires.map((w) => w.id));
-  const oldDevices = new Set(d.devices.map((x) => x.id));
-  const removed = d.wires.filter((w) => !kept.has(w.id) || !sameWire(w, out.wires.find((x) => x.id === w.id)!));
   const before = new Map(d.wires.map((w) => [w.id, w]));
-  for (const w of out.wires) {
-    const old = before.get(w.id);
-    if (old && sameWire(old, w)) continue;
-    // 置き換えでできた電線は「元の電線の端子 — 新しいリンク」。同じ端子を持つ元の電線の位置を使う
-    const end = oldDevices.has(w.from.device) ? w.from : w.to;
-    const src = removed.find((r) => refKey(r.from) === refKey(end) || refKey(r.to) === refKey(end));
-    const span = src ? map.wires.get(src.id) : undefined;
-    if (!span) continue;
-    map.wires.set(w.id, span);
-    for (const r of [w.from, w.to]) if (!oldDevices.has(r.device) && !map.devices.has(r.device)) map.devices.set(r.device, span);
+  const after = new Map(out.wires.map((w) => [w.id, w]));
+  const oldDevices = new Set(d.devices.map((x) => x.id));
+  const isNew = (w: DiagramWire) => !before.has(w.id) || !sameWire(before.get(w.id)!, w);
+  const removed = d.wires.filter((w) => !after.has(w.id) || !sameWire(w, after.get(w.id)!));
+  // 置き換えでできた電線は、なくなった電線の ID を使い回すことがある。元の位置は先に控えておく
+  const spans = new Map(removed.map((r) => [r.id, map.wires.get(r.id)]));
+  for (const r of removed) map.wires.delete(r.id);
+
+  const devices = new Map(out.devices.map((x) => [x.id, x]));
+  const linkKeyOf = (w: DiagramWire) => {
+    const link = devices.get(w.to.device);
+    const label = link && lookup(link.type)?.netLabel;
+    return link && label ? `${link.type}\u0000${String(link.params?.[label.param] ?? '')}` : '';
+  };
+  const created = out.wires.filter(isNew);
+  /** リンクの名前 → その名前のリンクにつないだ、置き換えでできた電線の端子 */
+  const endsByLink = new Map<string, Set<string>>();
+  for (const w of created) {
+    const k = linkKeyOf(w);
+    if (!endsByLink.has(k)) endsByLink.set(k, new Set());
+    endsByLink.get(k)!.add(refKey(w.from));
   }
-  return out;
+  const sameAttrs = (a: DiagramWire, b: DiagramWire) => (a.wireNo ?? '') === (b.wireNo ?? '') && a.wireType === b.wireType && a.sizeSq === b.sizeSq && a.color === b.color;
+  /** 元の電線ごとの、対応づけ済みの端子 */
+  const usedEnds = new Map<string, Set<string>>();
+  const fixed = new Map<string, DiagramWire>();
+  for (const w of created) {
+    const end = refKey(w.from);
+    const partners = endsByLink.get(linkKeyOf(w)) ?? new Set<string>();
+    const other = (r: DiagramWire) => (refKey(r.from) === end ? refKey(r.to) : refKey(r.from));
+    const candidates = removed.filter((r) => (refKey(r.from) === end || refKey(r.to) === end) && !usedEnds.get(r.id)?.has(end));
+    const src =
+      candidates.find((r) => sameAttrs(r, w) && partners.has(other(r))) ?? candidates.find((r) => sameAttrs(r, w)) ?? candidates.find((r) => partners.has(other(r))) ?? candidates[0];
+    if (!src) continue;
+    if (!usedEnds.has(src.id)) usedEnds.set(src.id, new Set());
+    usedEnds.get(src.id)!.add(end);
+    const span = spans.get(src.id);
+    if (span) {
+      map.wires.set(w.id, span);
+      for (const r of [w.from, w.to]) if (!oldDevices.has(r.device) && !map.devices.has(r.device)) map.devices.set(r.device, span);
+    }
+    // 元の電線の、この端子の側の端末処理を引き継ぐ（置き換えでは引き継がれないため）
+    const termination = refKey(src.from) === end ? src.fromTermination : src.toTermination;
+    if (termination) fixed.set(w.id, { ...w, fromTermination: termination });
+  }
+  return fixed.size ? { ...out, wires: out.wires.map((w) => fixed.get(w.id) ?? w) } : out;
 }
 
 const sameWire = (a: DiagramWire, b: DiagramWire) => refKey(a.from) === refKey(b.from) && refKey(a.to) === refKey(b.to);

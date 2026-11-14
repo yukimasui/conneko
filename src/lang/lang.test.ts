@@ -331,6 +331,138 @@ describe('図面 → 配線言語 → 図面', () => {
   });
 });
 
+describe('レビューで見つかった誤りの再発防止', () => {
+  const lookup = getDeviceDefinition;
+  const wire = (id: string, from: string, to: string, extra: Partial<Diagram['wires'][number]> = {}) => {
+    const [fd, ft] = from.split(':');
+    const [td, tt] = to.split(':');
+    return { id, from: { device: fd, terminal: ft }, to: { device: td, terminal: tt }, color: 'blue', sizeSq: 0.75, wireType: 'KIV', wireNo: 'P24', ...extra };
+  };
+  /** 電線が 3 本つながったリンク（位置と向きを決めてある） */
+  const fanOut: Diagram = {
+    devices: [
+      { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 400, y: 0 },
+      { id: 'PL2', type: 'generic.pilot-lamp.dc24v', x: 400, y: 200 },
+      { id: 'LK7', type: LINK_TYPE, x: 222, y: 333, params: { name: 'P24', side: 'left', orientation: 'horizontal' }, note: '母線' },
+    ],
+    wires: [wire('W1', 'PSU1:+V1', 'LK7:T'), wire('W2', 'LK7:T', 'PL1:X1', { route: [{ x: 300, y: 50 }] }), wire('W3', 'LK7:T', 'PL2:X1')],
+  };
+
+  it('電線が 2 本以上つながるリンクは、機器として書かれ、読み直しても 1 つのリンクのまま', () => {
+    const text = printDiagram(fanOut, { lookup });
+    expect(text).toContain('LK7 = generic.link(name=P24, side=left, orientation=horizontal) "母線"');
+    expect(text).not.toContain('<P24>');
+    const r = compile(text, { ...options, base: fanOut });
+    expect(r.diagnostics).toEqual([]);
+    expect(r.diagram.devices).toEqual(fanOut.devices);
+    expect(r.diagram.wires).toEqual(fanOut.wires);
+    expect(checkSource(text, options).issues.map((i) => i.rule)).toEqual(checkDiagram(fanOut, lookup).map((i) => i.rule));
+  });
+
+  it('1 つの文で <名前> に 2 本以上つないだリンクも、言語にして読み直すと増えない', () => {
+    const first = build('PSU1 = generic.psu.dc24v\nPL1 = generic.pilot-lamp.dc24v\nPL2 = generic.pilot-lamp.dc24v\n<P24> -- [PL1.X1, PL2.X1]\nPSU1.-V1 -- <N24> -- PL1.X2').diagram;
+    const links = (d: Diagram) => d.devices.filter((x) => x.type === LINK_TYPE).length;
+    expect(links(first)).toBe(2);
+    const again = compile(printDiagram(first, { lookup }), { ...options, base: first }).diagram;
+    expect(links(again)).toBe(2);
+    expect(again.wires).toEqual(first.wires);
+  });
+
+  it('リンクにつなぐ電線が 1 本でも、属性の違う電線が同じ端子との間に重なっていれば機器として書く', () => {
+    const d: Diagram = { devices: fanOut.devices.slice(0, 1).concat(fanOut.devices[3]), wires: [wire('W1', 'PSU1:+V1', 'LK7:T'), wire('W2', 'PSU1:+V1', 'LK7:T', { sizeSq: 1.25 })] };
+    const r = compile(printDiagram(d, { lookup }), { ...options, base: d });
+    expect(r.diagram.devices.filter((x) => x.type === LINK_TYPE)).toHaveLength(1);
+    expect(r.diagram.wires.map((w) => w.sizeSq)).toEqual([0.75, 1.25]);
+  });
+
+  it('元の図面の電線 ID に記号があっても、チェックが落ちない', () => {
+    const d: Diagram = { devices: fanOut.devices.slice(0, 2), wires: [wire('W(1', 'PSU1:+V1', 'PL1:X1'), wire('W[2', 'PSU1:+V2', 'PL1:X2')] };
+    const r = checkSource(printDiagram(d, { lookup }), { ...options, base: d });
+    expect(r.ok).toBe(true);
+    expect(r.diagram.wires.map((w) => w.id)).toEqual(['W(1', 'W[2']);
+  });
+
+  it('コネクタのピンには電線をつなげない（comment は付けられる）', () => {
+    const src = 'PLC1 = keyence.kv-8000.cpu {\n  IN1 = keyence.kv-c32xc.input\n}\nPL1 = generic.pilot-lamp.dc24v\ncomment IN1.CN1#1 "PH1"\nX: IN1.CN1#1 -- PL1.X1';
+    const r = build(src);
+    expect(r.diagnostics.map((d) => `${d.code} ${d.span?.start.line}:${d.span?.start.col}`)).toEqual(['pin-wire 6:8']);
+    expect(r.diagram.wires).toEqual([]);
+    expect(r.diagram.devices[1].comments).toEqual({ 'CN1#1': 'PH1' });
+  });
+
+  it('同じ端子から別のシートへ何本も出る電線の指摘は、それぞれを書いた行に出る', () => {
+    const r = checkSource(
+      `sheet "電源" {
+  PSU1 = generic.psu.dc24v
+}
+sheet "表示" {
+  PL3 = generic.pilot-lamp.dc24v
+  PL4 = generic.pilot-lamp.dc24v
+  PL5 = generic.pilot-lamp.dc24v
+}
+wire 0.75sq {
+  P1: PSU1.+V1 -- PL3.X1 blue ferrule
+  P2: PSU1.+V1 -- PL4.X1 red
+  P3: PSU1.+V1 -- PL5.X1
+}`,
+      options,
+    );
+    expect(r.ok).toBe(true);
+    const lineOf = (no: string) => [...new Set(r.diagram.wires.filter((w) => w.wireNo === no).map((w) => r.map.wires.get(w.id)?.start.line))];
+    expect([lineOf('P1'), lineOf('P2'), lineOf('P3')]).toEqual([[10], [11], [12]]);
+    // 端末処理は、リンクに置き換えた電線の、元の端子の側に残る
+    expect(r.diagram.wires.filter((w) => w.wireNo === 'P1').map((w) => [w.fromTermination, w.toTermination])).toEqual([
+      ['ferrule', undefined],
+      ['ferrule', undefined],
+    ]);
+  });
+
+  it('空白のあるシート ID・装着の誤ったデータ・0 埋めの範囲', () => {
+    const d: Diagram = {
+      sheets: [
+        { id: '主回路', name: '主回路' },
+        { id: 'DC24V 電源', name: 'DC24V 電源' },
+      ],
+      devices: [
+        { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0, sheet: 'DC24V 電源' },
+        // 互いに装着し合う（誤ったデータ）。どちらも出力から消えない
+        { id: 'B1', type: 'keyence.kv-c32xc.input', x: 0, y: 0, mount: { device: 'B2', slot: 1 } },
+        { id: 'B2', type: 'keyence.kv-c32xc.input', x: 0, y: 0, mount: { device: 'B1', slot: 1 } },
+      ],
+      wires: [],
+    };
+    const text = printDiagram(d, { lookup });
+    const r = build(text);
+    expect(r.diagnostics).toEqual([]);
+    expect(r.diagram.sheets).toEqual(d.sheets);
+    expect(r.diagram.devices.map((x) => [x.id, x.mount?.device, sheetOf(r.diagram, x)])).toEqual([
+      ['B1', 'B2', '主回路'],
+      ['B2', 'B1', '主回路'],
+      ['PSU1', undefined, 'DC24V 電源'],
+    ]);
+    const z = build('PSU1 = generic.psu.dc24v\nTB1 = toyogiken.pcw-1h34-d\nPSU1.+V1 -- TB1.[000..003]');
+    expect(z.diagnostics).toEqual([]);
+    expect(z.diagram.wires.map((w) => w.to.terminal)).toEqual(['000', '001', '002', '003']);
+  });
+
+  it('括弧の閉じ忘れ・at や slot で終わる行は、その行の誤りとして出て、後ろの行の誤りも出る', () => {
+    expect(codes(`${HEAD}PS1.[R, S -- ELB1.[1, 3]\nMC9 = mitsubishi.s-t10.ac200v at\nPS1.T -- ELB1.9\nPS1.[R,\n  S] -- ELB1.[1,\n  3]`).filter((c) => !c.startsWith('unconnected'))).toEqual([
+      'syntax 5:11',
+      'syntax 6:31',
+      'unknown-terminal 7:15',
+    ]);
+  });
+
+  it('ない変換ケーブルは警告。新しく置いたリンクの電線は、機器名が同じでも元の電線の経路を引き継がない', () => {
+    expect(codes('PLC1 = keyence.kv-8000.cpu {\n  IN1 = keyence.kv-c32xc.input\n}\nTB1 = generic.mil-terminal-block.34p\nIN1.CN1 -- TB1.CN cable=zzz').filter((c) => c.startsWith('unknown-cable'))).toEqual(['unknown-cable 5:25']);
+    const d: Diagram = { devices: [fanOut.devices[0], { ...fanOut.devices[3], id: 'LK1' }], wires: [wire('W1', 'PSU1:+V1', 'LK1:T', { route: [{ x: 9, y: 9 }] })] };
+    const renamed = compile(printDiagram(d, { lookup }).replace('<P24>', '<P5>'), { ...options, base: d }).diagram;
+    expect(renamed.devices.find((x) => x.type === LINK_TYPE)).toMatchObject({ id: 'LK1', params: { name: 'P5' } });
+    expect(renamed.wires[0].route).toBeUndefined();
+  });
+});
+
 describe('examples の見本', () => {
   const dir = resolve(import.meta.dirname, '../../examples');
   const read = (name: string) => readFileSync(resolve(dir, name), 'utf8');

@@ -94,6 +94,15 @@ export function lex(source: string): { tokens: Token[]; errors: LexError[] } {
     if (c === '\n') {
       const start = pos();
       advance();
+      if (depth > 0) {
+        // [ ] ( ) の中の改行は、並びの途中（直前が , か開き括弧、または次が , か閉じ括弧）のときだけ続きとして読む。
+        // それ以外は括弧の閉じ忘れとみなして文を区切る（後ろの行を巻き込まず、その行の誤りとして出す）
+        const prev = tokens[tokens.length - 1];
+        let j = i;
+        while (j < chars.length && (isSpace(chars[j]) || chars[j] === '\n')) j++;
+        const continues = (prev?.kind === 'punct' && (prev.text === ',' || prev.text === '[' || prev.text === '(')) || chars[j] === ',' || chars[j] === ']' || chars[j] === ')';
+        if (!continues) depth = 0;
+      }
       if (depth === 0) push('newline', '\n', start);
       spaced = true;
       continue;

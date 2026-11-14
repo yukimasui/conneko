@@ -70,7 +70,9 @@ export function inheritFromBase(diagram: Diagram, base: Diagram, map: SourceMap,
   const renamed = (id: string) => rename.get(id) ?? id;
   const devices = diagram.devices.map((x) => {
     const b = inherited.get(x.id);
-    if (b) return { ...x, id: b.id, x: b.x, y: b.y, params: { ...b.params, ...x.params, ...(b.params?.side !== undefined ? { side: b.params.side } : {}) } };
+    if (b) {
+      return { ...x, id: b.id, x: b.x, y: b.y, params: { ...b.params, ...x.params, ...(b.params?.side !== undefined ? { side: b.params.side } : {}) }, ...(b.note && !x.note ? { note: b.note } : {}) };
+    }
     return rename.has(x.id) ? { ...x, id: renamed(x.id) } : x;
   });
   const spans = new Map<string, NonNullable<ReturnType<SourceMap['devices']['get']>>>();
@@ -88,7 +90,11 @@ export function inheritFromBase(diagram: Diagram, base: Diagram, map: SourceMap,
   }
   const take = (k: string) => pool.get(k)?.shift();
   const usedWires = new Set<string>();
+  // 元の図面と一致しなかった（新しく置いた）リンクは、機器名がたまたま元のリンクと同じになることがある。
+  // そのリンクにつなぐ電線は、元の電線の曲がり・経路を引き継がない（リンクの位置が違うので、経路がずれる）
+  const freshLinks = new Set([...sigNew.keys()].filter((id) => !inherited.has(id)).map(renamed));
   const matched = wires.map((w) => {
+    if (freshLinks.has(w.from.device) || freshLinks.has(w.to.device)) return { w, b: undefined, reversed: false };
     const same = take(pairKey(w));
     if (same) return { w, b: same, reversed: false };
     const rev = take(reversedKey(w));

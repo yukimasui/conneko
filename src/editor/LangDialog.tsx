@@ -46,16 +46,44 @@ function offsetOf(text: string, line: number, col: number): number {
 export function LangDialog({ diagram, onApply, onClose }: Props) {
   const initial = useMemo(() => printDiagram(diagram, { lookup: getDeviceDefinition }), [diagram]);
   const [text, setText] = useState(initial);
-  const [result, setResult] = useState<CheckResult | null>(null);
+  /** コンパイルの結果と、そのときのソース（書き換えた直後は、いまのソースとずれている） */
+  const [compiled, setCompiled] = useState<{ source: string; result: CheckResult | null; failure?: string } | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
+  /** 枠の外（背景）でマウスを押したか。文字をドラッグで選んで枠の外で離したときに閉じないようにする */
+  const pressedBackdrop = useRef(false);
+
+  const run = (source: string) => {
+    try {
+      return { source, result: checkSource(source, { lookup: getDeviceDefinition, defs: deviceDefinitions, base: diagram }) };
+    } catch (e) {
+      // コンパイラの不具合で落ちても、エディタは使い続けられるようにする
+      return { source, result: null, failure: (e as Error).message };
+    }
+  };
 
   // 入力が止まってからコンパイルする
   useEffect(() => {
-    const timer = window.setTimeout(() => setResult(checkSource(text, { lookup: getDeviceDefinition, defs: deviceDefinitions, base: diagram })), result ? 250 : 0);
+    const timer = window.setTimeout(() => setCompiled(run(text)), compiled ? 250 : 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, diagram]);
+
+  const result = compiled?.result ?? null;
+  /** いまのソースをコンパイルし終えている */
+  const fresh = compiled?.source === text;
+
+  const close = () => {
+    if (text !== initial && !window.confirm('書き換えたソースは図面に反映されていません。破棄して閉じますか？')) return;
+    onClose();
+  };
+
+  const apply = () => {
+    // 書き換えた直後（コンパイル待ち）に押しても、いまのソースをコンパイルしたものを反映する
+    const now = fresh && compiled ? compiled : run(text);
+    setCompiled(now);
+    if (now.result?.ok) onApply(now.result.diagram);
+  };
 
   const lineCount = useMemo(() => text.split('\n').length, [text]);
   const marks = useMemo(() => {
@@ -92,8 +120,16 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
   const compileErrors = diagnostics.filter((d) => d.phase === 'compile' && d.severity === 'error').length;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal lang" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedBackdrop.current) close();
+      }}
+    >
+      <div className="modal lang">
         <h2>
           配線言語 <span className="lang__badge">試験的</span>
         </h2>
@@ -132,7 +168,8 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
             />
           </div>
           <div className="lang__side">
-            <div className="lang__summary">{result ? summarize(diagnostics) : 'コンパイル中…'}</div>
+            <div className="lang__summary">{compiled?.failure ? 'コンパイラの内部エラー' : result ? summarize(diagnostics) : 'コンパイル中…'}</div>
+            {compiled?.failure && <p className="lang__failure">コンパイルの途中で問題が起きました（{compiled.failure}）。ソースを見直すか、「元に戻す」を試してください。</p>}
             <ul className="lang__issues">
               {diagnostics.map((d, i) => (
                 <li key={i} className={`is-${d.severity}`}>
@@ -163,8 +200,8 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
           </span>
           <button type="button" onClick={copy} title="ソースをクリップボードにコピーします">コピー</button>
           <button type="button" onClick={() => setText(initial)} disabled={text === initial} title="いまの図面から作ったソースに戻します">元に戻す</button>
-          <button type="button" onClick={onClose}>閉じる</button>
-          <button type="button" className="primary" onClick={() => result?.ok && onApply(result.diagram)} disabled={!result?.ok || !!compileErrors}>
+          <button type="button" onClick={close}>閉じる</button>
+          <button type="button" className="primary" onClick={apply} disabled={fresh && (!result?.ok || !!compileErrors)}>
             図面に反映
           </button>
         </div>

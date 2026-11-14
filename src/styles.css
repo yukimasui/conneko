@@ -2863,3 +2863,7 @@ textarea {
   align-self: center;
   font-size: 12px;
 }
+
+.lang__failure {
+  color: var(--error);
+}

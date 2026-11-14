@@ -90,7 +90,11 @@ export function parse(source: string): { program: Program; errors: SyntaxError[]
           const [a, b] = [Number(range[1]), Number(range[2])];
           if (Math.abs(b - a) > 512) fail(`範囲 ${e.text} が大きすぎます`, e.span);
           const step = a <= b ? 1 : -1;
-          for (let n = a; n !== b + step; n += step) out.push({ kind: 'terminal', device, terminal: { value: String(n), span: e.span }, span: join(t.span, e.span) });
+          // 000..015 のように 0 で始まる同じ桁数の範囲は、0 埋めの端子 ID にする
+          const width = range[1].length === range[2].length && (range[1].startsWith('0') || range[2].startsWith('0')) ? range[1].length : 0;
+          for (let n = a; n !== b + step; n += step) {
+            out.push({ kind: 'terminal', device, terminal: { value: String(n).padStart(width, '0'), span: e.span }, span: join(t.span, e.span) });
+          }
         } else {
           out.push({ kind: 'terminal', device, terminal: text(e), span: join(t.span, e.span) });
         }
@@ -196,15 +200,20 @@ export function parse(source: string): { program: Program; errors: SyntaxError[]
         stmt.note = text(t);
       } else if (isWord(t, 'at')) {
         next();
-        const x = next();
+        // 行末・ファイルの終わりは読み進めない（誤りの位置と、読み飛ばす範囲をその行にとどめる）
+        const x = peek();
+        if (x.kind !== 'word' || !NUMBER.test(x.text)) fail('at の後は「x,y」（数値）と書きます', x.kind === 'word' ? x.span : t.span);
+        next();
         expectPunct(',', 'at の後は「x,y」と書きます');
-        const y = next();
-        if (!NUMBER.test(x.text) || !NUMBER.test(y.text)) fail('at の後は「x,y」（数値）と書きます', join(x.span, y.span));
+        const y = peek();
+        if (y.kind !== 'word' || !NUMBER.test(y.text)) fail('at の後は「x,y」（数値）と書きます', y.kind === 'word' ? y.span : t.span);
+        next();
         stmt.at = { x: Number(x.text), y: Number(y.text) };
       } else if (isWord(t, 'slot')) {
         next();
-        const n = next();
-        if (!/^\d+$/.test(n.text) || Number(n.text) < 1) fail('slot の後は 1 以上の整数を書きます', n.span);
+        const n = peek();
+        if (n.kind !== 'word' || !/^\d+$/.test(n.text) || Number(n.text) < 1) fail('slot の後は 1 以上の整数を書きます', n.kind === 'word' ? n.span : t.span);
+        next();
         stmt.slot = Number(n.text);
       } else if (isWord(t, 'on')) {
         next();
@@ -302,7 +311,8 @@ export function parse(source: string): { program: Program; errors: SyntaxError[]
       if (isWord(t, 'sheet') && (n.kind === 'word' || n.kind === 'string' || isPunct(n, '{'))) {
         next();
         const block: SheetBlock = { type: 'sheet', body: [], span: t.span };
-        if (peek().kind === 'word') block.id = text(next());
+        // sheet ID "名前" { / sheet "名前" { / sheet ID {。ID に空白などがあるときは、文字列を 2 つ続けて書く（1 つ目が ID）
+        if (peek().kind === 'word' || (peek().kind === 'string' && peek(1).kind === 'string')) block.id = text(next());
         if (peek().kind === 'string') block.name = text(next());
         const open = expectPunct('{', 'sheet の後に { が必要です（例: sheet S1 "主回路" { … }）');
         block.span = join(t.span, open.span);

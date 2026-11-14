@@ -36,13 +36,23 @@ function usage(): never {
 }
 if (!command) usage();
 
+/** ファイルを読む。なければ、スタックではなく 1 行で知らせる */
+function read(file: string): string {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch (e) {
+    console.error(`${file} を読めません（${(e as NodeJS.ErrnoException).code ?? (e as Error).message}）`);
+    process.exit(2);
+  }
+}
+
 const defs = await loadCatalog();
 const byType = new Map(defs.map((d) => [d.type, d]));
 const lookup = (type: string) => byType.get(type);
 
 if (command === 'check' || command === 'build') {
   const file = rest[0] ?? usage();
-  const source = readFileSync(file, 'utf8');
+  const source = read(file);
   const result = checkSource(source, { lookup, defs });
   for (const d of result.diagnostics) console.log(`${formatDiagnostic(d, source, file)}\n`);
   const errors = result.diagnostics.filter((d) => d.severity === 'error').length;
@@ -60,7 +70,13 @@ if (command === 'check' || command === 'build') {
   process.exit(errors || (flags.has('--strict') && warnings) ? 1 : 0);
 } else if (command === 'print') {
   const file = rest[0] ?? usage();
-  const text = printDiagram(parseDiagram(readFileSync(file, 'utf8')), { lookup, positions: flags.has('--positions') });
+  let text: string;
+  try {
+    text = printDiagram(parseDiagram(read(file)), { lookup, positions: flags.has('--positions') });
+  } catch (e) {
+    console.error(`${file}: ${(e as Error).message}`);
+    process.exit(1);
+  }
   if (rest[1]) writeFileSync(rest[1], text);
   else process.stdout.write(text);
 } else if (command === 'devices') {

@@ -13,6 +13,17 @@ export interface CheckResult extends CompileResult {
   issues: CheckIssue[];
 }
 
+/** 文に、その ID が単語として出てくるか（W1 が W12 の一部に当たらないように、前後が英数字でないことを見る。ID は任意の文字列） */
+function mentions(message: string, id: string): boolean {
+  if (!id) return false;
+  for (let at = message.indexOf(id); at >= 0; at = message.indexOf(id, at + 1)) {
+    const prev = message[at - 1] ?? '';
+    const next = message[at + id.length] ?? '';
+    if (!/[A-Za-z0-9]/.test(prev) && !/[A-Za-z0-9]/.test(next)) return true;
+  }
+  return false;
+}
+
 const before = (a: Span | undefined, b: Span | undefined) => {
   if (!a || !b) return (a ? 0 : 1) - (b ? 0 : 1);
   return a.start.line - b.start.line || a.start.col - b.start.col;
@@ -32,7 +43,7 @@ export function checkSource(source: string, options: CompileOptions): CheckResul
     ].filter((p): p is { label: string; span: Span } => !!p.span);
     // 指摘の位置: 文中で名指しされた電線 > いちばん後ろの行に書いた電線（同じネットに後から足した電線が原因のことが多い）> 最初の機器
     const wirePlaces = places.filter((p) => issue.wires.includes(p.label));
-    const named = wirePlaces.find((p) => new RegExp(`(^|[^A-Za-z0-9])${p.label}([^A-Za-z0-9]|$)`).test(issue.message));
+    const named = wirePlaces.find((p) => mentions(issue.message, p.label));
     const latest = wirePlaces.reduce<(typeof places)[number] | undefined>((best, p) => (!best || before(best.span, p.span) < 0 ? p : best), undefined);
     const first = named ?? latest ?? places[0];
     const rest = places.filter((p) => p !== first);

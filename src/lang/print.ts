@@ -35,9 +35,24 @@ export function printDiagram(d: Diagram, options: PrintOptions): string {
     const name = String(x.params?.[label.param] ?? '').trim();
     return name && !/[>\n]/.test(name) ? name : undefined;
   };
-  const wired = new Set(d.wires.flatMap((w) => [w.from.device, w.to.device]));
-  /** `<名前>` と書くリンク（名前があり、電線がつながっているもの）。それ以外のリンクは機器として宣言する */
-  const sugar = new Set(d.devices.filter((x) => linkName(x) !== undefined && wired.has(x.id)).map((x) => x.id));
+  const isLink = (id: string) => !!lookup(byId.get(id)?.type ?? '')?.netLabel;
+  // 同じ端子と同じリンクを結ぶ、属性も同じ電線の重なりは 1 本にする
+  // （シートをまたぐ電線をリンクに置き換えると、同じ端子から出る電線の数だけ重なってできる。「この端子はこのリンクにつながる」の意味は 1 本で足りる）
+  const seenLinkWires = new Set<string>();
+  const allWires = d.wires.filter((w) => {
+    if (!isLink(w.from.device) && !isLink(w.to.device)) return true;
+    const ends = [`${w.from.device}.${w.from.terminal}`, `${w.to.device}.${w.to.terminal}`].sort();
+    const k = JSON.stringify([...ends, w.wireNo ?? '', w.wireType, w.sizeSq, w.color, w.tubeOD ?? '', w.cable ?? '', w.fromTermination ?? '', w.toTermination ?? '']);
+    return !seenLinkWires.has(k) && !!seenLinkWires.add(k);
+  });
+  const wireCount = new Map<string, number>();
+  for (const w of allWires) for (const id of new Set([w.from.device, w.to.device])) wireCount.set(id, (wireCount.get(id) ?? 0) + 1);
+  /**
+   * `<名前>` と書くリンク: 名前があり、電線が 1 本だけつながっているもの。
+   * `<名前>` は書いた 1 か所ごとに 1 つのリンクになるので、電線が 2 本以上つながるリンク（と、名前のない・電線のないリンク）は
+   * 機器として宣言し、`LK1.T` のように端子で書く（1 つのリンクのまま読み直せるように）
+   */
+  const sugar = new Set(d.devices.filter((x) => linkName(x) !== undefined && wireCount.get(x.id) === 1).map((x) => x.id));
 
   const out: string[] = [];
   const s = d.settings ?? {};
@@ -90,17 +105,8 @@ export function printDiagram(d: Diagram, options: PrintOptions): string {
   };
 
   const printWires = (wires: DiagramWire[], indent: string) => {
-    // 同じ端子と同じリンクを結ぶ、属性も同じ電線の重なりは 1 本にする
-    // （シートをまたぐ電線をリンクに置き換えると、同じ端子から出る電線の数だけ重なってできる。「この端子はこのリンクにつながる」の意味は 1 本で足りる）
-    const seen = new Set<string>();
-    const list = wires.filter((w) => {
-      if (!sugar.has(w.from.device) && !sugar.has(w.to.device)) return true;
-      const ends = [`${w.from.device}.${w.from.terminal}`, `${w.to.device}.${w.to.terminal}`].sort();
-      const k = [...ends, w.wireNo ?? '', blockAttrs(w), trailing(w)].join('|');
-      return !seen.has(k) && !!seen.add(k);
-    });
     const groups = new Map<string, DiagramWire[]>();
-    for (const w of list) {
+    for (const w of wires) {
       const k = blockAttrs(w);
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k)!.push(w);
@@ -179,7 +185,9 @@ export function printDiagram(d: Diagram, options: PrintOptions): string {
     if (!single) out.push(`sheet ${quoteWord(sheet.id)} ${quoteString(sheet.name)} {`);
     const members = d.devices.filter((x) => sheetOf(d, x) === sheet.id);
     const inSheet = new Set(members.map((x) => x.id));
-    const isChild = (x: DiagramDevice) => !!x.mount && inSheet.has(x.mount.device) && x.mount.device !== x.id;
+    // 親のブロックの中に書くのは、同じシートの、それ自身は装着されていない機器に装着したユニットだけ。
+    // それ以外（別のシートの親、装着したユニットへの装着、互いに装着し合う誤ったデータ）は `on 親 slot n` を付けて単独で書く
+    const isChild = (x: DiagramDevice) => !!x.mount && x.mount.device !== x.id && inSheet.has(x.mount.device) && !byId.get(x.mount.device)?.mount;
     for (const x of members) {
       if (sugar.has(x.id) || isChild(x)) continue;
       const children = members.filter((c) => isChild(c) && c.mount!.device === x.id).sort((a, b) => a.mount!.slot - b.mount!.slot);
@@ -199,7 +207,7 @@ export function printDiagram(d: Diagram, options: PrintOptions): string {
     const comments = members.flatMap((x) => Object.entries(x.comments ?? {}).map(([terminal, text]) => `${indent}comment ${quoteWord(x.id)}.${quoteWord(terminal)} ${quoteString(text)}`));
     if (comments.length) out.push('', ...comments);
     // 電線は from 側の機器のシートに書く（リンクに置き換えたあとの図面では、両端は同じシートにある）
-    const wires = d.wires.filter((w) => {
+    const wires = allWires.filter((w) => {
       const a = byId.get(w.from.device) ?? byId.get(w.to.device);
       return a ? sheetOf(d, a) === sheet.id : sheet === sheets[0];
     });
