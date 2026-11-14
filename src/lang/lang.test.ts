@@ -463,6 +463,50 @@ wire 0.75sq {
   });
 });
 
+describe('宣言したリンクの書き換え', () => {
+  const lookup = getDeviceDefinition;
+  const w = (id: string, from: string, to: string, extra: Partial<Diagram['wires'][number]> = {}) => {
+    const [fd, ft] = from.split(':');
+    const [td, tt] = to.split(':');
+    return { id, from: { device: fd, terminal: ft }, to: { device: td, terminal: tt }, color: 'blue', sizeSq: 0.75, wireType: 'KIV', wireNo: 'P24', ...extra };
+  };
+  const base: Diagram = {
+    devices: [
+      { id: 'PSU1', type: 'generic.psu.dc24v', x: 0, y: 0 },
+      { id: 'PL1', type: 'generic.pilot-lamp.dc24v', x: 400, y: 0 },
+      { id: 'PL2', type: 'generic.pilot-lamp.dc24v', x: 400, y: 200 },
+      { id: 'PL3', type: 'generic.pilot-lamp.dc24v', x: 400, y: 400 },
+      { id: 'LK7', type: LINK_TYPE, x: 222, y: 333, params: { name: 'P24', side: 'left', orientation: 'horizontal' }, note: '母線' },
+    ],
+    wires: [w('W1', 'PSU1:+V1', 'LK7:T', { route: [{ x: 100, y: 50 }] }), w('W2', 'LK7:T', 'PL1:X1', { bend: 12 }), w('W3', 'LK7:T', 'PL2:X1')],
+  };
+  const text = printDiagram(base, { lookup });
+  const link = (d: Diagram) => d.devices.find((x) => x.id === 'LK7')!;
+
+  it('宣言したリンクのパラメータ・コメントは、書き換えた・消したとおりになる（位置は引き継ぐ）', () => {
+    const edited = text.replace('side=left, orientation=horizontal) "母線"', 'side=right)');
+    expect(edited).not.toBe(text);
+    const r = compile(edited, { ...options, base });
+    expect(r.diagnostics).toEqual([]);
+    expect(link(r.diagram)).toEqual({ id: 'LK7', type: LINK_TYPE, x: 222, y: 333, params: { name: 'P24', side: 'right' } });
+  });
+
+  it('宣言したリンクに電線を足しても、ほかの電線の曲がり・経路は残る', () => {
+    const r = compile(`${text}P24: LK7.T -- PL3.X1 blue 0.75sq\n`, { ...options, base });
+    expect(r.diagnostics).toEqual([]);
+    expect(r.diagram.wires).toHaveLength(4);
+    expect(r.diagram.wires.find((x) => x.id === 'W1')?.route).toEqual([{ x: 100, y: 50 }]);
+    expect(r.diagram.wires.find((x) => x.id === 'W2')?.bend).toBe(12);
+    expect(link(r.diagram)).toEqual(link(base));
+  });
+
+  it('並びの途中のコメントだけの行は、次が ] や , でも続きとして読む', () => {
+    const r = build('PSU1 = generic.psu.dc24v\nTB1 = generic.mil-terminal-block.34p\nPSU1.+V1 -- TB1.[6, 7\n  // 注釈\n  # 注釈\n  , 8\n\n  // 注釈\n]');
+    expect(r.diagnostics).toEqual([]);
+    expect(r.diagram.wires.map((x) => x.to.terminal)).toEqual(['6', '7', '8']);
+  });
+});
+
 describe('examples の見本', () => {
   const dir = resolve(import.meta.dirname, '../../examples');
   const read = (name: string) => readFileSync(resolve(dir, name), 'utf8');

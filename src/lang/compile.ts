@@ -318,6 +318,9 @@ export function compile(source: string, options: CompileOptions): CompileResult 
     }
   }
 
+  /** ソースに宣言した機器（この後に作るリンクと区別する） */
+  const declaredIds = new Set(byId.keys());
+
   // ---- 位置: at で書いた位置 > 元の図面の位置 > 自動 ----
   const baseDevices = new Map((base?.devices ?? []).map((d) => [d.id, d]));
   const sheetIdOf = (d: DiagramDevice) => (d.sheet && sheets.some((s) => s.id === d.sheet) ? d.sheet : (sheets[0]?.id ?? ''));
@@ -574,7 +577,7 @@ export function compile(source: string, options: CompileOptions): CompileResult 
   };
   diagram = normalizeTubes(diagram, lookup);
   diagram = splitCrossSheets(diagram, lookup, map);
-  if (base) diagram = inheritFromBase(diagram, base, map, lookup);
+  if (base) diagram = inheritFromBase(diagram, base, map, lookup, declaredIds);
 
   return { diagram, diagnostics, ok: !diagnostics.some((d) => d.severity === 'error'), map };
 }

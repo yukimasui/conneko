@@ -38,9 +38,14 @@ function linkSignatures(d: Diagram, lookup: DefLookup): Map<string, string> {
 const pairKey = (w: DiagramWire) => `${w.from.device}\u0000${w.from.terminal}\u0001${w.to.device}\u0000${w.to.terminal}`;
 const reversedKey = (w: DiagramWire) => `${w.to.device}\u0000${w.to.terminal}\u0001${w.from.device}\u0000${w.from.terminal}`;
 
-export function inheritFromBase(diagram: Diagram, base: Diagram, map: SourceMap, lookup: DefLookup): Diagram {
+/**
+ * declared は、ソースに機器として宣言した機器名。宣言したリンク（`LK1 = generic.link(…)`）は、ほかの機器と同じく書いたとおりに使い
+ * （位置は同じ機器名から compile.ts が引き継ぐ）、ここでの手がかりによる引き継ぎは `<名前>` とシートまたぎの置き換えで作ったリンクだけに行う
+ */
+export function inheritFromBase(diagram: Diagram, base: Diagram, map: SourceMap, lookup: DefLookup, declared: ReadonlySet<string> = new Set()): Diagram {
   // ---- リンク: 同じ手がかりのリンクが元の図面にあれば、機器名・位置・向きを引き継ぐ ----
   const sigNew = linkSignatures(diagram, lookup);
+  for (const id of declared) sigNew.delete(id);
   const sigBase = linkSignatures(base, lookup);
   const baseBySig = new Map<string, DiagramDevice[]>();
   for (const x of base.devices) {

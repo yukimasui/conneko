@@ -125,6 +125,10 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
       onMouseDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
       }}
+      onMouseUp={(e) => {
+        // 背景で押して、背景で離したときだけ閉じる
+        pressedBackdrop.current &&= e.target === e.currentTarget;
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget && pressedBackdrop.current) close();
       }}
