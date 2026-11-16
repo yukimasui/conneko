@@ -3,14 +3,27 @@
  *
  * 候補の中身は src/lang/complete.ts（エディタに依存しない）。ここではそれを CodeMirror の形にするだけ。
  */
-import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, insertCompletionText, startCompletion, type Completion, type CompletionSource } from '@codemirror/autocomplete';
+import {
+  acceptCompletion,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  closeCompletion,
+  completionKeymap,
+  completionStatus,
+  insertCompletionText,
+  selectedCompletion,
+  startCompletion,
+  type Completion,
+  type CompletionSource,
+} from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting, type StringStream } from '@codemirror/language';
 import { lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
 import { EditorState, type Extension, type Text } from '@codemirror/state';
-import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, type Command, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
-import { complete, type CompletionKind } from '../lang/complete';
+import { complete, type CompletionItem, type CompletionKind } from '../lang/complete';
 import type { DefLookup, Diagnostic } from '../lang/compile';
 import type { DeviceDefinition } from '../devices/types';
 import type { Span } from '../lang/lexer';
@@ -119,15 +132,43 @@ const ICON: Record<CompletionKind, string> = {
   new: 'function',
 };
 
+/** 候補を求める。候補の解析（コンパイル）が例外を投げても、エディタは使い続けられるようにする（候補を出さないだけ） */
+function safeComplete(state: EditorState, pos: number, lookup: DefLookup, defs: DeviceDefinition[], explicit: boolean) {
+  try {
+    return complete(state.doc.toString(), pos, { lookup, defs, explicit });
+  } catch {
+    return null;
+  }
+}
+
+/** 候補を確定する（機器名を選んだら端子、パラメータ名を選んだら値、と続けて出す） */
+function applyItem(view: EditorView, item: CompletionItem, from: number, to: number) {
+  view.dispatch(insertCompletionText(view.state, item.apply ?? item.label, from, to));
+  if (item.retrigger) window.setTimeout(() => startCompletion(view), 0);
+}
+
+/**
+ * Tab: 候補が出ていれば確定し、出ていなければ字下げに回す。
+ * CodeMirror の acceptCompletion は、候補を探している最中（打った直後）と、候補が出た直後のわずかな間（誤って確定しないための待ち）は
+ * 何もしない。そのとき字下げになると、素早く Tab を押したときに行頭に空白が入ってしまうので、ここで候補を求め直して確定する
+ */
+function acceptOnTab(lookup: DefLookup, defs: DeviceDefinition[]): Command {
+  return (view) => {
+    if (acceptCompletion(view)) return true;
+    if (completionStatus(view.state) === null) return false;
+    const r = safeComplete(view.state, view.state.selection.main.head, lookup, defs, false);
+    if (!r?.items.length) return false;
+    const selected = selectedCompletion(view.state);
+    const item = r.items.find((i) => i.label === selected?.label) ?? r.items[0];
+    closeCompletion(view);
+    applyItem(view, item, r.from, r.to);
+    return true;
+  };
+}
+
 function completionSource(lookup: DefLookup, defs: DeviceDefinition[]): CompletionSource {
   return (ctx) => {
-    let r: ReturnType<typeof complete>;
-    try {
-      r = complete(ctx.state.doc.toString(), ctx.pos, { lookup, defs, explicit: ctx.explicit });
-    } catch {
-      // 候補の解析（コンパイル）が例外を投げても、エディタは使い続けられるようにする（候補を出さないだけ）
-      return null;
-    }
+    const r = safeComplete(ctx.state, ctx.pos, lookup, defs, ctx.explicit);
     if (!r) return null;
     return {
       from: r.from,
@@ -139,11 +180,7 @@ function completionSource(lookup: DefLookup, defs: DeviceDefinition[]): Completi
           label: item.label,
           detail: item.detail,
           type: ICON[item.kind],
-          apply: (view, _c, from, to) => {
-            view.dispatch(insertCompletionText(view.state, item.apply ?? item.label, from, to));
-            // 機器名を選んだら端子、パラメータ名を選んだら値、と続けて出す
-            if (item.retrigger) window.setTimeout(() => startCompletion(view), 0);
-          },
+          apply: (view, _c, from, to) => applyItem(view, item, from, to),
         }),
       ),
     };
@@ -174,8 +211,8 @@ export function cnkExtensions({ lookup, defs, onChange }: Omit<CnkEditorOptions,
     // 候補の種類のアイコンは、日本語のフォントで記号が化けることがあるので出さない（説明の文字で分かる）
     autocompletion({ override: [completionSource(lookup, defs)], icons: false, maxRenderedOptions: 150, activateOnTypingDelay: 60 }),
     lintGutter(),
-    // Tab は、候補が出ているときは候補を確定し、出ていないときは字下げする（acceptCompletion は候補がなければ何もせず次へ回す）
-    keymap.of([...closeBracketsKeymap, ...completionKeymap, { key: 'Tab', run: acceptCompletion }, ...historyKeymap, indentWithTab, ...defaultKeymap]),
+    // Tab は、候補が出ているとき（出かかっているときも）は候補を確定し、出ていないときは字下げする
+    keymap.of([...closeBracketsKeymap, ...completionKeymap, { key: 'Tab', run: acceptOnTab(lookup, defs) }, ...historyKeymap, indentWithTab, ...defaultKeymap]),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) onChange(u.state.doc.toString());
     }),
