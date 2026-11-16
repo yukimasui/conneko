@@ -1,7 +1,7 @@
 {
   "name": "conneko",
   "private": true,
-  "version": "0.6.48",
+  "version": "0.6.49",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {
