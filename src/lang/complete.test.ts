@@ -117,4 +117,35 @@ describe('入力候補', () => {
   it('端子を 1 つ書いて空白を打ったところでは -- を出す', () => {
     expect(at(`${HEAD}ELB1.2 |`)!.labels).toEqual(['--']);
   });
+
+  it('1 行に書いたブロックの中でも、文の位置に合った候補を出す', () => {
+    expect(at(`PLC1 = keyence.kv-8000.cpu { IN1 = keyence.kv-c|`)!.labels).toContain('keyence.kv-c32xc.input');
+    expect(at(`${HEAD}sheet "x" { ELB1.|`)!.labels).toContain('2');
+    expect(at(`${HEAD}wire KIV 2sq { ELB1.2 -- M|`)!.labels).toEqual(['MC1']);
+  });
+
+  it('線番の : の後に空白がなくても候補を出す。comment の行には -- を出さない', () => {
+    expect(at(`${HEAD}R1:ELB1.|`)!.labels).toContain('2');
+    expect(at(`${HEAD}R1:E|`)!.labels).toEqual(['ELB1']);
+    expect(at(`${HEAD}comment IN1.CN1#1 |`)).toBeNull();
+  });
+
+  it('新しい機器名は、機器種別の分からない機器の名前とも重ねない', () => {
+    expect(at(`ELB1 = zzz.unknown\nEL|`)!.labels).toContain('ELB2 =');
+  });
+
+  it('打っている行の書きかけの電線は「接続済み」に数えない（前に同じ行を解析していても）', () => {
+    expect(at(`${HEAD}Y: ELB1.2 -- MC1.1/L1|`)).not.toBeNull();
+    const r = at(`${HEAD}Y: ELB1.|`)!;
+    expect(r.items.find((i) => i.label === '2')!.detail).not.toContain('接続済み');
+    expect(r.items.find((i) => i.label === '1')!.detail).toContain('接続済み');
+  });
+
+  it('引用符が要る端子 ID は引用符で囲んで入れる。. を含む端子 ID も候補にする', () => {
+    const quoted = at(`AD1 = aandd.ad-4402\nAD1.IN|`)!;
+    expect(quoted.items.find((i) => i.label === 'IN COM')?.apply).toBe('"IN COM"');
+    const sw = at(`CY1 = smc.cm2(bore=25, stroke=100, switch=M9N)\nCY1.SW1.|`)!;
+    expect(sw.word).toBe('SW1.');
+    expect(sw.labels).toEqual(expect.arrayContaining(['SW1.BN', 'SW1.BK', 'SW1.BU']));
+  });
 });

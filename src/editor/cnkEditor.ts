@@ -121,7 +121,13 @@ const ICON: Record<CompletionKind, string> = {
 
 function completionSource(lookup: DefLookup, defs: DeviceDefinition[]): CompletionSource {
   return (ctx) => {
-    const r = complete(ctx.state.doc.toString(), ctx.pos, { lookup, defs, explicit: ctx.explicit });
+    let r: ReturnType<typeof complete>;
+    try {
+      r = complete(ctx.state.doc.toString(), ctx.pos, { lookup, defs, explicit: ctx.explicit });
+    } catch {
+      // 候補の解析（コンパイル）が例外を投げても、エディタは使い続けられるようにする（候補を出さないだけ）
+      return null;
+    }
     if (!r) return null;
     return {
       from: r.from,
@@ -181,6 +187,7 @@ export function cnkExtensions({ lookup, defs, onChange }: Omit<CnkEditorOptions,
       '&.cm-focused': { outline: 'none' },
       '.cm-tooltip-autocomplete > ul': { fontFamily: "ui-monospace, 'Cascadia Code', monospace", maxHeight: '18em' },
       '.cm-tooltip-autocomplete .cm-completionDetail': { fontFamily: "'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif", fontStyle: 'normal', color: 'var(--muted)', marginLeft: '1.2em' },
+      '.cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail': { color: 'inherit', opacity: 0.85 },
     }),
   ];
 }

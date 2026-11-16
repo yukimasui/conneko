@@ -55,6 +55,8 @@ interface Analysis {
   devices: Map<string, { def: DeviceDefinition; r: ResolvedDevice; wired: Set<string>; note?: string }>;
   /** 使っているリンクの名前（種類ごとではなく、まとめて） */
   links: string[];
+  /** 宣言したすべての機器名（機器種別が分からない機器も含む。新しい機器名を重ねないため） */
+  names: Set<string>;
 }
 
 /** 最大の候補数（一覧の描画が重くならないように） */
@@ -74,13 +76,14 @@ const KEYWORDS: CompletionItem[] = [
 let cache: { key: string; defs: DeviceDefinition[]; analysis: Analysis } | undefined;
 
 function analyze(source: string, offset: number, options: CompletionOptions): Analysis {
-  // いま打っている行を除いたソースが同じなら、前の結果を使う
+  // いま打っている行を空にしたソースを解析する。それが同じあいだは前の結果を使う
+  // （打っている行の書きかけの電線を「接続済み」に数えず、キャッシュの中身もキーと必ず合うように、空にしたソースのほうをコンパイルする）
   const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
   const lineEnd = source.indexOf('\n', offset);
   const key = source.slice(0, lineStart) + source.slice(lineEnd < 0 ? source.length : lineEnd);
   if (cache && cache.key === key && cache.defs === options.defs) return cache.analysis;
 
-  const { diagram } = compile(source, { lookup: options.lookup, defs: options.defs });
+  const { diagram } = compile(key, { lookup: options.lookup, defs: options.defs });
   const bus = computeBus(diagram.devices, options.lookup);
   const wired = new Map<string, Set<string>>();
   for (const w of diagram.wires) {
@@ -100,7 +103,7 @@ function analyze(source: string, offset: number, options: CompletionOptions): An
     }
     devices.set(d.id, { def, r: resolveDevice(def, effectiveParams(d, bus)), wired: wired.get(d.id) ?? new Set(), note: d.note });
   }
-  const analysis = { devices, links: [...links].sort() };
+  const analysis = { devices, links: [...links].sort(), names: new Set(diagram.devices.map((d) => d.id)) };
   cache = { key, defs: options.defs, analysis };
   return analysis;
 }
@@ -164,10 +167,27 @@ function openBrackets(text: string): number {
   return depth;
 }
 
+/** 引用符の外にある、いちばん後ろの { か } の位置（なければ -1） */
+function lastBrace(text: string): number {
+  let at = -1;
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '\\') i++;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{' || c === '}') at = i;
+  }
+  return at;
+}
+
 export function complete(source: string, offset: number, options: CompletionOptions): CompletionResult | null {
   const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
-  const prefix = source.slice(lineStart, offset);
-  if (lineState(prefix) !== 'code') return null;
+  const line = source.slice(lineStart, offset);
+  if (lineState(line) !== 'code') return null;
+  // 1 行に書いたブロック（`PLC1 = … { IN1 = ▮`、`wire KIV { A.1 -- ▮`）は、ブロックの中の文から見る
+  const prefix = line.slice(lastBrace(line) + 1);
   const result = (word: string, items: CompletionItem[]): CompletionResult | null => (items.length ? { from: offset - word.length, to: offset, items } : null);
 
   // ---- リンク <名前 ----
@@ -239,7 +259,7 @@ export function complete(source: string, offset: number, options: CompletionOpti
   }
 
   // ---- いま打っている単語と、その前 ----
-  const word = /([^\s,[\]]*)$/.exec(prefix)![1];
+  const word = /([^\s,[\]:]*)$/.exec(prefix)![1];
   const before = prefix.slice(0, prefix.length - word.length);
   const head = before.trim();
   const isComment = /^comment$/.test(head);
@@ -285,7 +305,7 @@ export function complete(source: string, offset: number, options: CompletionOpti
   // 電線の後ろ（-- のある行）: 属性
   if (/(^|\s)--(\s|$)/.test(before)) return result(word, attributes(word, prefix));
   // 端子を 1 つ書いたところ: -- を出す
-  if (head && /\s$/.test(before) && /^-{0,2}$/.test(word)) return result(word, [{ label: '--', detail: '電線でつなぐ', kind: 'keyword', apply: '-- ', retrigger: true }]);
+  if (head && !/^comment\b/.test(head) && /\s$/.test(before) && /^-{0,2}$/.test(word)) return result(word, [{ label: '--', detail: '電線でつなぐ', kind: 'keyword', apply: '-- ', retrigger: true }]);
   return null;
 }
 
@@ -345,7 +365,7 @@ function newDeviceNames(typed: string, a: Analysis, defs: DeviceDefinition[]): C
   const prefixes = [...new Set(defs.filter((d) => !d.netLabel).map((d) => d.labelPrefix))].filter((p) => p.toUpperCase().startsWith(t.toUpperCase())).sort();
   return prefixes.slice(0, 8).map((p) => {
     let n = 1;
-    while (a.devices.has(`${p}${n}`)) n++;
+    while (a.names.has(`${p}${n}`)) n++;
     return { label: `${p}${n} =`, detail: '新しい機器を宣言', kind: 'new' as const, apply: `${p}${n} = `, retrigger: true };
   });
 }

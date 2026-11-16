@@ -19,7 +19,7 @@ const SEVERITY_LABEL = { error: 'エラー', warning: '警告', info: '注意' }
 
 const CHEAT_SHEET = `// 機器:  名前 = 機器種別(パラメータ=値, …) "コメント"
 ELB1 = mitsubishi.nv32-sv.3p(ratedCurrent=20)
-// Ctrl+Space（Mac は ⌥+Esc でも）で入力候補。機器名の後の「.」・「= 」・「-- 」では自動で出る
+// Ctrl+Space（Mac は ⌥+\` か ⌥+I でも）で入力候補。機器名の後の「.」・「= 」・「-- 」では自動で出る
 // 電線:  線番: 端子 -- 端子   色 太さ 種類
 R1: ELB1.2 -- MC1.1/L1  black 3.5sq KIV
 // 並んだ電線（同じ本数どうしを順につなぐ）
@@ -128,7 +128,13 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
         if (e.target === e.currentTarget && pressedBackdrop.current) close();
       }}
     >
-      <div className="modal lang">
+      <div
+        className="modal lang"
+        onKeyDown={(e) => {
+          // Ctrl+Z / Ctrl+Y は、ダイアログのボタンにフォーカスがあっても裏の図面の取り消しにしない（エディタの中ではエディタの取り消し）
+          if ((e.ctrlKey || e.metaKey) && /^[zy]$/i.test(e.key)) e.stopPropagation();
+        }}
+      >
         <h2>
           配線言語 <span className="lang__badge">試験的</span>
         </h2>
