@@ -1,9 +1,10 @@
 # 進捗
 
-最終更新: 2026-11-14（v0.6.47 配線言語）
+最終更新: 2026-11-16（v0.6.48 配線言語の入力候補）
 
 ## 現在地
 
+- v0.6.48: 配線言語のエディタを CodeMirror 6 に（src/editor/cnkEditor.ts）。入力候補（src/lang/complete.ts の `complete`）、色分け、誤りの波線と行の印（ADR-006）
 - v0.6.47: 配線言語（試験的。src/lang/ の `compile`・`checkSource`・`printDiagram`・`inheritFromBase`、src/editor/LangDialog.tsx、scripts/cnk.ts、examples/*.cnk、docs/wiring-language.md・wiring-language-survey.md、ADR-005）
 - v0.6.46: 空圧（parts/air3）。プラグイン形マニホールドの割付け（`bus.host.plugIn`・`PlugInWiringSpec`、src/devices/plugin-map.ts、`manifold-pins-over`）、ISE30A・AV2000、M3 のスピコン、KQ2R の異径の記号
 - v0.6.45: 機器を 49 機種追加（parts/robot3・panel3・plc3・misc3。ロボットの描画部品 src/devices/generic/robot-*.ts、GOT の共通部品 got2000.ts）

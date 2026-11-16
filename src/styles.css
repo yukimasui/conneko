@@ -2718,60 +2718,14 @@ textarea {
   gap: 10px;
 }
 .lang__editor {
-  display: flex;
   min-height: 0;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
-  background: #fbfcfd;
 }
-.lang__gutter,
-.lang__editor textarea {
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 8px 0;
-}
-.lang__gutter {
-  flex: none;
-  min-width: 44px;
-  overflow: hidden;
-  text-align: right;
-  color: var(--muted);
-  background: #f1f4f8;
-  border-right: 1px solid var(--border);
-  user-select: none;
-}
-.lang__gutter div {
-  padding: 0 8px 0 6px;
-  border-left: 3px solid transparent;
-}
-.lang__gutter .is-error {
-  border-left-color: var(--error);
-  color: var(--error);
-  font-weight: 700;
-}
-.lang__gutter .is-warning {
-  border-left-color: var(--warning);
-  color: var(--warning);
-}
-.lang__gutter .is-info {
-  border-left-color: var(--info);
-}
-.lang__editor textarea {
-  flex: 1;
-  height: auto;
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  outline: none;
-  resize: none;
-  padding-left: 10px;
-  padding-right: 10px;
-  white-space: pre;
-  overflow: auto;
-  tab-size: 2;
-  background: transparent;
+.lang__editor .cm-editor {
+  height: 100%;
 }
 .lang__side {
   display: flex;

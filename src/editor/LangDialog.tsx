@@ -1,9 +1,11 @@
+import type { EditorView } from '@codemirror/view';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { deviceDefinitions, getDeviceDefinition } from '../devices/registry';
 import { checkSource, summarize, type CheckResult } from '../lang/check';
 import type { Diagnostic } from '../lang/compile';
 import { printDiagram } from '../lang/print';
 import type { Diagram } from '../model/diagram';
+import { createCnkEditor, replaceDoc, revealSpan, showDiagnostics } from './cnkEditor';
 
 interface Props {
   /** いま開いている図面（言語に書かない配置は、ここから引き継ぐ） */
@@ -17,6 +19,7 @@ const SEVERITY_LABEL = { error: 'エラー', warning: '警告', info: '注意' }
 
 const CHEAT_SHEET = `// 機器:  名前 = 機器種別(パラメータ=値, …) "コメント"
 ELB1 = mitsubishi.nv32-sv.3p(ratedCurrent=20)
+// Ctrl+Space（Mac は ⌥+\` か ⌥+I でも）で入力候補。機器名の後の「.」・「= 」・「-- 」では自動で出る
 // 電線:  線番: 端子 -- 端子   色 太さ 種類
 R1: ELB1.2 -- MC1.1/L1  black 3.5sq KIV
 // 並んだ電線（同じ本数どうしを順につなぐ）
@@ -31,14 +34,6 @@ PSU1.+V1 -- <P24>
 sheet "主回路" { … }
 PLC1 = keyence.kv-8000.cpu { IN1 = keyence.kv-c32xc.input }`;
 
-/** 行・桁（文字数）を、テキストエリアの位置（UTF-16 の単位）にする */
-function offsetOf(text: string, line: number, col: number): number {
-  const lines = text.split('\n');
-  let offset = 0;
-  for (let i = 0; i < line - 1 && i < lines.length; i++) offset += lines[i].length + 1;
-  return offset + [...(lines[line - 1] ?? '')].slice(0, col - 1).join('').length;
-}
-
 /**
  * 配線言語（.cnk）のエディタ。いまの図面を言語のソースにして見せ、書き換えるたびにコンパイルとチェックをして、
  * 指摘を行番号つきで出す。「図面に反映」で図面を入れ替える（機器の位置などの配置は、同じ名前の機器・同じ端子の電線から引き継ぐ）。
@@ -48,8 +43,8 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
   const [text, setText] = useState(initial);
   /** コンパイルの結果と、そのときのソース（書き換えた直後は、いまのソースとずれている） */
   const [compiled, setCompiled] = useState<{ source: string; result: CheckResult | null; failure?: string } | null>(null);
-  const area = useRef<HTMLTextAreaElement>(null);
-  const gutter = useRef<HTMLDivElement>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
   /** 枠の外（背景）でマウスを押したか。文字をドラッグで選んで枠の外で離したときに閉じないようにする */
   const pressedBackdrop = useRef(false);
 
@@ -61,6 +56,19 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
       return { source, result: null, failure: (e as Error).message };
     }
   };
+
+  // エディタ（CodeMirror）を作る。ソースはエディタが持ち、変わるたびに text に写す
+  useEffect(() => {
+    if (!host.current) return;
+    const v = createCnkEditor(host.current, { doc: initial, lookup: getDeviceDefinition, defs: deviceDefinitions, onChange: setText });
+    view.current = v;
+    v.focus();
+    return () => {
+      v.destroy();
+      view.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 入力が止まってからコンパイルする
   useEffect(() => {
@@ -85,34 +93,21 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
     if (now.result?.ok) onApply(now.result.diagram);
   };
 
-  const lineCount = useMemo(() => text.split('\n').length, [text]);
-  const marks = useMemo(() => {
-    const m = new Map<number, Diagnostic['severity']>();
-    const rank = { error: 0, warning: 1, info: 2 };
-    for (const d of result?.diagnostics ?? []) {
-      if (!d.span) continue;
-      const cur = m.get(d.span.start.line);
-      if (!cur || rank[d.severity] < rank[cur]) m.set(d.span.start.line, d.severity);
-    }
-    return m;
-  }, [result]);
+  // 指摘をエディタの下線・行の印にする（コンパイルしたソースが、いまのソースと同じときだけ。ずれた位置に出さない）
+  useEffect(() => {
+    if (view.current && fresh) showDiagnostics(view.current, compiled?.result?.diagnostics ?? []);
+  }, [compiled, fresh]);
 
   const jump = (d: Diagnostic) => {
-    const ta = area.current;
-    if (!ta || !d.span) return;
-    const from = offsetOf(text, d.span.start.line, d.span.start.col);
-    const to = Math.max(from + 1, offsetOf(text, d.span.end.line, d.span.end.col));
-    ta.focus();
-    ta.setSelectionRange(from, to);
-    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 18;
-    ta.scrollTop = Math.max(0, (d.span.start.line - 4) * lineHeight);
+    if (view.current && d.span) revealSpan(view.current, d.span);
   };
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      area.current?.select();
+      view.current?.dispatch({ selection: { anchor: 0, head: view.current.state.doc.length } });
+      view.current?.focus();
     }
   };
 
@@ -133,7 +128,13 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
         if (e.target === e.currentTarget && pressedBackdrop.current) close();
       }}
     >
-      <div className="modal lang">
+      <div
+        className="modal lang"
+        onKeyDown={(e) => {
+          // Ctrl+Z / Ctrl+Y は、ダイアログのボタンにフォーカスがあっても裏の図面の取り消しにしない（エディタの中ではエディタの取り消し）
+          if ((e.ctrlKey || e.metaKey) && /^[zy]$/i.test(e.key)) e.stopPropagation();
+        }}
+      >
         <h2>
           配線言語 <span className="lang__badge">試験的</span>
         </h2>
@@ -142,35 +143,7 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
           機器の位置などの配置は書きません（「図面に反映」で、同じ名前の機器・同じ端子の電線の配置を引き継ぎます）。
         </p>
         <div className="lang__body">
-          <div className="lang__editor">
-            <div className="lang__gutter" ref={gutter} aria-hidden="true">
-              {Array.from({ length: lineCount }, (_, i) => (
-                <div key={i} className={marks.has(i + 1) ? `is-${marks.get(i + 1)}` : undefined}>
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-            <textarea
-              ref={area}
-              value={text}
-              spellCheck={false}
-              wrap="off"
-              onChange={(e) => setText(e.target.value)}
-              onScroll={(e) => {
-                if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop;
-              }}
-              onKeyDown={(e) => {
-                // Tab で字下げ（フォーカスを移さない）
-                if (e.key !== 'Tab' || e.shiftKey) return;
-                e.preventDefault();
-                const ta = e.currentTarget;
-                const { selectionStart: a, selectionEnd: b } = ta;
-                setText(`${text.slice(0, a)}  ${text.slice(b)}`);
-                window.requestAnimationFrame(() => ta.setSelectionRange(a + 2, a + 2));
-              }}
-              autoFocus
-            />
-          </div>
+          <div className="lang__editor" ref={host} />
           <div className="lang__side">
             <div className="lang__summary">{compiled?.failure ? 'コンパイラの内部エラー' : result ? summarize(diagnostics) : 'コンパイル中…'}</div>
             {compiled?.failure && <p className="lang__failure">コンパイルの途中で問題が起きました（{compiled.failure}）。ソースを見直すか、「元に戻す」を試してください。</p>}
@@ -203,7 +176,7 @@ export function LangDialog({ diagram, onApply, onClose }: Props) {
             {compileErrors ? `構文・名前のエラーが ${compileErrors} 件あるため、図面に反映できません` : text === initial ? '' : '変更があります'}
           </span>
           <button type="button" onClick={copy} title="ソースをクリップボードにコピーします">コピー</button>
-          <button type="button" onClick={() => setText(initial)} disabled={text === initial} title="いまの図面から作ったソースに戻します">元に戻す</button>
+          <button type="button" onClick={() => view.current && replaceDoc(view.current, initial)} disabled={text === initial} title="いまの図面から作ったソースに戻します">元に戻す</button>
           <button type="button" onClick={close}>閉じる</button>
           <button type="button" className="primary" onClick={apply} disabled={fresh && (!result?.ok || !!compileErrors)}>
             図面に反映
