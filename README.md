@@ -99,7 +99,7 @@ src/
   model/          図面データ（JSON）の型と読み書き、装着（bus）、サンプル図面
   editor/         キャンバス、機器ノード、電線の描画と経路計算、各パネル
   io/aiPrompt.ts  生成AI用プロンプトの組み立て
-  lang/           配線言語（.cnk）のコンパイラ（字句・構文解析、図面データへの変換、行番号つきの診断、図面からの逆変換）
+  lang/           配線言語（.cnk）のコンパイラ（字句・構文解析、図面データへの変換、行番号つきの診断、図面からの逆変換、入力候補）
 scripts/
   render-device.ts  機器定義のプレビュー画像出力・整合性検査
   cnk.ts            配線言語のコマンドライン（check / build / print / devices / terminals）
