@@ -3,7 +3,7 @@
  *
  * 候補の中身は src/lang/complete.ts（エディタに依存しない）。ここではそれを CodeMirror の形にするだけ。
  */
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, insertCompletionText, startCompletion, type Completion, type CompletionSource } from '@codemirror/autocomplete';
+import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, insertCompletionText, startCompletion, type Completion, type CompletionSource } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { HighlightStyle, StreamLanguage, bracketMatching, indentUnit, syntaxHighlighting, type StringStream } from '@codemirror/language';
 import { lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from '@codemirror/lint';
@@ -174,7 +174,8 @@ export function cnkExtensions({ lookup, defs, onChange }: Omit<CnkEditorOptions,
     // 候補の種類のアイコンは、日本語のフォントで記号が化けることがあるので出さない（説明の文字で分かる）
     autocompletion({ override: [completionSource(lookup, defs)], icons: false, maxRenderedOptions: 150, activateOnTypingDelay: 60 }),
     lintGutter(),
-    keymap.of([...closeBracketsKeymap, ...completionKeymap, ...historyKeymap, indentWithTab, ...defaultKeymap]),
+    // Tab は、候補が出ているときは候補を確定し、出ていないときは字下げする（acceptCompletion は候補がなければ何もせず次へ回す）
+    keymap.of([...closeBracketsKeymap, ...completionKeymap, { key: 'Tab', run: acceptCompletion }, ...historyKeymap, indentWithTab, ...defaultKeymap]),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) onChange(u.state.doc.toString());
     }),
